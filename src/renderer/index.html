@@ -55,10 +55,15 @@
       </div>
     </div>
     <div class="compose-row">
+      <div class="tpl">
+        <select id="tplSelect" aria-label="질문 템플릿" title="질문 앞뒤에 붙일 템플릿"></select>
+        <span id="tplPreview" class="tpl-preview"></span>
+      </div>
       <textarea id="prompt" rows="2" placeholder="모든 AI에게 한 번에 물어보기"></textarea>
       <button id="sendBtn" class="primary">보내기</button>
     </div>
   </footer>
+  <script src="templates.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

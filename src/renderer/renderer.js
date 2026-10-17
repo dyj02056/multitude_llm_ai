@@ -272,6 +272,42 @@ host.on('synth:status', ({ state: st, judge, count, error, cause }) => {
         : `${prefix}${judge}에게 답변 ${count}개 종합을 요청했습니다`;
 });
 
+// ---------- 질문 템플릿 ----------
+
+const TPL_KEY = 'mla.template'; // 마지막에 고른 템플릿 (이 PC에만 저장)
+let template = TEMPLATES[0];
+
+function setTemplate(id) {
+  template = TEMPLATES.find((t) => t.id === id) || TEMPLATES[0];
+  $('#tplSelect').value = template.id;
+  $('#tplSelect').classList.toggle('on', template.id !== 'none');
+  $('#prompt').placeholder = template.hint;
+  // 템플릿이 질문을 어떻게 감싸는지 한 줄로 보여 준다.
+  $('#tplPreview').textContent = template.id === 'none' ? '' : template.text.replace(/\n+/g, ' ').replace('{q}', '〈입력〉');
+  $('#tplPreview').title = template.text;
+  try {
+    localStorage.setItem(TPL_KEY, template.id);
+  } catch {}
+}
+
+$('#tplSelect').replaceChildren(
+  ...TEMPLATES.map((t) => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name;
+    return opt;
+  }),
+);
+$('#tplSelect').addEventListener('change', (e) => {
+  setTemplate(e.target.value);
+  $('#prompt').focus();
+});
+try {
+  setTemplate(localStorage.getItem(TPL_KEY));
+} catch {
+  setTemplate('none');
+}
+
 let sending = false;
 
 async function send() {
@@ -283,7 +319,7 @@ async function send() {
   sending = true;
   $('#sendBtn').disabled = true;
   try {
-    const results = await host.sendPrompt(text, ids);
+    const results = await host.sendPrompt(applyTemplate(template, text), ids);
     const failed = results.filter((r) => !r.ok);
     if (!failed.length) box.value = '';
     $('#sendHint').textContent = failed.length

@@ -177,3 +177,15 @@ body[data-view="compare"] #panels { display: none !important; }
   user-select: text;
 }
 .compare-body.empty { color: var(--muted); }
+
+/* ---------- 질문 템플릿 ---------- */
+.tpl { display: flex; flex-direction: column; gap: 4px; width: 150px; flex: none; }
+#tplSelect {
+  background: #20242f; color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px;
+}
+#tplSelect.on { border-color: var(--accent); color: #9ec0fa; }
+.tpl-preview {
+  color: var(--muted); font-size: 11px; line-height: 1.3;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
