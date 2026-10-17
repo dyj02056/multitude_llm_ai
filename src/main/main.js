@@ -299,6 +299,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 600,
     title: 'Multitude LLM',
+    icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
     backgroundColor: '#0f1117',
     autoHideMenuBar: true,
     webPreferences: {

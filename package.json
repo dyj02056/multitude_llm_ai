@@ -1,14 +1,43 @@
 {
   "name": "multitude-llm-ai",
   "productName": "Multitude LLM",
-  "version": "0.0.1",
-  "description": "Gemini · ChatGPT · DeepSeek · Groq 웹 채팅을 한 화면에서 동시에 쓰는 앱 (스파이크)",
+  "version": "0.1.0",
+  "description": "Gemini · ChatGPT · DeepSeek · Groq 웹 채팅을 한 화면에서 동시에 쓰는 앱",
+  "author": "dyj02056",
   "private": true,
   "main": "src/main/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "com.dyj02056.multitudellm",
+    "productName": "Multitude LLM",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Multitude LLM",
+      "artifactName": "MultitudeLLM-Setup-${version}.${ext}"
+    }
   },
   "devDependencies": {
-    "electron": "^44.9.0"
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3"
   }
 }

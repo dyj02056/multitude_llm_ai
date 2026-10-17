@@ -4,7 +4,20 @@ Gemini · ChatGPT · DeepSeek · Groq 웹 채팅을 한 화면에 띄워 같은 
 
 API 키 없이 각 서비스의 무료 웹 채팅을 그대로 쓰며, 로그인은 Google 계정 하나로 합니다.
 
-## 실행
+## 설치 (Windows)
+
+[Releases](https://github.com/dyj02056/multitude_llm_ai/releases)의 `MultitudeLLM-Setup-<버전>.exe`를 실행합니다.
+코드 서명이 없어서 처음 실행할 때 Windows SmartScreen 경고가 뜰 수 있습니다 ("추가 정보" → "실행").
+
+직접 만들려면:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scriptsuild-win.ps1
+```
+
+결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다. 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
+
+## 실행 (개발)
 
 ```bash
 npm install
