@@ -268,6 +268,8 @@ function computeRects() {
 
 function pushState() {
   if (!win || win.isDestroyed()) return;
+  // 최소화된 동안에는 창 크기가 0으로 잡혀 패널 배치가 깨진다. 복원될 때('restore') 다시 배치한다.
+  if (win.isMinimized()) return;
   const rects = computeRects();
   if (loginView && rects.login) loginView.setBounds(rects.login);
   // 비교·기록·도움말 화면에서는 웹 패널을 화면 밖으로 옮겨 둔다.
@@ -322,6 +324,7 @@ function createWindow() {
   });
 
   win.on('resize', pushState);
+  win.on('restore', pushState);
   win.on('closed', () => {
     win = null;
     loginView = null;

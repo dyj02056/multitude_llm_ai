@@ -11,7 +11,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 아래 두 함수는 toString()으로 페이지 안에 주입되어 실행된다. 바깥 변수를 쓰면 안 된다.
 function pageFocusInput(cfg) {
   const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
-  const input = cfg.input.map((s) => document.querySelector(s)).find(visible);
+  // 같은 셀렉터에 숨은 요소가 먼저 걸리는 사이트가 있어(Groq 플레이그라운드) 보이는 것을 고른다.
+  const input = cfg.input.flatMap((s) => [...document.querySelectorAll(s)]).find(visible);
   if (!input) return { ok: false, error: '입력창을 찾지 못했습니다' };
   input.focus();
   // 이미 적혀 있던 내용은 지우고 새로 쓴다.
@@ -28,7 +29,7 @@ function pageClickSend(cfg) {
     el.getAttribute('aria-disabled') !== 'true' &&
     // Tailwind의 "disabled:opacity-50" 같은 클래스는 상태가 아니라서 걸러내지 않는다.
     !/(^|\s)([\w-]*--)?disabled(\s|$)/.test(String(el.className));
-  let btn = cfg.send.map((s) => document.querySelector(s)).find(usable);
+  let btn = cfg.send.flatMap((s) => [...document.querySelectorAll(s)]).find(usable);
   if (!btn && cfg.sendText) {
     const re = new RegExp(cfg.sendText, 'i');
     btn = [...document.querySelectorAll('button,[role="button"]')].find(
@@ -70,7 +71,9 @@ async function sendPrompt(wc, svc, text) {
 
   // 버튼을 못 찾으면 키보드로 보낸다. 입력창에 포커스를 다시 준 뒤 누른다.
   await run(wc, (c) => {
-    const el = c.input.map((s) => document.querySelector(s)).find(Boolean);
+    const el = c.input
+      .flatMap((s) => [...document.querySelectorAll(s)])
+      .find((e) => e.offsetWidth || e.offsetHeight || e.getClientRects().length);
     if (el) el.focus();
   }, cfg);
   pressKey(wc, svc.submitKey || 'Enter');
