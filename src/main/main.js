@@ -9,6 +9,7 @@ const { sendPrompt } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
 const { buildSynthPrompt } = require('./synth');
+const history = require('./history');
 
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
@@ -34,7 +35,7 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 let win = null;
 let mode = 'login'; // 'login' | 'pick' | 'chat'
-let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교)
+let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'history' (기록)
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
 
@@ -327,7 +328,7 @@ ipcMain.on('layout:set', (_e, value) => {
 
 // 공통 입력창으로 보낸 질문 한 번을 "라운드"라고 부른다.
 // 자동 종합은 라운드의 모든 답변이 끝났을 때 한 번만 실행한다.
-let round = null; // { question, targets: [id], finished: Map(id -> 상태), synthDone }
+let round = null; // { question, targets: [id], finished: Map(id -> 상태), synthDone, historyId }
 
 const FINISHED = new Set(['done', 'timeout', 'no-answer']);
 
@@ -363,8 +364,20 @@ function sendSynthStatus(patch) {
   if (win && !win.isDestroyed()) win.webContents.send('synth:status', patch);
 }
 
-function onRoundAnswer(r, id, state) {
-  if (r !== round) return; // 그사이 새 질문을 보냈으면 무시
+/** 패널의 최신 답변 글 (기록 저장용) */
+async function latestAnswer(id) {
+  const svc = SERVICES.find((s) => s.id === id);
+  if (!panels.has(id)) return '';
+  return (await snapshot(panels.get(id).view.webContents, svc))?.text || '';
+}
+
+const serviceName = (id) => SERVICES.find((s) => s.id === id)?.name || id;
+
+async function onRoundAnswer(r, id, state) {
+  // 기록은 새 질문을 보낸 뒤에 끝난 답변이라도 그 라운드에 남긴다.
+  const text = state === 'done' ? await latestAnswer(id) : '';
+  history.setAnswer(r.historyId, id, { name: serviceName(id), state, text });
+  if (r !== round) return; // 그사이 새 질문을 보냈으면 자동 종합은 하지 않는다
   r.finished.set(id, state);
   if (r.finished.size < r.targets.length || r.synthDone || !prefs.autoSynth) return;
   r.synthDone = true;
@@ -380,8 +393,11 @@ async function runSynth(judgeId, cause = 'manual') {
   const answers = [];
   for (const svc of SERVICES) {
     if (svc.id === judge || !round.targets.includes(svc.id) || !panels.has(svc.id)) continue;
-    const snap = await snapshot(panels.get(svc.id).view.webContents, svc);
-    if (snap?.text) answers.push({ name: svc.name, text: snap.text });
+    // 페이지가 다시 그려지는 순간이면 글이 비어 보일 수 있어 한 번 더 읽는다.
+    let text = await latestAnswer(svc.id);
+    if (!text) text = await new Promise((r) => setTimeout(r, 600)).then(() => latestAnswer(svc.id));
+    if (text) answers.push({ name: svc.name, text });
+    else log('synth', 'skipped (no answer text)', svc.id);
   }
   if (!answers.length) return fail('종합할 다른 AI의 답변이 없습니다');
 
@@ -392,7 +408,11 @@ async function runSynth(judgeId, cause = 'manual') {
   });
   const judgeName = SERVICES.find((s) => s.id === judge).name;
   sendSynthStatus({ state: 'sending', judge: judgeName, count: answers.length, cause });
-  const res = await sendToPanel(judge, text);
+  const historyId = round.historyId;
+  const res = await sendToPanel(judge, text, async (state) => {
+    if (state !== 'done') return;
+    history.addSynth(historyId, { judge: judgeName, at: Date.now(), text: await latestAnswer(judge) });
+  });
   if (!res.ok) return fail(`${judgeName}에 보내지 못했습니다: ${res.error}`);
   sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause });
   return { ok: true, judge: judgeName, count: answers.length };
@@ -407,7 +427,8 @@ async function runSynth(judgeId, cause = 'manual') {
 ipcMain.handle('prompt:send', async (_e, { text, targets }) => {
   if (typeof text !== 'string' || !text.trim() || !Array.isArray(targets)) return [];
   const ids = targets.filter((id) => panels.has(id));
-  const r = (round = { question: text, targets: ids, finished: new Map(), synthDone: false });
+  const historyId = history.add({ question: text, targets: ids });
+  const r = (round = { question: text, targets: ids, finished: new Map(), synthDone: false, historyId });
   return Promise.all(ids.map((id) => sendToPanel(id, text, (state) => onRoundAnswer(r, id, state))));
 });
 
@@ -434,10 +455,19 @@ ipcMain.handle('answer:copy', async (_e, id) => {
 });
 
 ipcMain.on('view:set', (_e, value) => {
-  if (mode === 'chat' && (value === 'panels' || value === 'compare')) {
+  if (mode === 'chat' && ['panels', 'compare', 'history'].includes(value)) {
     chatView = value;
     pushState();
   }
+});
+
+// 질문·답변 기록
+ipcMain.handle('history:list', (_e, query) => history.list(typeof query === 'string' ? query : ''));
+ipcMain.handle('history:get', (_e, id) => history.get(id));
+ipcMain.handle('history:delete', (_e, id) => history.remove(id));
+ipcMain.handle('history:clear', () => history.clear());
+ipcMain.handle('clipboard:write', (_e, text) => {
+  if (typeof text === 'string') clipboard.writeText(text);
 });
 
 // 답변 비교 화면용: 열린 패널마다 최신 답변 글과 마지막 공통 질문
@@ -480,6 +510,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.whenReady().then(() => {
     loadPrefs();
+    history.init(app.getPath('userData'));
     setupSession();
     createWindow();
   });

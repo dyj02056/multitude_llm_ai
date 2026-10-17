@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld('host', {
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
   setView: (value) => ipcRenderer.send('view:set', value),
   getAnswers: () => ipcRenderer.invoke('answers:get'),
+  history: {
+    list: (query) => ipcRenderer.invoke('history:list', query),
+    get: (id) => ipcRenderer.invoke('history:get', id),
+    remove: (id) => ipcRenderer.invoke('history:delete', id),
+    clear: () => ipcRenderer.invoke('history:clear'),
+  },
+  copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   runSynth: (judgeId) => ipcRenderer.invoke('synth:run', judgeId),
   setSynth: (opts) => ipcRenderer.send('synth:set', opts),
   setLayout: (value) => ipcRenderer.send('layout:set', value),

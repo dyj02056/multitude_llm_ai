@@ -117,6 +117,8 @@ function createPanel(svc) {
   return p;
 }
 
+const FINISHED_STATES = new Set(['done', 'timeout', 'no-answer']);
+
 const ANSWER_TEXT = {
   answering: '답변 중…',
   done: '답변 완료',
@@ -147,6 +149,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars }
     updateAnswerSummary();
     // 비교 화면을 보고 있으면 답변이 끝날 때마다 새로 읽는다.
     if (answer === 'done' && state?.chatView === 'compare') renderCompare();
+    if (FINISHED_STATES.has(answer) && state?.chatView === 'history') setTimeout(renderHistoryList, 800);
     return;
   }
   if (loading !== undefined) p.dot.classList.toggle('loading', loading);
@@ -162,10 +165,13 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars }
     p.dot.classList.add('error');
   }
   if (login) {
-    p.status.textContent = LOGIN_TEXT[login] ?? '';
-    p.status.dataset.state = login;
     p.dot.classList.toggle('ready', login === 'ready');
     p.loginBtn.hidden = login !== 'needs-login';
+    // 로그인 확인은 대화 중에도 반복된다. "로그인됨"이 전송·답변 상태 글을 지우지 않게 한다.
+    const showingLogin = !p.status.dataset.state || p.status.dataset.state in LOGIN_TEXT;
+    if (login === 'ready' && !showingLogin) return;
+    p.status.textContent = LOGIN_TEXT[login] ?? '';
+    p.status.dataset.state = login;
   }
 });
 
@@ -210,33 +216,141 @@ async function renderCompare() {
   $('#compareQuestion').textContent = question || '(아직 공통 입력창으로 보낸 질문이 없습니다)';
   const cols = $('#compareCols');
   cols.style.gridTemplateColumns = `repeat(${Math.max(answers.length, 1)}, minmax(0, 1fr))`;
-  cols.replaceChildren(
-    ...answers.map((a) => {
-      const col = document.createElement('article');
-      col.className = 'compare-col';
-      col.style.setProperty('--svc', a.color);
-      const head = document.createElement('div');
-      head.className = 'compare-col-head';
-      const count = span('muted-label', a.text ? `${a.text.length.toLocaleString()}자` : '답변 없음');
-      const copy = button('복사', `${a.name} 답변 복사`, async () => {
-        const r = await host.copyAnswer(a.id);
-        flash(count, r.copied ? '복사했습니다' : '복사할 답변이 없습니다');
-      });
-      copy.disabled = !a.text;
-      head.append(span('dot ready'), span('name', a.name), count, copy);
-      const body = document.createElement('div');
-      body.className = 'compare-body';
-      body.textContent = a.text || '이 패널에는 아직 답변이 없습니다.';
-      body.classList.toggle('empty', !a.text);
-      col.append(head, body);
-      return col;
-    }),
-  );
+  cols.replaceChildren(...answers.map(answerColumn));
+}
+
+/** 답변 한 칸 (비교 화면·기록 화면 공용). a: { name, color, text, note?, emptyText? } */
+function answerColumn(a) {
+  const col = document.createElement('article');
+  col.className = 'compare-col';
+  col.style.setProperty('--svc', a.color);
+  const head = document.createElement('div');
+  head.className = 'compare-col-head';
+  const count = span('muted-label', a.text ? `${a.text.length.toLocaleString()}자` : a.note || '답변 없음');
+  const copy = button('복사', `${a.name} 답변 복사`, async () => {
+    await host.copyText(a.text);
+    flash(count, '복사했습니다');
+  });
+  copy.disabled = !a.text;
+  head.append(span('dot ready'), span('name', a.name), count, copy);
+  const body = document.createElement('div');
+  body.className = 'compare-body';
+  body.textContent = a.text || a.emptyText || '이 패널에는 아직 답변이 없습니다.';
+  body.classList.toggle('empty', !a.text);
+  col.append(head, body);
+  return col;
 }
 
 $('#compareBtn').addEventListener('click', () => host.setView(state.chatView === 'compare' ? 'panels' : 'compare'));
+$('#historyBtn').addEventListener('click', () => host.setView(state.chatView === 'history' ? 'panels' : 'history'));
 $('#compareClose').addEventListener('click', () => host.setView('panels'));
 $('#compareRefresh').addEventListener('click', renderCompare);
+
+// ---------- 질문·답변 기록 ----------
+
+const ANSWER_STATE_TEXT = { timeout: '시간 초과', 'no-answer': '답변 없음', error: '보내기 실패' };
+let historySelected = null;
+
+const fmtTime = (ms) =>
+  new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+async function renderHistoryList() {
+  const query = $('#historySearch').value;
+  const items = await host.history.list(query);
+  const list = $('#historyList');
+  if (!items.length) {
+    list.replaceChildren(span('history-empty', query ? '찾는 기록이 없습니다' : '아직 기록이 없습니다'));
+    $('#historyDetail').replaceChildren();
+    return;
+  }
+  if (!items.some((it) => it.id === historySelected)) historySelected = items[0].id;
+  list.replaceChildren(
+    ...items.map((it) => {
+      const row = document.createElement('button');
+      row.className = 'history-item';
+      row.classList.toggle('active', it.id === historySelected);
+      const meta = `${fmtTime(it.at)} · 답변 ${it.answered}/${it.targets}${it.synth ? ` · 종합 ${it.synth}` : ''}`;
+      row.append(span('history-q', it.question), span('history-meta', meta));
+      row.addEventListener('click', () => {
+        historySelected = it.id;
+        renderHistoryList();
+      });
+      return row;
+    }),
+  );
+  renderHistoryDetail();
+}
+
+function recordToMarkdown(rec) {
+  const parts = [`# ${rec.question.split('\n')[0]}`, '', `> ${fmtTime(rec.at)}`, '', '## 질문', '', rec.question];
+  for (const id of rec.targets) {
+    const a = rec.answers[id];
+    if (a?.text) parts.push('', `## ${a.name}`, '', a.text);
+  }
+  for (const sy of rec.synth) parts.push('', `## 종합 (${sy.judge})`, '', sy.text);
+  return parts.join('\n');
+}
+
+async function renderHistoryDetail() {
+  const rec = await host.history.get(historySelected);
+  const box = $('#historyDetail');
+  if (!rec) return box.replaceChildren();
+
+  const head = document.createElement('div');
+  head.className = 'history-detail-head';
+  const time = span('muted-label', fmtTime(rec.at));
+  head.append(
+    time,
+    button('질문 다시 쓰기', '이 질문을 입력창에 넣습니다', () => {
+      $('#prompt').value = rec.question;
+      host.setView('panels');
+      $('#prompt').focus();
+    }),
+    button('Markdown 복사', '질문과 답변을 Markdown으로 복사', async () => {
+      await host.copyText(recordToMarkdown(rec));
+      flash(time, '복사했습니다');
+    }),
+    button('삭제', '이 기록을 지웁니다', async () => {
+      await host.history.remove(rec.id);
+      historySelected = null;
+      renderHistoryList();
+    }),
+  );
+
+  const question = document.createElement('div');
+  question.className = 'history-question';
+  question.textContent = rec.question;
+
+  const cols = document.createElement('div');
+  cols.className = 'compare-cols';
+  const columns = rec.targets.map((id) => {
+    const a = rec.answers[id];
+    const svc = state.services.find((s) => s.id === id);
+    return {
+      name: a?.name || svc?.name || id,
+      color: svc?.color || 'var(--muted)',
+      text: a?.text || '',
+      note: a ? ANSWER_STATE_TEXT[a.state] : '기다리는 중',
+      emptyText: a ? '저장된 답변이 없습니다.' : '답변을 기다리는 중이거나, 앱이 닫혀 저장되지 않았습니다.',
+    };
+  });
+  for (const sy of rec.synth) columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text });
+  cols.style.gridTemplateColumns = `repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))`;
+  cols.replaceChildren(...columns.map(answerColumn));
+  box.replaceChildren(head, question, cols);
+}
+
+let searchTimer = null;
+$('#historySearch').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(renderHistoryList, 200);
+});
+$('#historyClose').addEventListener('click', () => host.setView('panels'));
+$('#historyClear').addEventListener('click', async () => {
+  if (!confirm('저장된 질문·답변 기록을 모두 지울까요? 되돌릴 수 없습니다.')) return;
+  await host.history.clear();
+  renderHistoryList();
+});
 
 // ---------- 교차검토(종합) ----------
 
@@ -346,11 +460,14 @@ $('#prompt').addEventListener('keydown', (e) => {
 host.on('state', (next) => {
   const modeChanged = !state || state.mode !== next.mode;
   const enteredCompare = next.chatView === 'compare' && (modeChanged || state.chatView !== 'compare');
+  const enteredHistory = next.chatView === 'history' && (modeChanged || state.chatView !== 'history');
   state = next;
   document.body.dataset.mode = state.mode;
   document.body.dataset.view = state.mode === 'chat' ? state.chatView : '';
   $('#compareBtn').classList.toggle('active', state.chatView === 'compare');
+  $('#historyBtn').classList.toggle('active', state.chatView === 'history');
   if (enteredCompare) renderCompare();
+  if (enteredHistory) renderHistoryList();
   $('#hint').textContent = HINTS[state.mode];
   for (const b of document.querySelectorAll('[data-layout]')) {
     b.classList.toggle('active', b.dataset.layout === state.layout);
@@ -374,5 +491,5 @@ $('#copyAll').addEventListener('click', async () => {
 });
 $('#pickBtn').addEventListener('click', () => host.pickModels());
 $('#logoutBtn').addEventListener('click', () => {
-  if (confirm('로그아웃하면 모든 서비스의 로그인과 기록(쿠키)이 지워집니다. 계속할까요?')) host.logout();
+  if (confirm('로그아웃하면 모든 서비스의 로그인 정보(쿠키)가 지워집니다. 질문·답변 기록은 남습니다. 계속할까요?')) host.logout();
 });

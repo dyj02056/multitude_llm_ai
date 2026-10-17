@@ -15,6 +15,7 @@
       <button data-layout="grid">격자</button>
       <button data-layout="row">가로</button>
     </div>
+    <button class="only-chat" id="historyBtn" title="지금까지 보낸 질문과 답변">기록</button>
     <button class="only-chat" id="compareBtn" title="열린 패널의 최신 답변을 나란히 봅니다">답변 비교</button>
     <button class="only-chat" id="copyAll" title="열린 패널의 최신 답변을 한 번에 복사">모든 답변 복사</button>
     <button class="only-chat" id="newChatAll">모두 새 대화</button>
@@ -40,6 +41,18 @@
       <button id="compareClose">패널로 돌아가기</button>
     </div>
     <div id="compareCols" class="compare-cols"></div>
+  </section>
+
+  <section id="history" class="only-history">
+    <aside class="history-side">
+      <input id="historySearch" type="search" placeholder="질문·답변에서 찾기" />
+      <div id="historyList" class="history-list"></div>
+      <div class="history-side-foot">
+        <button id="historyClear" class="danger">기록 전체 삭제</button>
+        <button id="historyClose">패널로 돌아가기</button>
+      </div>
+    </aside>
+    <div id="historyDetail" class="history-detail"></div>
   </section>
 
   <footer id="composer" class="only-chat">
