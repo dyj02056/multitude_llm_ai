@@ -10,6 +10,7 @@ const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
 const { buildSynthPrompt } = require('./synth');
 const history = require('./history');
+const { SHORTCUTS, shortcutFor } = require('./shortcuts');
 
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
@@ -35,7 +36,7 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 let win = null;
 let mode = 'login'; // 'login' | 'pick' | 'chat'
-let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'history' (기록)
+let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'history' (기록) | 'help' (단축키)
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
 
@@ -258,10 +259,14 @@ function pushState() {
   if (!win || win.isDestroyed()) return;
   const rects = computeRects();
   if (loginView && rects.login) loginView.setBounds(rects.login);
-  for (const r of rects.panels) panels.get(r.id)?.view.setBounds(r.content);
-  // 답변 비교 화면에서는 웹 패널을 숨긴다. 떼어 내지 않고 숨기기만 해서 답변 감시는 계속된다.
+  // 비교·기록·도움말 화면에서는 웹 패널을 화면 밖으로 옮겨 둔다.
+  // setVisible(false)로 숨기면 키보드 포커스가 숨은 패널에 갇혀 단축키가 먹지 않는다.
+  // 크기는 그대로라서 페이지 배치가 바뀌지 않고 답변 감시도 계속된다.
   const showPanels = mode === 'chat' && chatView === 'panels';
-  for (const p of panels.values()) p.view.setVisible(showPanels);
+  for (const r of rects.panels) {
+    panels.get(r.id)?.view.setBounds(showPanels ? r.content : { ...r.content, x: -20000 });
+  }
+  if (!showPanels && [...panels.values()].some((p) => p.view.webContents.isFocused())) win.webContents.focus();
   win.webContents.send('state', {
     mode,
     chatView,
@@ -456,7 +461,7 @@ ipcMain.handle('answer:copy', async (_e, id) => {
 });
 
 ipcMain.on('view:set', (_e, value) => {
-  if (mode === 'chat' && ['panels', 'compare', 'history'].includes(value)) {
+  if (mode === 'chat' && ['panels', 'compare', 'history', 'help'].includes(value)) {
     chatView = value;
     pushState();
   }
@@ -496,6 +501,47 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
       wc.loadURL(SERVICES.find((s) => s.id === pid).newChatUrl);
     }
   }
+});
+
+// ---------- 단축키 ----------
+
+ipcMain.handle('shortcuts:list', () => SHORTCUTS.map(({ keys, label }) => ({ keys, label })));
+
+/** 단축키 동작을 실행한다. 처리했으면 true (그 키는 페이지로 넘기지 않는다). */
+function runShortcut(action) {
+  if (mode !== 'chat' || !win || win.isDestroyed()) return false;
+
+  if (action.startsWith('view:')) {
+    const view = action.slice(5);
+    // 같은 화면 단축키를 다시 누르면 패널로 돌아간다.
+    chatView = chatView === view ? 'panels' : view;
+    pushState();
+    return true;
+  }
+  if (action.startsWith('panel:')) {
+    const ids = SERVICES.map((s) => s.id).filter((id) => panels.has(id));
+    const p = panels.get(ids[Number(action.slice(6)) - 1]);
+    if (!p) return false;
+    if (chatView !== 'panels') {
+      chatView = 'panels';
+      pushState();
+    }
+    p.view.webContents.focus();
+    return true;
+  }
+  // 나머지는 화면 쪽 버튼이 하는 일과 같아서 화면으로 넘긴다 (입력창 포커스, 새 대화, 종합, 복사, 대상 켜기/끄기 등).
+  win.webContents.focus();
+  win.webContents.send('shortcut', action);
+  return true;
+}
+
+// 메인 창과 서비스 패널 모두에서 단축키를 받는다.
+app.on('web-contents-created', (_e, wc) => {
+  wc.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && (input.control || input.alt)) log('key', input.key, input.code, input.control ? 'ctrl' : 'alt');
+    const action = shortcutFor(input, { canEscape: mode === 'chat' && chatView !== 'panels' });
+    if (action && runShortcut(action)) event.preventDefault();
+  });
 });
 
 Menu.setApplicationMenu(null);

@@ -223,3 +223,26 @@ body[data-view="history"] #panels { display: none !important; }
   background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
   padding: 8px 10px; font-weight: 600; user-select: text;
 }
+
+/* ---------- 단축키 도움말 ---------- */
+.only-help { display: none; }
+body[data-mode="chat"][data-view="help"] .only-help { display: flex; }
+body[data-view="help"] #panels { display: none !important; }
+#helpBtn { width: 30px; padding: 4px 0; font-weight: 700; text-align: center; }
+#helpBtn.active { background: var(--accent); border-color: var(--accent); }
+#help {
+  position: absolute; left: 0; right: 0; top: 44px; bottom: 104px;
+  align-items: center; justify-content: center; padding: 16px;
+}
+.help-box {
+  width: min(560px, 100%); max-height: 100%; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px;
+}
+.help-box h2 { margin: 0 0 4px; font-size: 18px; }
+#helpTable { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+#helpTable td { padding: 7px 4px; border-bottom: 1px solid var(--border); }
+#helpTable td:first-child { width: 150px; white-space: nowrap; }
+kbd {
+  display: inline-block; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 4px; background: #20242f; font: 12px/1.5 "Cascadia Mono", Consolas, monospace;
+}

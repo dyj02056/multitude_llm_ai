@@ -353,6 +353,36 @@ $('#historyClear').addEventListener('click', async () => {
   renderHistoryList();
 });
 
+// ---------- 단축키 ----------
+
+host.on('shortcut', (action) => {
+  if (action === 'focus-composer') return $('#prompt').focus();
+  if (action.startsWith('target:')) {
+    const chip = document.querySelectorAll('#targetChips .chip')[Number(action.slice(7)) - 1];
+    return chip?.click();
+  }
+  const click = { 'newchat-all': '#newChatAll', synth: '#synthBtn', 'copy-all': '#copyAll', 'reload-all': '#reloadAll' }[action];
+  if (click) $(click).click();
+});
+
+async function renderHelp() {
+  const rows = await host.shortcuts();
+  $('#helpTable').replaceChildren(
+    ...rows.map((r) => {
+      const tr = document.createElement('tr');
+      const k = document.createElement('td');
+      k.append(...r.keys.split(' ').map((part) => Object.assign(document.createElement('kbd'), { textContent: part })));
+      const d = document.createElement('td');
+      d.textContent = r.label;
+      tr.append(k, d);
+      return tr;
+    }),
+  );
+}
+
+$('#helpBtn').addEventListener('click', () => host.setView(state.chatView === 'help' ? 'panels' : 'help'));
+$('#helpClose').addEventListener('click', () => host.setView('panels'));
+
 // ---------- 교차검토(종합) ----------
 
 function renderSynth() {
@@ -462,6 +492,7 @@ host.on('state', (next) => {
   const modeChanged = !state || state.mode !== next.mode;
   const enteredCompare = next.chatView === 'compare' && (modeChanged || state.chatView !== 'compare');
   const enteredHistory = next.chatView === 'history' && (modeChanged || state.chatView !== 'history');
+  const enteredHelp = next.chatView === 'help' && (modeChanged || state.chatView !== 'help');
   state = next;
   document.body.dataset.mode = state.mode;
   document.body.dataset.view = state.mode === 'chat' ? state.chatView : '';
@@ -469,6 +500,8 @@ host.on('state', (next) => {
   $('#historyBtn').classList.toggle('active', state.chatView === 'history');
   if (enteredCompare) renderCompare();
   if (enteredHistory) renderHistoryList();
+  if (enteredHelp) renderHelp();
+  $('#helpBtn').classList.toggle('active', state.chatView === 'help');
   $('#hint').textContent = HINTS[state.mode];
   for (const b of document.querySelectorAll('[data-layout]')) {
     b.classList.toggle('active', b.dataset.layout === state.layout);

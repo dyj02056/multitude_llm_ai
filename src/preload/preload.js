@@ -2,7 +2,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-const CHANNELS = new Set(['state', 'panel:status', 'synth:status']);
+const CHANNELS = new Set(['state', 'panel:status', 'synth:status', 'shortcut']);
 
 contextBridge.exposeInMainWorld('host', {
   openModels: (ids) => ipcRenderer.send('models:open', ids),
@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('host', {
     clear: () => ipcRenderer.invoke('history:clear'),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
+  shortcuts: () => ipcRenderer.invoke('shortcuts:list'),
   runSynth: (judgeId) => ipcRenderer.invoke('synth:run', judgeId),
   setSynth: (opts) => ipcRenderer.send('synth:set', opts),
   setLayout: (value) => ipcRenderer.send('layout:set', value),
