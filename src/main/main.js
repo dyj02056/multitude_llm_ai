@@ -34,6 +34,7 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 let win = null;
 let mode = 'login'; // 'login' | 'pick' | 'chat'
+let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교)
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
 
@@ -207,6 +208,7 @@ function showChat(selected) {
     else openPanel(svc);
   }
   mode = 'chat';
+  chatView = 'panels';
   pushState();
 }
 
@@ -256,8 +258,12 @@ function pushState() {
   const rects = computeRects();
   if (loginView && rects.login) loginView.setBounds(rects.login);
   for (const r of rects.panels) panels.get(r.id)?.view.setBounds(r.content);
+  // 답변 비교 화면에서는 웹 패널을 숨긴다. 떼어 내지 않고 숨기기만 해서 답변 감시는 계속된다.
+  const showPanels = mode === 'chat' && chatView === 'panels';
+  for (const p of panels.values()) p.view.setVisible(showPanels);
   win.webContents.send('state', {
     mode,
+    chatView,
     layout: prefs.layout,
     selected: prefs.selected,
     synthTarget: prefs.synthTarget,
@@ -425,6 +431,24 @@ ipcMain.handle('answer:copy', async (_e, id) => {
   }
   if (parts.length) clipboard.writeText(parts.join('\n\n---\n\n'));
   return { copied: parts.length, total: ids.length };
+});
+
+ipcMain.on('view:set', (_e, value) => {
+  if (mode === 'chat' && (value === 'panels' || value === 'compare')) {
+    chatView = value;
+    pushState();
+  }
+});
+
+// 답변 비교 화면용: 열린 패널마다 최신 답변 글과 마지막 공통 질문
+ipcMain.handle('answers:get', async () => {
+  const answers = [];
+  for (const svc of SERVICES) {
+    if (!panels.has(svc.id)) continue;
+    const snap = await snapshot(panels.get(svc.id).view.webContents, svc);
+    answers.push({ id: svc.id, name: svc.name, color: svc.color, text: snap?.text || '' });
+  }
+  return { question: round?.question || '', answers };
 });
 
 ipcMain.on('panel:action', (_e, { id, action }) => {

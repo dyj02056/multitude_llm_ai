@@ -15,6 +15,7 @@
       <button data-layout="grid">격자</button>
       <button data-layout="row">가로</button>
     </div>
+    <button class="only-chat" id="compareBtn" title="열린 패널의 최신 답변을 나란히 봅니다">답변 비교</button>
     <button class="only-chat" id="copyAll" title="열린 패널의 최신 답변을 한 번에 복사">모든 답변 복사</button>
     <button class="only-chat" id="newChatAll">모두 새 대화</button>
     <button class="only-chat" id="reloadAll">모두 새로고침</button>
@@ -30,6 +31,16 @@
   </section>
 
   <main id="panels" class="only-chat"></main>
+
+  <section id="compare" class="only-compare">
+    <div class="compare-head">
+      <span class="muted-label">질문</span>
+      <span id="compareQuestion" class="compare-question"></span>
+      <button id="compareRefresh" title="답변을 다시 읽어 옵니다">새로고침</button>
+      <button id="compareClose">패널로 돌아가기</button>
+    </div>
+    <div id="compareCols" class="compare-cols"></div>
+  </section>
 
   <footer id="composer" class="only-chat">
     <div class="targets">

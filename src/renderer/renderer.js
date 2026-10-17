@@ -145,6 +145,8 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars }
     p.status.textContent = answer === 'done' ? `${ANSWER_TEXT.done} · ${chars}자` : ANSWER_TEXT[answer];
     p.status.dataset.state = `answer-${answer}`;
     updateAnswerSummary();
+    // 비교 화면을 보고 있으면 답변이 끝날 때마다 새로 읽는다.
+    if (answer === 'done' && state?.chatView === 'compare') renderCompare();
     return;
   }
   if (loading !== undefined) p.dot.classList.toggle('loading', loading);
@@ -200,6 +202,41 @@ function renderTargets() {
     box.append(chip);
   }
 }
+
+// ---------- 답변 비교 ----------
+
+async function renderCompare() {
+  const { question, answers } = await host.getAnswers();
+  $('#compareQuestion').textContent = question || '(아직 공통 입력창으로 보낸 질문이 없습니다)';
+  const cols = $('#compareCols');
+  cols.style.gridTemplateColumns = `repeat(${Math.max(answers.length, 1)}, minmax(0, 1fr))`;
+  cols.replaceChildren(
+    ...answers.map((a) => {
+      const col = document.createElement('article');
+      col.className = 'compare-col';
+      col.style.setProperty('--svc', a.color);
+      const head = document.createElement('div');
+      head.className = 'compare-col-head';
+      const count = span('muted-label', a.text ? `${a.text.length.toLocaleString()}자` : '답변 없음');
+      const copy = button('복사', `${a.name} 답변 복사`, async () => {
+        const r = await host.copyAnswer(a.id);
+        flash(count, r.copied ? '복사했습니다' : '복사할 답변이 없습니다');
+      });
+      copy.disabled = !a.text;
+      head.append(span('dot ready'), span('name', a.name), count, copy);
+      const body = document.createElement('div');
+      body.className = 'compare-body';
+      body.textContent = a.text || '이 패널에는 아직 답변이 없습니다.';
+      body.classList.toggle('empty', !a.text);
+      col.append(head, body);
+      return col;
+    }),
+  );
+}
+
+$('#compareBtn').addEventListener('click', () => host.setView(state.chatView === 'compare' ? 'panels' : 'compare'));
+$('#compareClose').addEventListener('click', () => host.setView('panels'));
+$('#compareRefresh').addEventListener('click', renderCompare);
 
 // ---------- 교차검토(종합) ----------
 
@@ -272,8 +309,12 @@ $('#prompt').addEventListener('keydown', (e) => {
 
 host.on('state', (next) => {
   const modeChanged = !state || state.mode !== next.mode;
+  const enteredCompare = next.chatView === 'compare' && (modeChanged || state.chatView !== 'compare');
   state = next;
   document.body.dataset.mode = state.mode;
+  document.body.dataset.view = state.mode === 'chat' ? state.chatView : '';
+  $('#compareBtn').classList.toggle('active', state.chatView === 'compare');
+  if (enteredCompare) renderCompare();
   $('#hint').textContent = HINTS[state.mode];
   for (const b of document.querySelectorAll('[data-layout]')) {
     b.classList.toggle('active', b.dataset.layout === state.layout);

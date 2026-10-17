@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('host', {
   logout: () => ipcRenderer.send('logout'),
   sendPrompt: (text, targets) => ipcRenderer.invoke('prompt:send', { text, targets }),
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
+  setView: (value) => ipcRenderer.send('view:set', value),
+  getAnswers: () => ipcRenderer.invoke('answers:get'),
   runSynth: (judgeId) => ipcRenderer.invoke('synth:run', judgeId),
   setSynth: (opts) => ipcRenderer.send('synth:set', opts),
   setLayout: (value) => ipcRenderer.send('layout:set', value),
