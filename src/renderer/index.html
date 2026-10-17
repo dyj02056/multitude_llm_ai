@@ -36,6 +36,12 @@
       <span class="muted-label">보낼 대상</span>
       <div id="targetChips"></div>
       <span class="hint" id="sendHint">Enter 보내기 · Shift+Enter 줄바꿈</span>
+      <div class="synth" title="다른 AI들의 답변을 모아 한 AI에게 비교·정리를 부탁합니다">
+        <span class="muted-label">종합</span>
+        <select id="synthTarget" aria-label="종합을 맡을 AI"></select>
+        <button id="synthBtn">종합 요청</button>
+        <label class="check"><input type="checkbox" id="autoSynth" /> 완료 후 자동</label>
+      </div>
     </div>
     <div class="compose-row">
       <textarea id="prompt" rows="2" placeholder="모든 AI에게 한 번에 물어보기"></textarea>

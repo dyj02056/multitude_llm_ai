@@ -132,3 +132,13 @@ button.primary:hover { background: #3f7ce0; }
 .status[data-state="answer-done"] { color: #6bd67a; }
 .status[data-state="answer-timeout"], .status[data-state="answer-no-answer"] { color: #e05b5b; }
 .status[data-state="flash"] { color: var(--text); }
+
+/* ---------- 교차검토(종합) ---------- */
+.synth { display: flex; align-items: center; gap: 6px; padding-left: 10px; border-left: 1px solid var(--border); }
+.synth select {
+  background: #20242f; color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12px;
+}
+.synth button { padding: 2px 10px; font-size: 12px; }
+.synth button:disabled { opacity: .5; cursor: default; }
+.check { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); cursor: pointer; }

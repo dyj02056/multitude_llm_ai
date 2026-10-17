@@ -51,9 +51,9 @@ module.exports = [
     submitKey: 'Enter',
     stop: ['button[data-testid="stop-button"]', 'button[aria-label*="Stop streaming" i]', 'button[aria-label*="스트리밍 중지"]'],
     response: [
+      '[data-markdown-text-style="assistant-message"]',
       '[data-message-author-role="assistant"] .markdown',
       '[data-message-author-role="assistant"]',
-      '[data-markdown-text-style="assistant-message"]',
     ],
     newChatUrl: 'https://chatgpt.com/',
   },

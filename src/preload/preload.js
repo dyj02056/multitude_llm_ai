@@ -2,7 +2,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-const CHANNELS = new Set(['state', 'panel:status']);
+const CHANNELS = new Set(['state', 'panel:status', 'synth:status']);
 
 contextBridge.exposeInMainWorld('host', {
   openModels: (ids) => ipcRenderer.send('models:open', ids),
@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('host', {
   logout: () => ipcRenderer.send('logout'),
   sendPrompt: (text, targets) => ipcRenderer.invoke('prompt:send', { text, targets }),
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
+  runSynth: (judgeId) => ipcRenderer.invoke('synth:run', judgeId),
+  setSynth: (opts) => ipcRenderer.send('synth:set', opts),
   setLayout: (value) => ipcRenderer.send('layout:set', value),
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),
   on: (channel, fn) => {

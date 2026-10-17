@@ -8,6 +8,7 @@ const autologin = require('./autologin');
 const { sendPrompt } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
+const { buildSynthPrompt } = require('./synth');
 
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
@@ -39,7 +40,7 @@ const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비
 // ---------- 설정 저장 ----------
 
 const prefsFile = () => path.join(app.getPath('userData'), 'prefs.json');
-let prefs = { selected: SERVICES.map((s) => s.id), layout: 'grid' };
+let prefs = { selected: SERVICES.map((s) => s.id), layout: 'grid', synthTarget: 'chatgpt', autoSynth: false };
 
 function loadPrefs() {
   try {
@@ -259,6 +260,8 @@ function pushState() {
     mode,
     layout: prefs.layout,
     selected: prefs.selected,
+    synthTarget: prefs.synthTarget,
+    autoSynth: prefs.autoSynth,
     services: SERVICES.map(({ id, name, color, url }) => ({ id, name, color, url })),
     rects: rects.panels,
   });
@@ -314,35 +317,101 @@ ipcMain.on('layout:set', (_e, value) => {
   }
 });
 
+// ---------- 질문 보내기 · 교차검토(종합) ----------
+
+// 공통 입력창으로 보낸 질문 한 번을 "라운드"라고 부른다.
+// 자동 종합은 라운드의 모든 답변이 끝났을 때 한 번만 실행한다.
+let round = null; // { question, targets: [id], finished: Map(id -> 상태), synthDone }
+
+const FINISHED = new Set(['done', 'timeout', 'no-answer']);
+
+/** 패널 하나에 글을 보내고 답변을 지켜본다. onFinish(state): 답변이 끝났거나 실패했을 때 */
+async function sendToPanel(id, text, onFinish) {
+  const svc = SERVICES.find((s) => s.id === id);
+  const p = panels.get(id);
+  const wc = p.view.webContents;
+  const token = (p.watchToken = (p.watchToken || 0) + 1); // 새로 보내면 이전 감시는 멈춘다
+  sendPanel(id, { send: 'sending' });
+  const before = await snapshot(wc, svc);
+  let res;
+  try {
+    res = await sendPrompt(wc, svc, text);
+  } catch (err) {
+    res = { ok: false, error: err.message };
+  }
+  log('send', id, JSON.stringify(res));
+  sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error });
+  if (!res.ok) {
+    onFinish?.('error');
+  } else if (!dev.drySend) {
+    watchAnswer(wc, svc, before, () => p.watchToken === token, (answer, info) => {
+      log('answer', id, answer, info ? JSON.stringify(info) : '');
+      sendPanel(id, { answer, ...info });
+      if (FINISHED.has(answer)) onFinish?.(answer);
+    });
+  }
+  return { id, ...res };
+}
+
+function sendSynthStatus(patch) {
+  if (win && !win.isDestroyed()) win.webContents.send('synth:status', patch);
+}
+
+function onRoundAnswer(r, id, state) {
+  if (r !== round) return; // 그사이 새 질문을 보냈으면 무시
+  r.finished.set(id, state);
+  if (r.finished.size < r.targets.length || r.synthDone || !prefs.autoSynth) return;
+  r.synthDone = true;
+  runSynth(null, 'auto');
+}
+
+/** 종합 요청. judgeId가 없으면 설정된 종합 담당 AI를 쓴다. */
+async function runSynth(judgeId, cause = 'manual') {
+  const judge = judgeId || prefs.synthTarget;
+  if (!round) return fail('먼저 공통 입력창으로 질문을 보내 주세요');
+  if (!panels.has(judge)) return fail('종합을 맡을 AI 패널이 열려 있지 않습니다');
+
+  const answers = [];
+  for (const svc of SERVICES) {
+    if (svc.id === judge || !round.targets.includes(svc.id) || !panels.has(svc.id)) continue;
+    const snap = await snapshot(panels.get(svc.id).view.webContents, svc);
+    if (snap?.text) answers.push({ name: svc.name, text: snap.text });
+  }
+  if (!answers.length) return fail('종합할 다른 AI의 답변이 없습니다');
+
+  const text = buildSynthPrompt({
+    question: round.question,
+    answers,
+    judgeAnswered: round.targets.includes(judge),
+  });
+  const judgeName = SERVICES.find((s) => s.id === judge).name;
+  sendSynthStatus({ state: 'sending', judge: judgeName, count: answers.length, cause });
+  const res = await sendToPanel(judge, text);
+  if (!res.ok) return fail(`${judgeName}에 보내지 못했습니다: ${res.error}`);
+  sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause });
+  return { ok: true, judge: judgeName, count: answers.length };
+
+  function fail(error) {
+    sendSynthStatus({ state: 'error', error, cause });
+    return { ok: false, error };
+  }
+}
+
 // 공통 입력창: 고른 패널들에 같은 질문을 동시에 보낸다.
 ipcMain.handle('prompt:send', async (_e, { text, targets }) => {
   if (typeof text !== 'string' || !text.trim() || !Array.isArray(targets)) return [];
-  const jobs = targets
-    .filter((id) => panels.has(id))
-    .map(async (id) => {
-      const svc = SERVICES.find((s) => s.id === id);
-      const p = panels.get(id);
-      const wc = p.view.webContents;
-      const token = (p.watchToken = (p.watchToken || 0) + 1); // 새로 보내면 이전 감시는 멈춘다
-      sendPanel(id, { send: 'sending' });
-      const before = await snapshot(wc, svc);
-      let res;
-      try {
-        res = await sendPrompt(wc, svc, text);
-      } catch (err) {
-        res = { ok: false, error: err.message };
-      }
-      log('send', id, JSON.stringify(res));
-      sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error });
-      if (res.ok) {
-        watchAnswer(wc, svc, before, () => p.watchToken === token, (answer, info) => {
-          log('answer', id, answer, info ? JSON.stringify(info) : '');
-          sendPanel(id, { answer, ...info });
-        });
-      }
-      return { id, ...res };
-    });
-  return Promise.all(jobs);
+  const ids = targets.filter((id) => panels.has(id));
+  const r = (round = { question: text, targets: ids, finished: new Map(), synthDone: false });
+  return Promise.all(ids.map((id) => sendToPanel(id, text, (state) => onRoundAnswer(r, id, state))));
+});
+
+ipcMain.handle('synth:run', (_e, judgeId) => runSynth(typeof judgeId === 'string' ? judgeId : null));
+
+ipcMain.on('synth:set', (_e, { target, auto }) => {
+  if (typeof target === 'string' && SERVICES.some((s) => s.id === target)) prefs.synthTarget = target;
+  if (typeof auto === 'boolean') prefs.autoSynth = auto;
+  savePrefs();
+  pushState();
 });
 
 // 최신 답변 복사. id가 '*'이면 열린 패널 전부를 "## 이름" 머리말로 묶는다.

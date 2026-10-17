@@ -201,6 +201,40 @@ function renderTargets() {
   }
 }
 
+// ---------- 교차검토(종합) ----------
+
+function renderSynth() {
+  const select = $('#synthTarget');
+  const open = state.rects.map((r) => r.id);
+  select.replaceChildren(
+    ...open.map((id) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = state.services.find((s) => s.id === id).name;
+      return opt;
+    }),
+  );
+  // 저장된 종합 담당이 열려 있지 않으면 첫 패널로 바꿔 저장한다.
+  if (open.length && !open.includes(state.synthTarget)) host.setSynth({ target: open[0] });
+  else select.value = state.synthTarget;
+  $('#autoSynth').checked = !!state.autoSynth;
+  $('#synthBtn').disabled = open.length < 2;
+}
+
+$('#synthTarget').addEventListener('change', (e) => host.setSynth({ target: e.target.value }));
+$('#autoSynth').addEventListener('change', (e) => host.setSynth({ auto: e.target.checked }));
+$('#synthBtn').addEventListener('click', () => host.runSynth($('#synthTarget').value));
+
+host.on('synth:status', ({ state: st, judge, count, error, cause }) => {
+  const prefix = cause === 'auto' ? '자동 종합: ' : '';
+  $('#sendHint').textContent =
+    st === 'error'
+      ? `${prefix}${error}`
+      : st === 'sending'
+        ? `${prefix}${judge}에게 답변 ${count}개 종합을 요청하는 중…`
+        : `${prefix}${judge}에게 답변 ${count}개 종합을 요청했습니다`;
+});
+
 let sending = false;
 
 async function send() {
@@ -246,7 +280,10 @@ host.on('state', (next) => {
   }
   if (state.mode === 'pick' && modeChanged) renderPick();
   syncPanels();
-  if (state.mode === 'chat') renderTargets();
+  if (state.mode === 'chat') {
+    renderTargets();
+    renderSynth();
+  }
 });
 
 for (const b of document.querySelectorAll('[data-layout]')) {
