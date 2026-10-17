@@ -1,0 +1,415 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
+const SERVICES = require('./services');
+const autologin = require('./autologin');
+const { sendPrompt } = require('./injector');
+const { snapshot, watchAnswer } = require('./watcher');
+
+const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
+const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
+const COMPOSER_H = 104; // 채팅 화면 맨 아래 공통 입력창 높이
+const GAP = 4;
+
+// 모든 패널이 한 세션을 같이 쓴다. 그래야 Google 로그인 한 번으로 다른 서비스의 "Google로 계속하기"가 이어진다.
+const PARTITION = 'persist:shared';
+const LOGIN_URL = 'https://accounts.google.com/ServiceLogin?continue=' + encodeURIComponent('https://myaccount.google.com/');
+
+// Electron 기본 UA에는 "Electron/x.y" 토큰이 들어가 일부 사이트가 막는다. 일반 Chrome UA로 바꾼다.
+const CHROME_UA =
+  `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ` +
+  `Chrome/${process.versions.chrome} Safari/537.36`;
+// Google 로그인은 임베디드 Chromium을 "안전하지 않은 브라우저"로 막는다. 로그인 도메인에만 Firefox UA를 보낸다.
+const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
+const AUTH_URL_RE =
+  /accounts\.google\.com|appleid\.apple\.com|auth0|auth\.openai\.com|\/oauth|\/auth\/|\/login|\/signin|sso/i;
+
+app.userAgentFallback = CHROME_UA;
+// 개발용: 별도 프로필 폴더로 실행해 사용 중인 앱과 겹치지 않게 한다.
+if (process.env.MLA_PROFILE) app.setPath('userData', process.env.MLA_PROFILE);
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
+
+let win = null;
+let mode = 'login'; // 'login' | 'pick' | 'chat'
+let loginView = null;
+const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
+
+// ---------- 설정 저장 ----------
+
+const prefsFile = () => path.join(app.getPath('userData'), 'prefs.json');
+let prefs = { selected: SERVICES.map((s) => s.id), layout: 'grid' };
+
+function loadPrefs() {
+  try {
+    prefs = { ...prefs, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) };
+  } catch {}
+}
+
+function savePrefs() {
+  try {
+    fs.writeFileSync(prefsFile(), JSON.stringify(prefs, null, 2));
+  } catch {}
+}
+
+// ---------- 세션 ----------
+
+const ses = () => session.fromPartition(PARTITION);
+
+function setupSession() {
+  const s = ses();
+  s.setUserAgent(CHROME_UA);
+
+  const allowed = new Set(['clipboard-sanitized-write', 'fullscreen']);
+  s.setPermissionRequestHandler((_wc, permission, cb) => cb(allowed.has(permission)));
+  s.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+
+  s.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*'] }, (details, cb) => {
+    const headers = details.requestHeaders;
+    headers['User-Agent'] = FIREFOX_UA;
+    for (const key of Object.keys(headers)) {
+      if (/^sec-ch-ua/i.test(key)) delete headers[key];
+    }
+    cb({ requestHeaders: headers });
+  });
+}
+
+async function isGoogleLoggedIn() {
+  const cookies = await ses().cookies.get({ domain: 'google.com' });
+  return cookies.some((c) => c.name === 'SID' || c.name === '__Secure-1PSID');
+}
+
+// ---------- 뷰 ----------
+
+function newView() {
+  const view = new WebContentsView({
+    webPreferences: {
+      partition: PARTITION,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false, // 화면에 안 보이는 패널도 답변 스트리밍이 멈추지 않도록
+    },
+  });
+  view.webContents.setWindowOpenHandler(({ url }) => {
+    console.log(`[popup] ${url.slice(0, 160)}`);
+    // 로그인 팝업은 같은 세션의 자식 창으로 연다. 나머지 링크는 기본 브라우저로.
+    if (url === 'about:blank' || AUTH_URL_RE.test(url)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 520,
+          height: 720,
+          parent: win,
+          autoHideMenuBar: true,
+          webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true },
+        },
+      };
+    }
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  return view;
+}
+
+function destroyView(view) {
+  if (!view) return;
+  win?.contentView.removeChildView(view);
+  if (!view.webContents.isDestroyed()) view.webContents.close();
+}
+
+function sendPanel(id, patch) {
+  if (win && !win.isDestroyed()) win.webContents.send('panel:status', { id, ...patch });
+}
+
+function openPanel(svc) {
+  const view = newView();
+  const wc = view.webContents;
+
+  wc.on('did-start-loading', () => sendPanel(svc.id, { loading: true }));
+  wc.on('did-stop-loading', () => sendPanel(svc.id, { loading: false, url: wc.getURL() }));
+  wc.on('did-navigate', (_e, url, code) => {
+    console.log(`[nav] ${svc.id} ${code} ${url.slice(0, 160)}`);
+    sendPanel(svc.id, { url });
+  });
+  wc.on('did-redirect-navigation', (d) => d.isMainFrame && console.log(`[nav] ${svc.id} redirect ${d.url.slice(0, 160)}`));
+  wc.on('did-navigate-in-page', (_e, url) => sendPanel(svc.id, { url }));
+  wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
+    if (isMainFrame && code !== -3) sendPanel(svc.id, { error: `${desc} (${code})`, url });
+  });
+
+  const login = autologin.attach(wc, svc, (state) => sendPanel(svc.id, { login: state }));
+  win.contentView.addChildView(view);
+  wc.loadURL(svc.url);
+  panels.set(svc.id, { view, login });
+}
+
+// ---------- 화면 전환 ----------
+
+function showLogin() {
+  for (const { view } of panels.values()) destroyView(view);
+  panels.clear();
+  mode = 'login';
+
+  loginView = newView();
+  const wc = loginView.webContents;
+  // 로그인 직후 Google이 "패스키 생성됨" 같은 안내 화면에서 멈추기도 한다.
+  // 그래서 페이지 이동이 아니라 로그인 쿠키가 생기는 순간을 보고 넘어간다.
+  let timer = null;
+  const check = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (mode === 'login' && (await isGoogleLoggedIn())) showPick();
+    }, 800);
+  };
+  const onCookie = (_e, cookie, _cause, removed) => {
+    if (!removed && (cookie.name === 'SID' || cookie.name === '__Secure-1PSID')) check();
+  };
+  ses().cookies.on('changed', onCookie);
+  wc.once('destroyed', () => {
+    clearTimeout(timer);
+    ses().cookies.removeListener('changed', onCookie);
+  });
+  wc.on('did-navigate', check);
+  wc.on('did-navigate-in-page', check);
+  win.contentView.addChildView(loginView);
+  wc.loadURL(LOGIN_URL);
+  pushState();
+}
+
+function showPick() {
+  destroyView(loginView);
+  loginView = null;
+  mode = 'pick';
+  // 열린 패널은 살려 두되 화면에서만 뺀다. 다시 열면 대화가 그대로 남아 있다.
+  for (const { view } of panels.values()) win.contentView.removeChildView(view);
+  pushState();
+}
+
+function showChat(selected) {
+  const ids = SERVICES.map((s) => s.id).filter((id) => selected.includes(id));
+  if (!ids.length) return;
+  prefs.selected = ids;
+  savePrefs();
+
+  for (const [id, p] of panels) {
+    if (!ids.includes(id)) {
+      destroyView(p.view);
+      panels.delete(id);
+    }
+  }
+  for (const svc of SERVICES) {
+    if (!ids.includes(svc.id)) continue;
+    const p = panels.get(svc.id);
+    if (p) win.contentView.addChildView(p.view);
+    else openPanel(svc);
+  }
+  mode = 'chat';
+  pushState();
+}
+
+async function logout() {
+  destroyView(loginView);
+  loginView = null;
+  for (const { view } of panels.values()) destroyView(view);
+  panels.clear();
+  const s = ses();
+  await s.clearStorageData();
+  await s.clearCache();
+  await s.clearAuthCache();
+  showLogin();
+}
+
+// ---------- 배치 ----------
+
+function computeRects() {
+  const [w, h] = win.getContentSize();
+  const area = { x: 0, y: TOOLBAR_H, width: w, height: h - TOOLBAR_H };
+  if (mode === 'login') return { login: area, panels: [] };
+  if (mode !== 'chat') return { panels: [] };
+
+  const ids = SERVICES.map((s) => s.id).filter((id) => panels.has(id));
+  const n = ids.length;
+  const cols = prefs.layout === 'row' || n <= 3 ? n : 2;
+  const rows = Math.ceil(n / cols);
+  const cellW = Math.floor((w - GAP * (cols + 1)) / cols);
+  const panelsH = area.height - COMPOSER_H;
+  const cellH = Math.floor((panelsH - GAP * (rows + 1)) / rows);
+
+  return {
+    panels: ids.map((id, i) => {
+      const x = GAP + (i % cols) * (cellW + GAP);
+      const y = area.y + GAP + Math.floor(i / cols) * (cellH + GAP);
+      return {
+        id,
+        frame: { x, y, width: cellW, height: cellH },
+        content: { x, y: y + HEADER_H, width: cellW, height: Math.max(0, cellH - HEADER_H) },
+      };
+    }),
+  };
+}
+
+function pushState() {
+  if (!win || win.isDestroyed()) return;
+  const rects = computeRects();
+  if (loginView && rects.login) loginView.setBounds(rects.login);
+  for (const r of rects.panels) panels.get(r.id)?.view.setBounds(r.content);
+  win.webContents.send('state', {
+    mode,
+    layout: prefs.layout,
+    selected: prefs.selected,
+    services: SERVICES.map(({ id, name, color, url }) => ({ id, name, color, url })),
+    rects: rects.panels,
+  });
+}
+
+// ---------- 창 ----------
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1600,
+    height: 960,
+    minWidth: 960,
+    minHeight: 600,
+    title: 'Multitude LLM',
+    backgroundColor: '#0f1117',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'preload', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  win.webContents.once('did-finish-load', async () => {
+    const start = process.env.MLA_START; // 개발용: 'pick' | 'chat' 으로 로그인 확인을 건너뛴다
+    if (start === 'chat') showChat(prefs.selected);
+    else if (start === 'pick' || (await isGoogleLoggedIn())) showPick();
+    else showLogin();
+    if (process.env.MLA_SMOKE_DIR) runSmoke(process.env.MLA_SMOKE_DIR);
+  });
+
+  win.on('resize', pushState);
+  win.on('closed', () => {
+    win = null;
+    loginView = null;
+    panels.clear();
+  });
+}
+
+// 개발용 점검: MLA_SMOKE_DIR=<폴더> 로 실행하면 잠시 뒤 화면별 URL·제목을 출력하고 스크린샷을 저장한 뒤 종료한다.
+function runSmoke(dir) {
+  setTimeout(async () => {
+    fs.mkdirSync(dir, { recursive: true });
+    const shots = loginView ? [['login', loginView]] : [...panels].map(([id, p]) => [id, p.view]);
+    for (const [id, view] of shots) {
+      const wc = view.webContents;
+      console.log(`[smoke] ${mode}\t${id}\t${wc.getURL()}\t${wc.getTitle()}`);
+      try {
+        fs.writeFileSync(path.join(dir, `${id}.png`), (await wc.capturePage()).toPNG());
+      } catch (err) {
+        console.log(`[smoke] ${id}	capture failed: ${err.message}`);
+      }
+    }
+    fs.writeFileSync(path.join(dir, 'window.png'), (await win.webContents.capturePage()).toPNG());
+    app.quit();
+  }, Number(process.env.MLA_SMOKE_DELAY || 20000));
+}
+
+// ---------- IPC ----------
+
+ipcMain.on('models:open', (_e, selected) => {
+  if (Array.isArray(selected)) showChat(selected.filter((id) => typeof id === 'string'));
+});
+ipcMain.on('models:pick', () => mode === 'chat' && showPick());
+ipcMain.on('logout', () => logout());
+
+ipcMain.on('layout:set', (_e, value) => {
+  if (value === 'grid' || value === 'row') {
+    prefs.layout = value;
+    savePrefs();
+    pushState();
+  }
+});
+
+// 공통 입력창: 고른 패널들에 같은 질문을 동시에 보낸다.
+ipcMain.handle('prompt:send', async (_e, { text, targets }) => {
+  if (typeof text !== 'string' || !text.trim() || !Array.isArray(targets)) return [];
+  const jobs = targets
+    .filter((id) => panels.has(id))
+    .map(async (id) => {
+      const svc = SERVICES.find((s) => s.id === id);
+      const p = panels.get(id);
+      const wc = p.view.webContents;
+      const token = (p.watchToken = (p.watchToken || 0) + 1); // 새로 보내면 이전 감시는 멈춘다
+      sendPanel(id, { send: 'sending' });
+      const before = await snapshot(wc, svc);
+      let res;
+      try {
+        res = await sendPrompt(wc, svc, text);
+      } catch (err) {
+        res = { ok: false, error: err.message };
+      }
+      console.log(`[send] ${id}`, JSON.stringify(res));
+      sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error });
+      if (res.ok) {
+        watchAnswer(wc, svc, before, () => p.watchToken === token, (answer, info) => {
+          console.log(`[answer] ${id} ${answer}`, info ? JSON.stringify(info) : '');
+          sendPanel(id, { answer, ...info });
+        });
+      }
+      return { id, ...res };
+    });
+  return Promise.all(jobs);
+});
+
+// 최신 답변 복사. id가 '*'이면 열린 패널 전부를 "## 이름" 머리말로 묶는다.
+ipcMain.handle('answer:copy', async (_e, id) => {
+  const ids = id === '*' ? SERVICES.map((s) => s.id).filter((x) => panels.has(x)) : [id].filter((x) => panels.has(x));
+  const parts = [];
+  for (const pid of ids) {
+    const svc = SERVICES.find((s) => s.id === pid);
+    const snap = await snapshot(panels.get(pid).view.webContents, svc);
+    if (snap?.text) parts.push(id === '*' ? `## ${svc.name}\n\n${snap.text}` : snap.text);
+  }
+  if (parts.length) clipboard.writeText(parts.join('\n\n---\n\n'));
+  return { copied: parts.length, total: ids.length };
+});
+
+ipcMain.on('panel:action', (_e, { id, action }) => {
+  const targets = id === '*' ? [...panels.entries()] : [[id, panels.get(id)]].filter(([, p]) => p);
+  for (const [pid, p] of targets) {
+    const wc = p.view.webContents;
+    if (action === 'reload') wc.reload();
+    else if (action === 'home') wc.loadURL(SERVICES.find((s) => s.id === pid).url);
+    else if (action === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
+    else if (action === 'devtools') wc.toggleDevTools();
+    else if (action === 'login') p.login.retry();
+    else if (action === 'newchat') {
+      p.watchToken = (p.watchToken || 0) + 1;
+      sendPanel(pid, { answer: 'clear' });
+      wc.loadURL(SERVICES.find((s) => s.id === pid).newChatUrl);
+    }
+  }
+});
+
+Menu.setApplicationMenu(null);
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  });
+  app.whenReady().then(() => {
+    loadPrefs();
+    setupSession();
+    createWindow();
+  });
+  app.on('window-all-closed', () => app.quit());
+}

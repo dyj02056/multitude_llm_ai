@@ -1,0 +1,14 @@
+{
+  "name": "multitude-llm-ai",
+  "productName": "Multitude LLM",
+  "version": "0.0.1",
+  "description": "Gemini · ChatGPT · DeepSeek · Groq 웹 채팅을 한 화면에서 동시에 쓰는 앱 (스파이크)",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.9.0"
+  }
+}
