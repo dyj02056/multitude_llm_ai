@@ -10,6 +10,7 @@ const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
 const { buildSynthPrompt } = require('./synth');
 const history = require('./history');
+const remote = require('./remote');
 const { SHORTCUTS, shortcutFor } = require('./shortcuts');
 
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
@@ -50,6 +51,7 @@ let prefs = {
   synthTarget: 'chatgpt',
   autoSynth: false,
   answerTimeoutMin: 20,
+  remoteSelectors: true, // 사이트 셀렉터 원격 갱신
 };
 
 function loadPrefs() {
@@ -285,6 +287,8 @@ function pushState() {
     autoSynth: prefs.autoSynth,
     answerTimeoutMin: prefs.answerTimeoutMin,
     timeoutChoices: TIMEOUT_CHOICES,
+    remoteSelectors: prefs.remoteSelectors,
+    remote: remote.getStatus(),
     services: SERVICES.map(({ id, name, color, url }) => ({ id, name, color, url })),
     rects: rects.panels,
   });
@@ -463,8 +467,13 @@ ipcMain.handle('prompt:send', async (_e, { text, targets }) => {
 
 ipcMain.handle('synth:run', (_e, judgeId) => runSynth(typeof judgeId === 'string' ? judgeId : null));
 
-ipcMain.on('settings:set', (_e, { answerTimeoutMin }) => {
+ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors }) => {
   if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
+  if (typeof remoteSelectors === 'boolean' && remoteSelectors !== prefs.remoteSelectors) {
+    prefs.remoteSelectors = remoteSelectors;
+    if (remoteSelectors) refreshRemote();
+    else remote.reset();
+  }
   savePrefs();
   pushState();
 });
@@ -532,6 +541,20 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
   }
 });
 
+// ---------- 사이트 셀렉터 원격 갱신 ----------
+
+const REMOTE_REFRESH_MS = 6 * 60 * 60 * 1000;
+
+async function refreshRemote() {
+  if (!prefs.remoteSelectors) return remote.getStatus();
+  const st = await remote.refresh();
+  log('remote', JSON.stringify(st));
+  pushState();
+  return st;
+}
+
+ipcMain.handle('remote:refresh', () => refreshRemote());
+
 // ---------- 단축키 ----------
 
 ipcMain.handle('shortcuts:list', () => SHORTCUTS.map(({ keys, label }) => ({ keys, label })));
@@ -586,6 +609,13 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     loadPrefs();
     history.init(app.getPath('userData'));
+    remote.init(app.getPath('userData'), SERVICES, { remoteUrl: dev.remoteUrl });
+    if (prefs.remoteSelectors) {
+      refreshRemote();
+      setInterval(refreshRemote, REMOTE_REFRESH_MS);
+    } else {
+      remote.reset(); // 끈 상태면 저장해 둔 원격 값도 쓰지 않는다
+    }
     setupSession();
     createWindow();
   });

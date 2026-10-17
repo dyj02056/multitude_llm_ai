@@ -255,3 +255,6 @@ kbd {
 }
 .muted.small { font-size: 12px; margin-bottom: 18px; }
 .status[data-state="answer-timeout"] { color: #e0a23b; }
+
+.check-label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+#remoteRefresh:disabled { opacity: .5; cursor: default; }

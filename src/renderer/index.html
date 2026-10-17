@@ -64,6 +64,11 @@
         <select id="timeoutSelect"></select>
       </div>
       <p class="muted small">이 시간이 지나면 "시간 초과"로 표시하지만, 그 뒤에도 1시간 동안 계속 지켜보다가 끝나면 "완료"로 바꿉니다.</p>
+      <div class="setting-row">
+        <label class="check-label"><input type="checkbox" id="remoteToggle" /> 사이트 셀렉터 자동 갱신</label>
+        <button id="remoteRefresh">지금 확인</button>
+      </div>
+      <p class="muted small" id="remoteStatus"></p>
       <h2>단축키</h2>
       <p class="muted">서비스 패널 안에 커서가 있어도 동작합니다.</p>
       <table id="helpTable"></table>

@@ -386,7 +386,31 @@ host.on('shortcut', (action) => {
 
 $('#timeoutSelect').addEventListener('change', (e) => host.setSettings({ answerTimeoutMin: Number(e.target.value) }));
 
+const REMOTE_SOURCE = { builtin: '앱에 들어 있는 셀렉터', cache: '저장해 둔 원격 셀렉터', remote: '원격 셀렉터' };
+
+function renderRemoteStatus() {
+  const r = state.remote || {};
+  const parts = [
+    `지금 쓰는 것: ${REMOTE_SOURCE[r.source] || r.source}${r.version ? ` (버전 ${r.version}${r.updated ? `, ${r.updated}` : ''})` : ''}`,
+  ];
+  if (r.services?.length) parts.push(`바뀐 서비스: ${r.services.join(', ')}`);
+  if (r.checkedAt) parts.push(`마지막 확인 ${fmtTime(r.checkedAt)}`);
+  if (r.error) parts.push(`확인 실패: ${r.error}`);
+  $('#remoteStatus').textContent =
+    `서비스 화면이 바뀌어 입력창·답변을 못 찾을 때, 앱을 다시 설치하지 않고 GitHub에서 고친 셀렉터를 받아 씁니다. ${parts.join(' · ')}`;
+  $('#remoteToggle').checked = !!state.remoteSelectors;
+  $('#remoteRefresh').disabled = !state.remoteSelectors;
+}
+
+$('#remoteToggle').addEventListener('change', (e) => host.setSettings({ remoteSelectors: e.target.checked }));
+$('#remoteRefresh').addEventListener('click', async () => {
+  $('#remoteRefresh').disabled = true;
+  await host.refreshRemote();
+  $('#remoteRefresh').disabled = false;
+});
+
 function renderSettings() {
+  renderRemoteStatus();
   const select = $('#timeoutSelect');
   select.replaceChildren(
     ...state.timeoutChoices.map((m) => Object.assign(document.createElement('option'), { value: m, textContent: `${m}분` })),
@@ -531,6 +555,7 @@ host.on('state', (next) => {
   if (enteredCompare) renderCompare();
   if (enteredHistory) renderHistoryList();
   if (enteredHelp) renderHelp();
+  else if (state.chatView === 'help') renderRemoteStatus(); // 설정 화면을 보는 중에 갱신 결과가 오면 바로 반영
   $('#helpBtn').classList.toggle('active', state.chatView === 'help');
   $('#hint').textContent = HINTS[state.mode];
   for (const b of document.querySelectorAll('[data-layout]')) {

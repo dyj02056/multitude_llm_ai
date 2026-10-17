@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('host', {
   runSynth: (judgeId) => ipcRenderer.invoke('synth:run', judgeId),
   setSynth: (opts) => ipcRenderer.send('synth:set', opts),
   setSettings: (opts) => ipcRenderer.send('settings:set', opts),
+  refreshRemote: () => ipcRenderer.invoke('remote:refresh'),
   setLayout: (value) => ipcRenderer.send('layout:set', value),
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),
   on: (channel, fn) => {
