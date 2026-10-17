@@ -4,6 +4,8 @@
 // 글자 입력은 webContents.insertText(브라우저의 실제 입력 경로)를 써서
 // textarea · ProseMirror(ChatGPT) · Quill(Gemini) 어느 편집기든 똑같이 동작하게 한다.
 
+const { dev } = require('./dev');
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 아래 두 함수는 toString()으로 페이지 안에 주입되어 실행된다. 바깥 변수를 쓰면 안 된다.
@@ -51,8 +53,7 @@ function pressKey(wc, combo) {
 
 /** 질문을 보낸다. 결과: { ok: true, via: 'button' | 'key' } 또는 { ok: false, error } */
 async function sendPrompt(wc, svc, text) {
-  // 개발용: MLA_DRY_SEND=1 이면 입력과 버튼 찾기까지만 하고 실제로 보내지는 않는다.
-  const dry = !!process.env.MLA_DRY_SEND;
+  const dry = dev.drySend; // 개발용: 입력과 버튼 찾기까지만 하고 실제로 보내지 않는다
   const cfg = { input: svc.input || [], send: svc.send || [], sendText: svc.sendText || null, dry };
 
   const focus = await run(wc, pageFocusInput, cfg);

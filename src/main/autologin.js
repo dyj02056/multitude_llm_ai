@@ -58,7 +58,8 @@ function pageLoginStep(cfg) {
   return { step: 'idle', candidates: clickables.map(label).filter(Boolean).slice(0, 15) };
 }
 
-const log = (svc, ...args) => console.log(`[autologin] ${svc.id}`, ...args);
+const { log: devLog } = require('./dev');
+const log = (svc, ...args) => devLog('autologin', svc.id, ...args);
 
 const run = (wc, fn, arg) => wc.executeJavaScript(`(${fn.toString()})(${JSON.stringify(arg)})`, true);
 

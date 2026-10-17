@@ -7,6 +7,7 @@ const SERVICES = require('./services');
 const autologin = require('./autologin');
 const { sendPrompt } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
+const { dev, log } = require('./dev');
 
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
@@ -27,8 +28,7 @@ const AUTH_URL_RE =
   /accounts\.google\.com|appleid\.apple\.com|auth0|auth\.openai\.com|\/oauth|\/auth\/|\/login|\/signin|sso/i;
 
 app.userAgentFallback = CHROME_UA;
-// 개발용: 별도 프로필 폴더로 실행해 사용 중인 앱과 겹치지 않게 한다.
-if (process.env.MLA_PROFILE) app.setPath('userData', process.env.MLA_PROFILE);
+if (dev.profile) app.setPath('userData', dev.profile);
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 let win = null;
@@ -93,7 +93,7 @@ function newView() {
     },
   });
   view.webContents.setWindowOpenHandler(({ url }) => {
-    console.log(`[popup] ${url.slice(0, 160)}`);
+    log('popup', url.slice(0, 160));
     // 로그인 팝업은 같은 세션의 자식 창으로 연다. 나머지 링크는 기본 브라우저로.
     if (url === 'about:blank' || AUTH_URL_RE.test(url)) {
       return {
@@ -130,10 +130,10 @@ function openPanel(svc) {
   wc.on('did-start-loading', () => sendPanel(svc.id, { loading: true }));
   wc.on('did-stop-loading', () => sendPanel(svc.id, { loading: false, url: wc.getURL() }));
   wc.on('did-navigate', (_e, url, code) => {
-    console.log(`[nav] ${svc.id} ${code} ${url.slice(0, 160)}`);
+    log('nav', svc.id, code, url.slice(0, 160));
     sendPanel(svc.id, { url });
   });
-  wc.on('did-redirect-navigation', (d) => d.isMainFrame && console.log(`[nav] ${svc.id} redirect ${d.url.slice(0, 160)}`));
+  wc.on('did-redirect-navigation', (d) => d.isMainFrame && log('nav', svc.id, 'redirect', d.url.slice(0, 160)));
   wc.on('did-navigate-in-page', (_e, url) => sendPanel(svc.id, { url }));
   wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
     if (isMainFrame && code !== -3) sendPanel(svc.id, { error: `${desc} (${code})`, url });
@@ -285,11 +285,9 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.webContents.once('did-finish-load', async () => {
-    const start = process.env.MLA_START; // 개발용: 'pick' | 'chat' 으로 로그인 확인을 건너뛴다
-    if (start === 'chat') showChat(prefs.selected);
-    else if (start === 'pick' || (await isGoogleLoggedIn())) showPick();
+    if (dev.start === 'chat') showChat(prefs.selected);
+    else if (dev.start === 'pick' || (await isGoogleLoggedIn())) showPick();
     else showLogin();
-    if (process.env.MLA_SMOKE_DIR) runSmoke(process.env.MLA_SMOKE_DIR);
   });
 
   win.on('resize', pushState);
@@ -298,25 +296,6 @@ function createWindow() {
     loginView = null;
     panels.clear();
   });
-}
-
-// 개발용 점검: MLA_SMOKE_DIR=<폴더> 로 실행하면 잠시 뒤 화면별 URL·제목을 출력하고 스크린샷을 저장한 뒤 종료한다.
-function runSmoke(dir) {
-  setTimeout(async () => {
-    fs.mkdirSync(dir, { recursive: true });
-    const shots = loginView ? [['login', loginView]] : [...panels].map(([id, p]) => [id, p.view]);
-    for (const [id, view] of shots) {
-      const wc = view.webContents;
-      console.log(`[smoke] ${mode}\t${id}\t${wc.getURL()}\t${wc.getTitle()}`);
-      try {
-        fs.writeFileSync(path.join(dir, `${id}.png`), (await wc.capturePage()).toPNG());
-      } catch (err) {
-        console.log(`[smoke] ${id}	capture failed: ${err.message}`);
-      }
-    }
-    fs.writeFileSync(path.join(dir, 'window.png'), (await win.webContents.capturePage()).toPNG());
-    app.quit();
-  }, Number(process.env.MLA_SMOKE_DELAY || 20000));
 }
 
 // ---------- IPC ----------
@@ -353,11 +332,11 @@ ipcMain.handle('prompt:send', async (_e, { text, targets }) => {
       } catch (err) {
         res = { ok: false, error: err.message };
       }
-      console.log(`[send] ${id}`, JSON.stringify(res));
+      log('send', id, JSON.stringify(res));
       sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error });
       if (res.ok) {
         watchAnswer(wc, svc, before, () => p.watchToken === token, (answer, info) => {
-          console.log(`[answer] ${id} ${answer}`, info ? JSON.stringify(info) : '');
+          log('answer', id, answer, info ? JSON.stringify(info) : '');
           sendPanel(id, { answer, ...info });
         });
       }
