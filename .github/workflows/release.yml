@@ -1,0 +1,47 @@
+# v로 시작하는 태그(예: v0.1.0)를 올리면 Windows 설치 파일을 만들어 GitHub Release에 붙인다.
+# 릴리스 설명은 docs/release-notes/<태그>.md 를 쓴다.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check tag matches package.json version
+        shell: bash
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "태그 $GITHUB_REF_NAME 와 package.json 버전 $version 이 다릅니다" >&2
+            exit 1
+          fi
+          test -f "docs/release-notes/$GITHUB_REF_NAME.md" || { echo "docs/release-notes/$GITHUB_REF_NAME.md 가 없습니다" >&2; exit 1; }
+
+      - run: npm ci
+
+      - name: Build installer
+        run: |
+          node scripts/make-icon.js
+          npx electron-builder --win nsis --x64 --publish never
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Multitude LLM ${{ github.ref_name }}
+          body_path: docs/release-notes/${{ github.ref_name }}.md
+          files: |
+            dist/MultitudeLLM-Setup-*.exe
+            dist/MultitudeLLM-Setup-*.exe.blockmap
+            dist/latest.yml
