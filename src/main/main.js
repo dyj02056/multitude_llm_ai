@@ -364,19 +364,20 @@ function sendSynthStatus(patch) {
   if (win && !win.isDestroyed()) win.webContents.send('synth:status', patch);
 }
 
-/** 패널의 최신 답변 글 (기록 저장용) */
-async function latestAnswer(id) {
+/** 패널의 최신 답변: { text: 화면 글, md: Markdown } */
+async function readAnswer(id) {
   const svc = SERVICES.find((s) => s.id === id);
-  if (!panels.has(id)) return '';
-  return (await snapshot(panels.get(id).view.webContents, svc))?.text || '';
+  if (!panels.has(id)) return { text: '', md: '' };
+  const snap = await snapshot(panels.get(id).view.webContents, svc, { markdown: true });
+  return { text: snap?.text || '', md: snap?.md || snap?.text || '' };
 }
 
 const serviceName = (id) => SERVICES.find((s) => s.id === id)?.name || id;
 
 async function onRoundAnswer(r, id, state) {
   // 기록은 새 질문을 보낸 뒤에 끝난 답변이라도 그 라운드에 남긴다.
-  const text = state === 'done' ? await latestAnswer(id) : '';
-  history.setAnswer(r.historyId, id, { name: serviceName(id), state, text });
+  const { text, md } = state === 'done' ? await readAnswer(id) : { text: '', md: '' };
+  history.setAnswer(r.historyId, id, { name: serviceName(id), state, text, md });
   if (r !== round) return; // 그사이 새 질문을 보냈으면 자동 종합은 하지 않는다
   r.finished.set(id, state);
   if (r.finished.size < r.targets.length || r.synthDone || !prefs.autoSynth) return;
@@ -394,9 +395,9 @@ async function runSynth(judgeId, cause = 'manual') {
   for (const svc of SERVICES) {
     if (svc.id === judge || !round.targets.includes(svc.id) || !panels.has(svc.id)) continue;
     // 페이지가 다시 그려지는 순간이면 글이 비어 보일 수 있어 한 번 더 읽는다.
-    let text = await latestAnswer(svc.id);
-    if (!text) text = await new Promise((r) => setTimeout(r, 600)).then(() => latestAnswer(svc.id));
-    if (text) answers.push({ name: svc.name, text });
+    let { md } = await readAnswer(svc.id);
+    if (!md) ({ md } = await new Promise((r) => setTimeout(r, 600)).then(() => readAnswer(svc.id)));
+    if (md) answers.push({ name: svc.name, text: md }); // 표·코드가 살아 있도록 Markdown으로 넘긴다
     else log('synth', 'skipped (no answer text)', svc.id);
   }
   if (!answers.length) return fail('종합할 다른 AI의 답변이 없습니다');
@@ -411,7 +412,7 @@ async function runSynth(judgeId, cause = 'manual') {
   const historyId = round.historyId;
   const res = await sendToPanel(judge, text, async (state) => {
     if (state !== 'done') return;
-    history.addSynth(historyId, { judge: judgeName, at: Date.now(), text: await latestAnswer(judge) });
+    history.addSynth(historyId, { judge: judgeName, at: Date.now(), ...(await readAnswer(judge)) });
   });
   if (!res.ok) return fail(`${judgeName}에 보내지 못했습니다: ${res.error}`);
   sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause });
@@ -441,14 +442,14 @@ ipcMain.on('synth:set', (_e, { target, auto }) => {
   pushState();
 });
 
-// 최신 답변 복사. id가 '*'이면 열린 패널 전부를 "## 이름" 머리말로 묶는다.
+// 최신 답변을 Markdown으로 복사. id가 '*'이면 열린 패널 전부를 "## 이름" 머리말로 묶는다.
 ipcMain.handle('answer:copy', async (_e, id) => {
   const ids = id === '*' ? SERVICES.map((s) => s.id).filter((x) => panels.has(x)) : [id].filter((x) => panels.has(x));
   const parts = [];
   for (const pid of ids) {
     const svc = SERVICES.find((s) => s.id === pid);
-    const snap = await snapshot(panels.get(pid).view.webContents, svc);
-    if (snap?.text) parts.push(id === '*' ? `## ${svc.name}\n\n${snap.text}` : snap.text);
+    const { md } = await readAnswer(pid);
+    if (md) parts.push(id === '*' ? `## ${svc.name}\n\n${md}` : md);
   }
   if (parts.length) clipboard.writeText(parts.join('\n\n---\n\n'));
   return { copied: parts.length, total: ids.length };
@@ -475,8 +476,7 @@ ipcMain.handle('answers:get', async () => {
   const answers = [];
   for (const svc of SERVICES) {
     if (!panels.has(svc.id)) continue;
-    const snap = await snapshot(panels.get(svc.id).view.webContents, svc);
-    answers.push({ id: svc.id, name: svc.name, color: svc.color, text: snap?.text || '' });
+    answers.push({ id: svc.id, name: svc.name, color: svc.color, ...(await readAnswer(svc.id)) });
   }
   return { question: round?.question || '', answers };
 });

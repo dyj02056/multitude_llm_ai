@@ -9,10 +9,13 @@ const STABLE_POLLS = 3; // 약 2초 동안 글이 그대로면 완료
 const START_TIMEOUT_MS = 60 * 1000; // 이 안에 답변이 시작되지 않으면 포기
 const TOTAL_TIMEOUT_MS = 5 * 60 * 1000;
 
+const { htmlToMarkdown } = require('./markdown');
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 페이지 안에 주입되어 실행된다. 바깥 변수를 쓰면 안 된다.
-function pageSnapshot(cfg) {
+// toMarkdown이 있으면 최신 답변을 Markdown으로도 바꿔 md에 담는다.
+function pageSnapshot(cfg, toMarkdown) {
   const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   const stop = cfg.stop.some((s) => [...document.querySelectorAll(s)].some(visible));
   let list = [];
@@ -31,7 +34,9 @@ function pageSnapshot(cfg) {
     }
   }
   const last = list[list.length - 1];
-  return { stop, count: list.length, text: last ? textWithoutButtons(last) : '' };
+  const text = last ? textWithoutButtons(last) : '';
+  const md = toMarkdown && last ? toMarkdown(last) : undefined;
+  return { stop, count: list.length, text, md };
 
   // 답변 안의 버튼 글자("예", "복사" 등)는 빼고 읽는다.
   // innerText는 화면에 붙어 있어야 줄바꿈이 살아서, 복제본을 화면 밖에 잠깐 붙였다가 뗀다.
@@ -47,11 +52,13 @@ function pageSnapshot(cfg) {
   }
 }
 
-async function snapshot(wc, svc) {
+/** 패널의 지금 상태. { markdown: true }면 최신 답변의 Markdown(md)도 함께 읽는다 (조금 느림). */
+async function snapshot(wc, svc, { markdown = false } = {}) {
   if (wc.isDestroyed()) return null;
   const cfg = { stop: svc.stop || [], response: svc.response || [], messages: svc.messages || null };
+  const md = markdown ? htmlToMarkdown.toString() : 'null';
   try {
-    return await wc.executeJavaScript(`(${pageSnapshot.toString()})(${JSON.stringify(cfg)})`, true);
+    return await wc.executeJavaScript(`(${pageSnapshot.toString()})(${JSON.stringify(cfg)}, ${md})`, true);
   } catch {
     return null; // 페이지가 바뀌는 중
   }

@@ -219,7 +219,7 @@ async function renderCompare() {
   cols.replaceChildren(...answers.map(answerColumn));
 }
 
-/** 답변 한 칸 (비교 화면·기록 화면 공용). a: { name, color, text, note?, emptyText? } */
+/** 답변 한 칸 (비교 화면·기록 화면 공용). a: { name, color, text, md?, note?, emptyText? } */
 function answerColumn(a) {
   const col = document.createElement('article');
   col.className = 'compare-col';
@@ -228,7 +228,7 @@ function answerColumn(a) {
   head.className = 'compare-col-head';
   const count = span('muted-label', a.text ? `${a.text.length.toLocaleString()}자` : a.note || '답변 없음');
   const copy = button('복사', `${a.name} 답변 복사`, async () => {
-    await host.copyText(a.text);
+    await host.copyText(a.md || a.text); // Markdown이 있으면 서식(표·코드)을 살려 복사
     flash(count, '복사했습니다');
   });
   copy.disabled = !a.text;
@@ -285,9 +285,9 @@ function recordToMarkdown(rec) {
   const parts = [`# ${rec.question.split('\n')[0]}`, '', `> ${fmtTime(rec.at)}`, '', '## 질문', '', rec.question];
   for (const id of rec.targets) {
     const a = rec.answers[id];
-    if (a?.text) parts.push('', `## ${a.name}`, '', a.text);
+    if (a?.text) parts.push('', `## ${a.name}`, '', a.md || a.text);
   }
-  for (const sy of rec.synth) parts.push('', `## 종합 (${sy.judge})`, '', sy.text);
+  for (const sy of rec.synth) parts.push('', `## 종합 (${sy.judge})`, '', sy.md || sy.text);
   return parts.join('\n');
 }
 
@@ -330,11 +330,12 @@ async function renderHistoryDetail() {
       name: a?.name || svc?.name || id,
       color: svc?.color || 'var(--muted)',
       text: a?.text || '',
+      md: a?.md,
       note: a ? ANSWER_STATE_TEXT[a.state] : '기다리는 중',
       emptyText: a ? '저장된 답변이 없습니다.' : '답변을 기다리는 중이거나, 앱이 닫혀 저장되지 않았습니다.',
     };
   });
-  for (const sy of rec.synth) columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text });
+  for (const sy of rec.synth) columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text, md: sy.md });
   cols.style.gridTemplateColumns = `repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))`;
   cols.replaceChildren(...columns.map(answerColumn));
   box.replaceChildren(head, question, cols);
