@@ -228,7 +228,7 @@ body[data-view="history"] #panels { display: none !important; }
 .only-help { display: none; }
 body[data-mode="chat"][data-view="help"] .only-help { display: flex; }
 body[data-view="help"] #panels { display: none !important; }
-#helpBtn { width: 30px; padding: 4px 0; font-weight: 700; text-align: center; }
+#helpBtn { width: 30px; padding: 4px 0; font-weight: 700; justify-content: center; }
 #helpBtn.active { background: var(--accent); border-color: var(--accent); }
 #help {
   position: absolute; left: 0; right: 0; top: 44px; bottom: 104px;
@@ -246,3 +246,12 @@ kbd {
   display: inline-block; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px;
   border-radius: 4px; background: #20242f; font: 12px/1.5 "Cascadia Mono", Consolas, monospace;
 }
+
+/* ---------- 설정 ---------- */
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 4px; }
+.setting-row select {
+  background: #20242f; color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px; font: inherit;
+}
+.muted.small { font-size: 12px; margin-bottom: 18px; }
+.status[data-state="answer-timeout"] { color: #e0a23b; }

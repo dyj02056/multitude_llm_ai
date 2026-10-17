@@ -43,7 +43,14 @@ const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비
 // ---------- 설정 저장 ----------
 
 const prefsFile = () => path.join(app.getPath('userData'), 'prefs.json');
-let prefs = { selected: SERVICES.map((s) => s.id), layout: 'grid', synthTarget: 'chatgpt', autoSynth: false };
+const TIMEOUT_CHOICES = [5, 10, 20, 30, 60]; // 답변 최대 대기 시간(분) 선택지
+let prefs = {
+  selected: SERVICES.map((s) => s.id),
+  layout: 'grid',
+  synthTarget: 'chatgpt',
+  autoSynth: false,
+  answerTimeoutMin: 20,
+};
 
 function loadPrefs() {
   try {
@@ -54,7 +61,9 @@ function loadPrefs() {
 function savePrefs() {
   try {
     fs.writeFileSync(prefsFile(), JSON.stringify(prefs, null, 2));
-  } catch {}
+  } catch (err) {
+    console.error('[prefs] 설정을 저장하지 못했습니다:', err.message);
+  }
 }
 
 // ---------- 세션 ----------
@@ -274,6 +283,8 @@ function pushState() {
     selected: prefs.selected,
     synthTarget: prefs.synthTarget,
     autoSynth: prefs.autoSynth,
+    answerTimeoutMin: prefs.answerTimeoutMin,
+    timeoutChoices: TIMEOUT_CHOICES,
     services: SERVICES.map(({ id, name, color, url }) => ({ id, name, color, url })),
     rects: rects.panels,
   });
@@ -356,11 +367,22 @@ async function sendToPanel(id, text, onFinish) {
   if (!res.ok) {
     onFinish?.('error');
   } else if (!dev.drySend) {
-    watchAnswer(wc, svc, before, () => p.watchToken === token, (answer, info) => {
-      log('answer', id, answer, info ? JSON.stringify(info) : '');
-      sendPanel(id, { answer, ...info });
-      if (FINISHED.has(answer)) onFinish?.(answer);
-    });
+    const opts = {
+      maxMs: dev.answerTimeoutMs || prefs.answerTimeoutMin * 60 * 1000,
+      startMs: dev.answerStartMs || undefined,
+    };
+    watchAnswer(
+      wc,
+      svc,
+      before,
+      () => p.watchToken === token,
+      (answer, info) => {
+        log('answer', id, answer, info ? JSON.stringify(info) : '');
+        sendPanel(id, { answer, ...info });
+        if (FINISHED.has(answer)) onFinish?.(answer);
+      },
+      opts,
+    );
   }
   return { id, ...res };
 }
@@ -439,6 +461,12 @@ ipcMain.handle('prompt:send', async (_e, { text, targets }) => {
 });
 
 ipcMain.handle('synth:run', (_e, judgeId) => runSynth(typeof judgeId === 'string' ? judgeId : null));
+
+ipcMain.on('settings:set', (_e, { answerTimeoutMin }) => {
+  if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
+  savePrefs();
+  pushState();
+});
 
 ipcMain.on('synth:set', (_e, { target, auto }) => {
   if (typeof target === 'string' && SERVICES.some((s) => s.id === target)) prefs.synthTarget = target;

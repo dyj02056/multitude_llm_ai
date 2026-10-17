@@ -122,7 +122,7 @@ const FINISHED_STATES = new Set(['done', 'timeout', 'no-answer']);
 const ANSWER_TEXT = {
   answering: '답변 중…',
   done: '답변 완료',
-  timeout: '답변이 너무 오래 걸립니다',
+  timeout: '시간 초과 — 계속 기다리는 중…',
   'no-answer': '답변이 시작되지 않았습니다',
   clear: '',
 };
@@ -140,12 +140,31 @@ function flash(el, text) {
 
 const SEND_TEXT = { sending: '보내는 중…', sent: '보냄', error: '보내기 실패' };
 
-host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars }) => {
+// 답변을 기다리는 동안 걸린 시간을 1초마다 보여 준다.
+const fmtElapsed = (ms) => {
+  const s = Math.floor(ms / 1000);
+  return s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`;
+};
+
+function tickAnswerTimers() {
+  for (const p of panels.values()) {
+    const st = p.status.dataset.state;
+    if (!p.answerStart || (st !== 'answer-answering' && st !== 'answer-timeout')) continue;
+    const label = st === 'answer-answering' ? '답변 중…' : '시간 초과 — 계속 기다리는 중…';
+    p.status.textContent = `${label} ${fmtElapsed(Date.now() - p.answerStart)}`;
+  }
+}
+setInterval(tickAnswerTimers, 1000);
+
+host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late }) => {
   const p = panels.get(id);
   if (!p) return;
   if (answer) {
-    p.status.textContent = answer === 'done' ? `${ANSWER_TEXT.done} · ${chars}자` : ANSWER_TEXT[answer];
+    if (answer === 'answering') p.answerStart = Date.now();
+    p.status.textContent =
+      answer === 'done' ? `${ANSWER_TEXT.done} · ${chars}자${late ? ' (늦게 끝남)' : ''}` : ANSWER_TEXT[answer];
     p.status.dataset.state = `answer-${answer}`;
+    tickAnswerTimers();
     updateAnswerSummary();
     // 비교 화면을 보고 있으면 답변이 끝날 때마다 새로 읽는다.
     if (answer === 'done' && state?.chatView === 'compare') renderCompare();
@@ -365,7 +384,18 @@ host.on('shortcut', (action) => {
   if (click) $(click).click();
 });
 
+$('#timeoutSelect').addEventListener('change', (e) => host.setSettings({ answerTimeoutMin: Number(e.target.value) }));
+
+function renderSettings() {
+  const select = $('#timeoutSelect');
+  select.replaceChildren(
+    ...state.timeoutChoices.map((m) => Object.assign(document.createElement('option'), { value: m, textContent: `${m}분` })),
+  );
+  select.value = String(state.answerTimeoutMin);
+}
+
 async function renderHelp() {
+  renderSettings();
   const rows = await host.shortcuts();
   $('#helpTable').replaceChildren(
     ...rows.map((r) => {
