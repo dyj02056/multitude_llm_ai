@@ -12,7 +12,7 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 쓰며, 로그인
 직접 만들려면:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scriptsuild-win.ps1
+powershell -ExecutionPolicy Bypass -File scripts\build-win.ps1
 ```
 
 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다. 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
