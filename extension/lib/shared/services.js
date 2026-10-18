@@ -20,6 +20,7 @@
 // tokenBridge: 로그인 토큰을 localStorage에 두는 사이트 (확장 프로그램 전용, extension/cookie-bridge.js 참고).
 //   { cookies: 토큰이 들어 있는 쿠키 이름 후보(앞에서부터 처음 있는 것), storage: 화면이 읽는 localStorage 키 }
 //   확장 탭 안 iframe의 저장소는 일반 탭과 분리될 수 있어서, 크롬의 그 쿠키 값을 iframe의 localStorage에 넣어 준다.
+//   서비스 주소(url)의 도메인 화면에만 넣는다 (로그인 화면 등 다른 hosts에는 넣지 않는다).
 //
 // 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Genspark·Duck.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
 // 틀린 것은 remote/selectors.json으로 앱을 다시 배포하지 않고 고칠 수 있다.
@@ -148,7 +149,8 @@
       name: 'Qwen',
       color: '#615ced',
       url: 'https://chat.qwen.ai/',
-      hosts: ['chat.qwen.ai'],
+      // auth.qwen.ai: 로그인 화면과 로그인 확인·토큰 갱신 요청이 가는 곳 (확장 프로그램이 접근할 수 있어야 로그인 쿠키가 붙는다)
+      hosts: ['chat.qwen.ai', 'auth.qwen.ai'],
       loggedOut: { url: '/auth', text: '^(로그인|log in|sign in|登录)$' },
       input: ['#chat-input', 'textarea[placeholder]', 'textarea'],
       send: ['#send-message-button', 'button.send-button', 'button[aria-label*="send" i]'],

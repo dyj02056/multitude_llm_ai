@@ -4,6 +4,8 @@
 > (처음 값: Gemini · ChatGPT · DeepSeek · Perplexity). 크롬 확장 프로그램(`extension/`)을 추가하고, 두 쪽이 같이 쓰는 코드를 `src/shared/`로 옮겼다.
 > **v0.3 (2026-10-18) 변경:** Mistral(chat.mistral.ai/work)을 더해 9개 서비스가 됐고, 공통 입력창에 파일 첨부(끌어다 놓기 · Ctrl+V · 📎)를 넣었다.
 > **v0.4 (2026-10-18) 변경:** 프로젝트 모드 — 로컬 폴더를 열어 3단계 제외 규칙(L1 내장 · L2 .gitignore 계열·AI ignore·.mlaignore · L3 .dockerignore 등 선택)과 비밀 정보 검사를 거친 맥락을 보내고, NEED_FILES 요청 응답, 코드 수정안 비교·적용·되돌리기를 Windows 앱과 크롬 확장에 넣었다.
+> **v0.4.6 (2026-10-18) 변경:** Qwen hosts에 `auth.qwen.ai` 추가 (로그인 화면·로그인 확인 요청 도메인. 권한이 없으면 크롬이 그 요청을 제3자 요청으로 보고 SameSite=Lax 로그인 쿠키를 빼고, 앱 탭 CSP가 로그인 화면을 막음).
+>
 > **v0.4.5 (2026-10-18) 변경:** 실제 Qwen에는 `token` 쿠키 없이 `refresh_token` 쿠키만 있음 → 토큰 다리 쿠키 후보에 추가, 유효한 JWT는 유지.
 >
 > **v0.4.4 (2026-10-18) 변경:** Qwen 로그아웃 화면의 실제 원인 보완 — Qwen은 `localStorage.token`을 Authorization 헤더로 보내 로그인을 확인하는데, 확장 탭 iframe의 저장소가 일반 탭과 분리됨 → `token` 쿠키 값을 iframe localStorage에 넣는 토큰 다리(tokenBridge).

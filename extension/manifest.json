@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Multitude LLM",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Genspark · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -37,6 +37,7 @@
     "https://grok.com/*",
     "https://chat.mistral.ai/*",
     "https://chat.qwen.ai/*",
+    "https://auth.qwen.ai/*",
     "https://www.genspark.ai/*",
     "https://genspark.ai/*",
     "https://duck.ai/*",
@@ -49,6 +50,7 @@
     "wss://grok.com/*",
     "wss://chat.mistral.ai/*",
     "wss://chat.qwen.ai/*",
+    "wss://auth.qwen.ai/*",
     "wss://www.genspark.ai/*",
     "wss://genspark.ai/*",
     "wss://duck.ai/*",
@@ -65,6 +67,7 @@
         "https://grok.com/*",
         "https://chat.mistral.ai/*",
         "https://chat.qwen.ai/*",
+        "https://auth.qwen.ai/*",
         "https://www.genspark.ai/*",
         "https://genspark.ai/*",
         "https://duck.ai/*",
@@ -81,7 +84,8 @@
     },
     {
       "matches": [
-        "https://chat.qwen.ai/*"
+        "https://chat.qwen.ai/*",
+        "https://auth.qwen.ai/*"
       ],
       "js": [
         "cookie-shim.js"
@@ -92,7 +96,8 @@
     },
     {
       "matches": [
-        "https://chat.qwen.ai/*"
+        "https://chat.qwen.ai/*",
+        "https://auth.qwen.ai/*"
       ],
       "js": [
         "cookie-bridge.js"

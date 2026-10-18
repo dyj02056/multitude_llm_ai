@@ -13,6 +13,7 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음
 
 | 버전 | 내용 |
 |---|---|
+| **v0.4.6** | Qwen 로그인이 `auth.qwen.ai`로 옮겨 간 것에 맞춤: 그 도메인 접근 권한 추가 → 패널 안 로그인 화면이 뜨고, 로그인 확인 요청에 로그인 쿠키가 붙음 |
 | **v0.4.5** | Qwen 토큰 다리가 `refresh_token` 쿠키(로그인 시 Qwen이 두는 30일짜리 토큰)도 쓰도록 수정. 패널에 아직 유효한 토큰이 있으면 건드리지 않음 |
 | **v0.4.4** | 크롬 확장 **Qwen 로그인 문제 실제 원인 수정**: Qwen은 쿠키가 아니라 `localStorage.token`으로 로그인을 확인하는데, 확장 탭 안 iframe의 저장소가 일반 탭과 분리돼 토큰이 없었음. 크롬이 가진 Qwen `token` 쿠키 값을 그 iframe의 localStorage에 넣고 한 번 새로고침 |
 | **v0.4.3** | 크롬 확장에서 **Qwen**이 크롬에 로그인돼 있어도 로그아웃 화면으로 뜨던 문제 수정 (iframe 안 화면 스크립트가 로그인 쿠키를 읽지 못하던 크롬 동작 보완) |
@@ -146,7 +147,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 - 1번의 브랜치 이름은 작업 중인 브랜치입니다. main에 병합한 뒤에는 `git pull origin main`을 씁니다.
-- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.4.5). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
+- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.4.6). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
 - 4번의 실행 허용은 그 PowerShell 창을 닫으면 사라집니다 (PC 설정은 바뀌지 않음).
 - `powershell -ExecutionPolicy Bypass -File ...` 형태는 PATH에 `powershell`이 없는 PC에서 `'powershell' 용어가 ... 인식되지 않습니다` 오류가 납니다. 위 4번처럼 열린 창에서 직접 실행하세요. 그래도 빌드 중 같은 오류가 나면 전체 경로로 실행합니다.
 
@@ -154,7 +155,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
   & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File scripts\build-win.ps1
   ```
 - 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
-- 태그(`v0.4.5` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
+- 태그(`v0.4.6` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
 
 ## 코드 구조
 
