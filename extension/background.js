@@ -18,6 +18,10 @@
 // SameSite=Lax/Strict 쿠키를 읽지 못해 로그인 쿠키가 없다고 보고 로그아웃 화면을 띄운다. 그 사이트의 (HttpOnly가 아닌)
 // 쿠키를 이 확장 탭 안 iframe에서만 보이는 partitioned 쿠키로 복사해 둔다. 일반 탭의 그 사이트에는 영향이 없다.
 // 화면 스크립트가 쓴 쿠키는 cookie-shim.js → cookie-bridge.js → 여기(mla:setCookie)로 와서 원래 쿠키에 반영한다.
+//
+// 토큰 다리(tokenBridge, 지금은 Qwen): Qwen 화면은 쿠키가 아니라 localStorage.token으로 로그인을 확인하는데, 확장 탭 안
+// iframe의 저장소는 일반 탭과 분리될 수 있다. 서버가 같은 토큰을 넣어 두는 token 쿠키 값을 그 iframe에만 알려 주고,
+// cookie-bridge.js가 iframe의 localStorage에 넣은 뒤 한 번 새로고침한다.
 
 importScripts('lib/shared/services.js');
 
@@ -174,17 +178,37 @@ async function applyCookieWrite(pageUrl, raw) {
   });
 }
 
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (msg?.type !== 'mla:setCookie' || typeof msg.raw !== 'string' || sender.id !== chrome.runtime.id) return;
-  let pageUrl;
+const TOKEN_BRIDGES = new Map(
+  MLA.services.SERVICES.filter((s) => s.tokenBridge).flatMap((s) => s.hosts.map((h) => [h, s.tokenBridge])),
+);
+
+/** 앱 탭 안 서비스 iframe(content script)이 보낸 메시지인지 확인하고 그 페이지 주소를 돌려준다 */
+function appFrameUrl(sender, hosts) {
+  if (sender.id !== chrome.runtime.id || !(sender.frameId > 0) || !owners.has(sender.tab?.id)) return null;
   try {
-    pageUrl = new URL(sender.url);
+    const url = new URL(sender.url);
+    return url.protocol === 'https:' && hosts.includes(url.hostname) ? url : null;
   } catch {
-    return;
+    return null;
   }
-  // 앱 탭 안의 jsCookies 서비스 iframe에서 온 것만
-  if (pageUrl.protocol !== 'https:' || !JS_COOKIE_HOSTS.includes(pageUrl.hostname)) return;
-  if (!(sender.frameId > 0) || !owners.has(sender.tab?.id)) return;
+}
+
+// 토큰 다리(tokenBridge): 그 사이트 자신의 iframe에만, 크롬이 가진 그 사이트의 토큰 쿠키 값을 알려 준다.
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg?.type !== 'mla:tokenBridge') return;
+  const url = appFrameUrl(sender, [...TOKEN_BRIDGES.keys()]);
+  if (!url) return reply(null);
+  const bridge = TOKEN_BRIDGES.get(url.hostname);
+  chrome.cookies
+    .get({ url: `https://${url.hostname}/`, name: bridge.cookie })
+    .then((c) => reply(c?.value ? { storage: bridge.storage, value: c.value } : null), () => reply(null));
+  return true;
+});
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg?.type !== 'mla:setCookie' || typeof msg.raw !== 'string') return;
+  const pageUrl = appFrameUrl(sender, JS_COOKIE_HOSTS); // 앱 탭 안의 jsCookies 서비스 iframe에서 온 것만
+  if (!pageUrl) return;
   serial(() => applyCookieWrite(pageUrl, msg.raw.slice(0, 8192)));
 });
 

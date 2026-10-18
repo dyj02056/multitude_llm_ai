@@ -4,6 +4,8 @@
 > (처음 값: Gemini · ChatGPT · DeepSeek · Perplexity). 크롬 확장 프로그램(`extension/`)을 추가하고, 두 쪽이 같이 쓰는 코드를 `src/shared/`로 옮겼다.
 > **v0.3 (2026-10-18) 변경:** Mistral(chat.mistral.ai/work)을 더해 9개 서비스가 됐고, 공통 입력창에 파일 첨부(끌어다 놓기 · Ctrl+V · 📎)를 넣었다.
 > **v0.4 (2026-10-18) 변경:** 프로젝트 모드 — 로컬 폴더를 열어 3단계 제외 규칙(L1 내장 · L2 .gitignore 계열·AI ignore·.mlaignore · L3 .dockerignore 등 선택)과 비밀 정보 검사를 거친 맥락을 보내고, NEED_FILES 요청 응답, 코드 수정안 비교·적용·되돌리기를 Windows 앱과 크롬 확장에 넣었다.
+> **v0.4.4 (2026-10-18) 변경:** Qwen 로그아웃 화면의 실제 원인 보완 — Qwen은 `localStorage.token`을 Authorization 헤더로 보내 로그인을 확인하는데, 확장 탭 iframe의 저장소가 일반 탭과 분리됨 → `token` 쿠키 값을 iframe localStorage에 넣는 토큰 다리(tokenBridge).
+>
 > **v0.4.3 (2026-10-18) 변경:** 크롬 확장에서 Qwen 로그아웃 화면 문제 보완 (iframe 화면 스크립트가 SameSite=Lax 쿠키를 읽지 못함 → 확장 탭 전용 partitioned 쿠키 복사·쓰기 전달).
 >
 > **v0.4.2 (2026-10-18) 변경:** Genspark 추가·Poe 제거, 크롬 확장 iframe의 WebSocket 쿠키 누락(Grok 대화 실패) 보완.

@@ -93,7 +93,9 @@ function buildAppHtml(html) {
 function buildManifest() {
   const hosts = [...new Set(SERVICES.flatMap((s) => s.hosts))];
   const matches = hosts.map((h) => `https://${h}/*`);
-  const jsCookieMatches = SERVICES.filter((s) => s.jsCookies).flatMap((s) => s.hosts.map((h) => `https://${h}/*`));
+  const matchesOf = (pick) => SERVICES.filter(pick).flatMap((s) => s.hosts.map((h) => `https://${h}/*`));
+  const jsCookieMatches = matchesOf((s) => s.jsCookies);
+  const bridgeMatches = matchesOf((s) => s.jsCookies || s.tokenBridge);
   return {
     manifest_version: 3,
     name: 'Multitude LLM',
@@ -119,13 +121,12 @@ function buildManifest() {
         all_frames: true,
         run_at: 'document_idle',
       },
-      // 화면 스크립트가 로그인 쿠키를 직접 읽고 쓰는 사이트(jsCookies)용. 페이지 스크립트보다 먼저 실행돼야 한다.
+      // 화면 스크립트가 로그인 쿠키를 직접 읽고 쓰는 사이트(jsCookies)·localStorage 토큰 사이트(tokenBridge)용.
+      // 페이지 스크립트보다 먼저 실행돼야 한다.
       ...(jsCookieMatches.length
-        ? [
-            { matches: jsCookieMatches, js: ['cookie-shim.js'], world: 'MAIN', all_frames: true, run_at: 'document_start' },
-            { matches: jsCookieMatches, js: ['cookie-bridge.js'], all_frames: true, run_at: 'document_start' },
-          ]
+        ? [{ matches: jsCookieMatches, js: ['cookie-shim.js'], world: 'MAIN', all_frames: true, run_at: 'document_start' }]
         : []),
+      ...(bridgeMatches.length ? [{ matches: bridgeMatches, js: ['cookie-bridge.js'], all_frames: true, run_at: 'document_start' }] : []),
     ],
   };
 }
