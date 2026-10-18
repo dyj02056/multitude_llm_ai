@@ -3,6 +3,7 @@
 > **v0.2 (2026-10-18) 변경:** Groq를 Grok(grok.com)으로 바꾸고 Perplexity · Qwen · Poe · Duck.ai를 더해 8개 서비스 중 최대 4개를 고르게 했다
 > (처음 값: Gemini · ChatGPT · DeepSeek · Perplexity). 크롬 확장 프로그램(`extension/`)을 추가하고, 두 쪽이 같이 쓰는 코드를 `src/shared/`로 옮겼다.
 > **v0.3 (2026-10-18) 변경:** Mistral(chat.mistral.ai/work)을 더해 9개 서비스가 됐고, 공통 입력창에 파일 첨부(끌어다 놓기 · Ctrl+V · 📎)를 넣었다.
+> **v0.4 (2026-10-18) 변경:** 프로젝트 모드 — 로컬 폴더를 열어 3단계 제외 규칙(L1 내장 · L2 .gitignore 계열·AI ignore·.mlaignore · L3 .dockerignore 등 선택)과 비밀 정보 검사를 거친 맥락을 보내고, NEED_FILES 요청 응답, 코드 수정안 비교·적용·되돌리기를 Windows 앱과 크롬 확장에 넣었다.
 > 아래는 v0.1 계획 당시의 기록이다.
 
 > 작성일: 2026-10-17

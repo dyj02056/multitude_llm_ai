@@ -35,6 +35,9 @@ jobs:
       - name: Check extension folder is up to date
         run: npm run check:ext
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build installer
         run: |
           node scripts/make-icon.js

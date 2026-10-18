@@ -118,6 +118,10 @@ function createPanel(svc) {
   const status = span('status');
   const attachBadge = span('attach-badge');
   attachBadge.hidden = true;
+  // 프로젝트 모드: 답변 끝의 NEED_FILES 요청을 보면 project.js가 이 버튼을 띄운다.
+  const needBtn = button('', '', () => window.onNeedFilesClick?.(svc.id));
+  needBtn.className = 'need-btn';
+  needBtn.hidden = true;
   const loginBtn = button(UI.loginButton.label, UI.loginButton.title, () => host.panelAction(svc.id, 'login'));
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
@@ -128,6 +132,7 @@ function createPanel(svc) {
     url,
     status,
     attachBadge,
+    needBtn,
     loginBtn,
     button('복사', '최신 답변 복사', async () => {
       const r = await host.copyAnswer(svc.id);
@@ -141,7 +146,7 @@ function createPanel(svc) {
   if (UI.devtools) head.append(button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')));
   el.append(head);
   panelsEl.append(el);
-  const p = { el, dot, url, status, loginBtn, attachBadge };
+  const p = { el, dot, url, status, loginBtn, attachBadge, needBtn };
   panels.set(svc.id, p);
   return p;
 }
@@ -189,7 +194,11 @@ setInterval(tickAnswerTimers, 1000);
 host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching }) => {
   const p = panels.get(id);
   if (!p) return;
-  if (answer === 'clear') p.attachBadge.hidden = true;
+  if (answer === 'clear') {
+    p.attachBadge.hidden = true;
+    p.needBtn.hidden = true;
+  }
+  if (answer === 'done') window.onPanelAnswerDone?.(id); // 프로젝트 모드: NEED_FILES 확인
   if (answer) {
     if (answer === 'answering') p.answerStart = Date.now();
     p.status.textContent =
@@ -212,6 +221,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     p.status.dataset.state = `send-${send}`;
     if (send === 'sending') {
       p.attachBadge.hidden = true;
+      p.needBtn.hidden = true;
       if (attaching) p.status.textContent = `파일 ${attaching}개 첨부 후 보내는 중…`;
     }
     // 첨부에 실패한 패널은 글만 보냈다. 머리줄에 표시를 남겨 둔다 (다음에 보내거나 새 대화를 열 때까지).
@@ -312,6 +322,8 @@ function answerColumn(a) {
 }
 
 $('#compareBtn').addEventListener('click', () => host.setView(state.chatView === 'compare' ? 'panels' : 'compare'));
+$('#changesBtn').addEventListener('click', () => host.setView(state.chatView === 'changes' ? 'panels' : 'changes'));
+$('#changesClose').addEventListener('click', () => host.setView('panels'));
 $('#historyBtn').addEventListener('click', () => host.setView(state.chatView === 'history' ? 'panels' : 'history'));
 $('#compareClose').addEventListener('click', () => host.setView('panels'));
 $('#compareRefresh').addEventListener('click', renderCompare);
@@ -722,7 +734,11 @@ async function send() {
       })),
     );
     // 글 없이 파일만 보낼 때는 템플릿을 붙이지 않는다.
-    const results = await host.sendPrompt(text ? applyTemplate(template, text) : '', ids, files);
+    let payload = { text: text ? applyTemplate(template, text) : '', files, opts: {} };
+    // 프로젝트 모드: 프로젝트 구조와 고른 파일 내용을 붙인다 (project.js). null이면 사용자가 취소했다.
+    if (window.projectPrepareSend) payload = await window.projectPrepareSend(payload, ids);
+    if (!payload) return;
+    const results = await host.sendPrompt(payload.text, ids, payload.files, payload.opts);
     const failed = results.filter((r) => !r.ok);
     const noAttach = results.filter((r) => r.ok && r.attach && r.attach.state !== 'ok');
     const name = (id) => state.services.find((s) => s.id === id)?.name || id;
@@ -758,6 +774,7 @@ host.on('state', (next) => {
   const enteredCompare = next.chatView === 'compare' && (modeChanged || state.chatView !== 'compare');
   const enteredHistory = next.chatView === 'history' && (modeChanged || state.chatView !== 'history');
   const enteredHelp = next.chatView === 'help' && (modeChanged || state.chatView !== 'help');
+  const enteredChanges = next.chatView === 'changes' && (modeChanged || state.chatView !== 'changes');
   state = next;
   document.body.dataset.mode = state.mode;
   document.body.dataset.view = state.mode === 'chat' ? state.chatView : '';
@@ -765,6 +782,9 @@ host.on('state', (next) => {
   $('#historyBtn').classList.toggle('active', state.chatView === 'history');
   if (enteredCompare) renderCompare();
   if (enteredHistory) renderHistoryList();
+  if (enteredChanges) window.renderChanges?.();
+  $('#changesBtn').classList.toggle('active', state.chatView === 'changes');
+  window.onProjectState?.(); // 프로젝트 사이드바 보이기/숨기기
   if (enteredHelp) renderHelp();
   else if (state.chatView === 'help') renderRemoteStatus(); // 설정 화면을 보는 중에 갱신 결과가 오면 바로 반영
   $('#helpBtn').classList.toggle('active', state.chatView === 'help');
