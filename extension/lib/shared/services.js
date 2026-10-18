@@ -17,6 +17,9 @@
 //   accept: 받는 파일 종류 'image' · 'document' (그 밖의 종류는 보내지 않고 "첨부 없이 보냄"으로 알린다)
 // jsCookies: 페이지 스크립트가 로그인 쿠키를 직접 읽고 쓰는 사이트 (확장 프로그램 전용, extension/cookie-*.js 참고).
 //   확장 탭 안 iframe에서는 크롬이 SameSite=Lax 쿠키를 document.cookie로 보여 주지 않아 로그아웃 상태로 보인다.
+// tokenBridge: 로그인 토큰을 localStorage에 두는 사이트 (확장 프로그램 전용, extension/cookie-bridge.js 참고).
+//   { cookie: 서버가 같은 토큰을 넣어 두는 쿠키 이름, storage: 화면이 읽는 localStorage 키 }
+//   확장 탭 안 iframe의 저장소는 일반 탭과 분리될 수 있어서, 크롬의 그 쿠키 값을 iframe의 localStorage에 넣어 준다.
 //
 // 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Genspark·Duck.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
 // 틀린 것은 remote/selectors.json으로 앱을 다시 배포하지 않고 고칠 수 있다.
@@ -155,6 +158,8 @@
       upload: { methods: ['input', 'paste', 'drop'] },
       newChatUrl: 'https://chat.qwen.ai/',
       jsCookies: true,
+      // Qwen 화면은 localStorage.token을 Authorization 헤더로 보내 로그인을 확인한다 (서버는 같은 값을 token 쿠키에도 둔다)
+      tokenBridge: { cookie: 'token', storage: 'token' },
     },
     {
       id: 'genspark',
