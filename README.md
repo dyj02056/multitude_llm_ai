@@ -88,7 +88,9 @@ Google로 로그인한 뒤 쓸 모델을 9개 중 최대 4개까지 고릅니다
 직접 만들려면:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build-win.ps1
+# 이미 열린 PowerShell 창에서 실행 (이 창에서만 스크립트 실행 허용)
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\build-win.ps1
 ```
 
 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다. 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
