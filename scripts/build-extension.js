@@ -107,8 +107,10 @@ function buildManifest() {
     },
     background: { service_worker: 'background.js' },
     // browsingData: 패널을 막는 서비스 워커 등록만 지운다 (host.js clearServiceWorkers)
-    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData'],
-    host_permissions: matches,
+    // cookies: 앱 탭 iframe의 WebSocket 연결에 그 사이트 쿠키를 붙이려고 읽는다 (background.js syncWsCookies)
+    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData', 'cookies'],
+    // wss://는 WebSocket 요청 헤더(쿠키)를 바꾸는 규칙에 필요하다 (background.js syncWsCookies)
+    host_permissions: [...matches, ...hosts.map((h) => `wss://${h}/*`)],
     content_scripts: [
       {
         matches,

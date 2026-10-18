@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Multitude LLM",
-  "version": "0.4.1",
-  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Poe · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
+  "version": "0.4.2",
+  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Genspark · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon-16.png",
@@ -25,7 +25,8 @@
     "unlimitedStorage",
     "declarativeNetRequest",
     "clipboardWrite",
-    "browsingData"
+    "browsingData",
+    "cookies"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
@@ -36,9 +37,22 @@
     "https://grok.com/*",
     "https://chat.mistral.ai/*",
     "https://chat.qwen.ai/*",
-    "https://poe.com/*",
+    "https://www.genspark.ai/*",
+    "https://genspark.ai/*",
     "https://duck.ai/*",
-    "https://duckduckgo.com/*"
+    "https://duckduckgo.com/*",
+    "wss://gemini.google.com/*",
+    "wss://chatgpt.com/*",
+    "wss://chat.deepseek.com/*",
+    "wss://www.perplexity.ai/*",
+    "wss://perplexity.ai/*",
+    "wss://grok.com/*",
+    "wss://chat.mistral.ai/*",
+    "wss://chat.qwen.ai/*",
+    "wss://www.genspark.ai/*",
+    "wss://genspark.ai/*",
+    "wss://duck.ai/*",
+    "wss://duckduckgo.com/*"
   ],
   "content_scripts": [
     {
@@ -51,7 +65,8 @@
         "https://grok.com/*",
         "https://chat.mistral.ai/*",
         "https://chat.qwen.ai/*",
-        "https://poe.com/*",
+        "https://www.genspark.ai/*",
+        "https://genspark.ai/*",
         "https://duck.ai/*",
         "https://duckduckgo.com/*"
       ],
