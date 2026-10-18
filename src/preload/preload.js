@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('host', {
   // files: [{ name, type, lastModified, data: ArrayBuffer }]
   // opts: { question(기록·종합용 질문), textById({ 서비스 id: 그 서비스에 보낼 글 }) }
   sendPrompt: (text, targets, files, opts) => ipcRenderer.invoke('prompt:send', { text, targets, files, opts }),
-  sendFollowUp: (id, text, files) => ipcRenderer.invoke('prompt:followup', { id, text, files }),
+  sendFollowUp: (id, text, files, opts) => ipcRenderer.invoke('prompt:followup', { id, text, files, opts }),
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
   setView: (value) => ipcRenderer.send('view:set', value),
   getAnswers: () => ipcRenderer.invoke('answers:get'),

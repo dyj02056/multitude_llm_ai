@@ -18,9 +18,10 @@
    * a (adapter):
    *   services: 서비스 목록
    *   hasPanel(id): 패널이 열려 있는지
-   *   sendPrompt(id, text, files): 패널에 파일을 첨부하고 글을 넣어 보낸다
+   *   sendPrompt(id, text, files, { fallbackText }): 패널에 파일을 첨부하고 글을 넣어 보낸다
    *     files: [{ name, type, size, lastModified, data: ArrayBuffer }] (이 서비스가 받는 종류만)
-   *     → { ok, via, attach?: { ok, error } } | { ok: false, error }
+   *     fallbackText: 첨부에 실패하면 text 대신 넣을 글 (프로젝트 파일 업로드의 내부 예비 경로)
+   *     → { ok, via, attach?: { ok, error, fallback? } } | { ok: false, error }
    *   snapshot(id, { markdown }): 패널의 지금 상태 { stop, count, text, md } (못 읽으면 null)
    *   watch(id, before, isCurrent, onState): 답변 감시 (shared/watch.js의 watchAnswer)
    *   sendPanel(id, patch): 패널 상태를 화면에 알린다
@@ -42,20 +43,24 @@
     }
 
     /**
-     * 첨부 결과를 화면용으로 정리한다. → { state: 'ok' | 'partial' | 'failed' | 'skipped', error? } (첨부가 없으면 undefined)
+     * 첨부 결과를 화면용으로 정리한다. → { state: 'ok' | 'partial' | 'failed' | 'fallback' | 'skipped', error? } (첨부가 없으면 undefined)
      * 받지 않는 종류는 보내지 않고(skipped), 첨부에 실패하면 글만 보낸다(failed).
+     * 예비 글이 있으면 첨부 실패 때 그 글을 대신 보낸다(fallback).
      */
     function attachResult(sent, skipped, res) {
       if (!sent.length && !skipped.length) return undefined;
       const names = (list) => list.map((f) => f.name).join(', ');
       if (!sent.length) return { state: 'skipped', error: `받지 않는 파일 종류: ${names(skipped)}` };
-      if (!res.attach?.ok) return { state: 'failed', error: res.attach?.error || '첨부하지 못했습니다' };
+      if (!res.attach?.ok) return { state: res.attach?.fallback ? 'fallback' : 'failed', error: res.attach?.error || '첨부하지 못했습니다' };
       if (skipped.length) return { state: 'partial', error: `받지 않는 파일 종류: ${names(skipped)}` };
       return { state: 'ok' };
     }
 
-    /** 패널 하나에 글(과 첨부 파일)을 보내고 답변을 지켜본다. onFinish(state): 답변이 끝났거나 실패했을 때 */
-    async function sendToPanel(id, text, onFinish, files = []) {
+    /**
+     * 패널 하나에 글(과 첨부 파일)을 보내고 답변을 지켜본다. onFinish(state): 답변이 끝났거나 실패했을 때
+     * fallbackText: 첨부에 실패하면 대신 보낼 글
+     */
+    async function sendToPanel(id, text, onFinish, files = [], fallbackText) {
       cancelWatch(id);
       const token = tokens.get(id);
       const svc = a.services.find((s) => s.id === id);
@@ -70,7 +75,7 @@
         res =
           !text && !sendFiles.length
             ? { ok: false, error: `보낼 내용이 없습니다 (받지 않는 파일 종류: ${skipped.map((f) => f.name).join(', ')})` }
-            : await a.sendPrompt(id, text, sendFiles);
+            : await a.sendPrompt(id, text, sendFiles, { fallbackText: sendFiles.length && typeof fallbackText === 'string' ? fallbackText : undefined });
       } catch (err) {
         res = { ok: false, error: err.message };
       }
@@ -117,6 +122,7 @@
      * 공통 입력창: 고른 패널들에 같은 질문(과 첨부 파일)을 동시에 보낸다. 종합 요청에는 첨부를 다시 보내지 않는다.
      * opts.question: 기록·종합에 쓸 질문 (프로젝트 맥락을 붙여 보낼 때는 사용자가 쓴 요청만 남긴다)
      * opts.textById: 서비스별로 다른 글을 보낼 때 { id: 글 } (예: 문서 첨부를 받지 않는 서비스에는 맥락을 본문으로)
+     * opts.fallbackText: 첨부에 실패한 패널에 대신 보낼 글 (프로젝트 파일 업로드의 내부 예비 경로)
      */
     function sendAll(text, targets, files = [], opts = {}) {
       const ids = targets.filter((id) => a.hasPanel(id));
@@ -125,14 +131,14 @@
       const historyId = a.history.add({ question, targets: ids, files: meta });
       const r = (round = { question, targets: ids, finished: new Map(), synthDone: false, historyId });
       const textFor = (id) => (typeof opts.textById?.[id] === 'string' ? opts.textById[id] : text);
-      return Promise.all(ids.map((id) => sendToPanel(id, textFor(id), (state) => onRoundAnswer(r, id, state), files)));
+      return Promise.all(ids.map((id) => sendToPanel(id, textFor(id), (state) => onRoundAnswer(r, id, state), files, opts.fallbackText)));
     }
 
     /**
      * 패널 하나에만 이어서 보낸다 (프로젝트 모드: 요청한 파일 보내기, 전체 파일 다시 요청).
      * 지금 라운드가 있으면 그 기록의 이 서비스 답변을 새 답변으로 바꿔 남긴다.
      */
-    function sendFollowUp(id, text, files = []) {
+    function sendFollowUp(id, text, files = [], opts = {}) {
       if (!a.hasPanel(id)) return Promise.resolve({ id, ok: false, error: '패널이 열려 있지 않습니다' });
       const r = round;
       return sendToPanel(
@@ -144,6 +150,7 @@
           a.history.setAnswer(r.historyId, id, { name: nameOf(id), state, text: answer, md });
         },
         files,
+        opts.fallbackText,
       );
     }
 

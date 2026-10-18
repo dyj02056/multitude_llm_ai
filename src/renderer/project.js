@@ -5,12 +5,17 @@
 //
 // renderer.js 다음에 읽힌다 ($, state, panels, button, span, flash, fmtSize, attachments 등은 renderer.js의 것).
 // 폴더 읽기·쓰기는 host.project (Windows 앱: src/main/project.js / 크롬 확장: extension/project-fs.js),
-// 제외 규칙·맥락·diff는 공통 모듈(MLA.projectIgnore · secretScan · projectContext · patch)이 한다.
+// 제외 규칙·맥락·업로드 파일·diff는 공통 모듈(MLA.projectIgnore · secretScan · projectContext · projectUpload · patch)이 한다.
+//
+// 프로젝트 파일은 AI에게 파일 업로드로 보낸다 (묶음 파일 / 개별 파일, 사이드바에서 고름 — shared/project-upload.js).
+// 문서 첨부를 받지 않는 서비스와 업로드에 실패한 패널에는 같은 내용을 본문에 넣어 보낸다 (내부 예비 경로).
 
 (() => {
   const PI = MLA.projectIgnore;
   const { scanSecrets, describeSecrets } = MLA.secretScan;
   const PC = MLA.projectContext;
+  const PU = MLA.projectUpload;
+  const MODE_TEXT = { bundle: '묶음 파일', files: '개별 파일' };
   const PX = MLA.patch;
 
   const KEY_FILES = ['package.json', 'README.md', 'README', 'readme.md', 'pyproject.toml', 'requirements.txt', 'go.mod', 'Cargo.toml', 'pom.xml', 'build.gradle', 'composer.json', 'Gemfile', 'tsconfig.json'];
@@ -21,6 +26,7 @@
     scan: null, // scanProject 결과
     open: false, // 사이드바를 보이는지
     include: true, // 다음 질문에 맥락을 붙일지
+    uploadMode: PU.DEFAULT_MODE, // 올리는 방식: 'bundle'(묶음 파일) | 'files'(개별 파일)
     l3Enabled: [],
     checked: new Set(), // 내용을 보낼 파일
     allowSecret: new Set(), // 비밀 정보 경고를 보고도 보내기로 한 파일
@@ -43,6 +49,7 @@
         checked: [...project.checked],
         allowSecret: [...project.allowSecret],
         include: project.include,
+        uploadMode: project.uploadMode,
         log: project.log.slice(0, MAX_LOG),
       })
       .catch((err) => console.warn('[project] 상태를 저장하지 못했습니다:', err.message));
@@ -54,6 +61,7 @@
     project.checked = new Set(Array.isArray(s.checked) ? s.checked : []);
     project.allowSecret = new Set(Array.isArray(s.allowSecret) ? s.allowSecret : []);
     project.include = s.include !== false;
+    project.uploadMode = PU.normalizeMode(s.uploadMode);
     project.log = Array.isArray(s.log) ? s.log : [];
     return !!s.checked;
   }
@@ -127,6 +135,13 @@
       alert(err.message);
     }
   });
+  $('#psUploadMode').addEventListener('click', (e) => {
+    const mode = e.target.closest('[data-umode]')?.dataset.umode;
+    if (!mode || mode === project.uploadMode) return;
+    project.uploadMode = PU.normalizeMode(mode);
+    saveState();
+    render();
+  });
   $('#projectInclude').addEventListener('change', (e) => {
     project.include = e.target.checked;
     saveState();
@@ -154,6 +169,7 @@
     $('#psConnect').hidden = !project.info?.needsPermission;
     $('#projectChip').hidden = !has();
     $('#projectInclude').checked = project.include;
+    for (const b of document.querySelectorAll('#psUploadMode [data-umode]')) b.classList.toggle('active', b.dataset.umode === project.uploadMode);
     if (!has()) {
       $('#psTree').replaceChildren();
       $('#psRulesBody').replaceChildren();
@@ -166,7 +182,7 @@
     const amount = chars < 10000 ? `${chars.toLocaleString()}자` : `${(chars / 10000).toFixed(1)}만 자`;
     const summary = `내용 보낼 파일 ${project.checked.size}개 · 약 ${amount} / 보낼 수 있는 파일 ${sendablePaths().length}개`;
     $('#psSummary').textContent = project.scan.truncated ? `${summary} (항목이 많아 일부만 읽음)` : summary;
-    $('#projectChipText').textContent = `📁 ${project.info.name} · 파일 ${project.checked.size}개 포함`;
+    $('#projectChipText').textContent = `📁 ${project.info.name} · 파일 ${project.checked.size}개 · ${MODE_TEXT[project.uploadMode]}로 업로드`;
   }
 
   function renderRules() {
@@ -322,32 +338,51 @@
     return { files, skipped };
   }
 
-  const toAttachment = (name, text) => {
+  const toAttachment = ({ name, type, text }) => {
     const data = new TextEncoder().encode(text).buffer;
-    return { name, type: 'text/markdown', lastModified: Date.now(), data };
+    return { name, type, lastModified: Date.now(), data };
   };
+  const acceptsDocs = (id) => !!state.services.find((s) => s.id === id)?.accept.includes('document');
+  const notice = (text) => flash($('#psSummary'), text);
+
+  /** 첨부 한도 중 이미 쓴 만큼(사용자가 직접 올린 파일)을 뺀 나머지 */
+  function budgetAfter(files = []) {
+    const L = state.attachLimits || { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 };
+    const used = files.reduce((n, f) => n + (f.data?.byteLength || 0), 0);
+    return { files: L.maxFiles - files.length, bytes: L.maxTotalBytes - used, fileBytes: L.maxFileBytes };
+  }
 
   window.projectPrepareSend = async (payload, targetIds) => {
     if (!has() || !project.include) return payload;
     const { files } = await readChosen([...project.checked]);
-    const ctx = PC.buildContext({ project: { name: project.info.name, paths: sendablePaths() }, files, request: payload.text });
-    const out = {
-      text: ctx.text,
-      files: [...payload.files],
-      opts: { ...payload.opts, question: `${payload.text || '(첨부 파일만)'}\n\n[프로젝트 ${project.info.name} · 파일 ${files.length}개 내용 포함]` },
+    const budget = budgetAfter(payload.files);
+    const pack = PU.packContext({ project: { name: project.info.name, paths: sendablePaths() }, files, request: payload.text, mode: project.uploadMode, budget });
+    const ups = pack.attachments.map(toAttachment);
+    const room = ups.length <= budget.files && ups.reduce((n, f) => n + f.data.byteLength, 0) <= budget.bytes;
+    // 직접 올린 파일 때문에 자리가 없으면 프로젝트 내용은 본문으로 보낸다
+    if (!room) notice('첨부 한도가 모자라 프로젝트 내용은 본문으로 보냅니다');
+    const textById = {};
+    // 문서 첨부를 받지 않는 서비스(예: Duck.ai)에는 내용을 본문으로 넣는다 (넘치는 만큼 잘라서).
+    for (const id of targetIds) if (!room || !acceptsDocs(id)) textById[id] = pack.inlineText;
+    if (pack.note) notice(pack.note);
+    return {
+      text: pack.text,
+      files: room ? [...payload.files, ...ups] : [...payload.files],
+      opts: {
+        ...payload.opts,
+        question: `${payload.text || '(첨부 파일만)'}\n\n[프로젝트 ${project.info.name} · 파일 ${files.length}개 내용 포함]`,
+        textById,
+        fallbackText: pack.inlineText,
+      },
     };
-    if (ctx.attachment) {
-      out.files.push(toAttachment(ctx.attachment.name, ctx.attachment.content));
-      // 문서 첨부를 받지 않는 서비스(예: Duck.ai)에는 맥락을 본문으로 넣는다 (넘치는 만큼 잘라서).
-      const textById = {};
-      for (const id of targetIds) {
-        const svc = state.services.find((s) => s.id === id);
-        if (svc && !svc.accept.includes('document')) textById[id] = ctx.inlineText;
-      }
-      out.opts.textById = textById;
-    }
-    return out;
   };
+
+  /** 패널 하나에 프로젝트 파일을 이어서 보낸다 (요청 파일 보내기 · 다시 보내기). pack: PU.pack* 결과 */
+  async function sendProjectFollowUp(id, pack) {
+    if (pack.note) notice(pack.note);
+    if (!acceptsDocs(id)) return host.sendFollowUp(id, pack.inlineText);
+    return host.sendFollowUp(id, pack.text, pack.attachments.map(toAttachment), { fallbackText: pack.inlineText });
+  }
 
   // ---------- NEED_FILES ----------
 
@@ -359,7 +394,8 @@
   window.onPanelAnswerDone = async (id) => {
     if (!has()) return;
     const md = await answerMd(id).catch(() => '');
-    const wanted = PC.parseNeedFiles(md);
+    // 개별 파일 방식이면 AI가 올린 이름(src__a__index.js)으로 요청할 수 있어 실제 경로로 되돌린다
+    const wanted = [...new Set(PC.parseNeedFiles(md).map((p) => PU.restorePaths(p).find((c) => entryOf(c)) || p))];
     const p = panels.get(id);
     if (!p) return;
     project.need.set(id, wanted);
@@ -433,7 +469,7 @@
     }
     const p = panels.get(id);
     p.needBtn.hidden = true;
-    const res = await host.sendFollowUp(id, PC.buildFollowUp(files, skipped));
+    const res = await sendProjectFollowUp(id, PU.packFollowUp({ files, skipped, mode: project.uploadMode, budget: budgetAfter() }));
     if (!res?.ok) alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
   };
 
@@ -547,7 +583,7 @@
       if (text === null) return alert('파일이 없습니다');
       const hits = scanSecrets(text);
       if (hits.length && !confirm(`${path}에 비밀 정보로 보이는 문자열이 있습니다:\n${describeSecrets(hits)}\n\n그래도 현재 내용을 ${ai.name}에게 보낼까요?`)) return;
-      const res = await host.sendFollowUp(ai.id, PC.buildRefetch(path, text));
+      const res = await sendProjectFollowUp(ai.id, PU.packRefetch({ path, text, mode: project.uploadMode }));
       if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error}`);
       host.setView('panels');
     } catch (err) {

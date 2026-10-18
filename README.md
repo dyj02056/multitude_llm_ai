@@ -13,6 +13,7 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음
 
 | 버전 | 내용 |
 |---|---|
+| **v0.5.0** | 프로젝트 모드가 파일을 **업로드**로 보냄: 사이드바에서 **묶음 파일**(기본, 경로가 붙은 `.md`) / **개별 파일**(파일마다, 이름에 경로) 선택. 첫 질문·📂 요청 파일 보내기·전체 파일 다시 요청 모두 적용. 업로드를 못 하면 본문으로 보냄 |
 | **v0.4.6** | Qwen 로그인이 `auth.qwen.ai`로 옮겨 간 것에 맞춤: 그 도메인 접근 권한 추가 → 패널 안 로그인 화면이 뜨고, 로그인 확인 요청에 로그인 쿠키가 붙음 |
 | **v0.4.5** | Qwen 토큰 다리가 `refresh_token` 쿠키(로그인 시 Qwen이 두는 30일짜리 토큰)도 쓰도록 수정. 패널에 아직 유효한 토큰이 있으면 건드리지 않음 |
 | **v0.4.4** | 크롬 확장 **Qwen 로그인 문제 실제 원인 수정**: Qwen은 쿠키가 아니라 `localStorage.token`으로 로그인을 확인하는데, 확장 탭 안 iframe의 저장소가 일반 탭과 분리돼 토큰이 없었음. 크롬이 가진 Qwen `token` 쿠키 값을 그 iframe의 localStorage에 넣고 한 번 새로고침 |
@@ -75,7 +76,7 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음
 
 ### 8. 프로젝트 모드 (로컬 코드 작업)
 
-툴바의 **📁 프로젝트**로 로컬 폴더를 열면 왼쪽에 파일 트리가 뜹니다. 빼야 할 파일은 `L1`·`L2`·`L3` 표시와 이유(예: `.gitignore 1행 (dist/)`)가 붙고, 비밀 정보로 보이는 파일은 `⚠ 비밀?`로 경고합니다. 질문을 보내면 프로젝트 구조와 고른 파일 내용이 함께 갑니다. AI가 답변 끝에 `NEED_FILES:`로 파일을 요청하면 패널 머리줄에 **📂 요청 파일 N개 보내기** 버튼이 생깁니다. [자세히](#프로젝트-모드)
+툴바의 **📁 프로젝트**로 로컬 폴더를 열면 왼쪽에 파일 트리가 뜹니다. 빼야 할 파일은 `L1`·`L2`·`L3` 표시와 이유(예: `.gitignore 1행 (dist/)`)가 붙고, 비밀 정보로 보이는 파일은 `⚠ 비밀?`로 경고합니다. 질문을 보내면 프로젝트 구조와 고른 파일 내용이 **파일 업로드**로 함께 갑니다 (사이드바 아래 `올리는 방식`: 묶음 파일 / 개별 파일). AI가 답변 끝에 `NEED_FILES:`로 파일을 요청하면 패널 머리줄에 **📂 요청 파일 N개 보내기** 버튼이 생깁니다. [자세히](#프로젝트-모드)
 
 ![프로젝트를 열고 네 AI에 코드 작업을 요청한 화면](docs/screenshots/09-project.png)
 
@@ -147,7 +148,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 - 1번의 브랜치 이름은 작업 중인 브랜치입니다. main에 병합한 뒤에는 `git pull origin main`을 씁니다.
-- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.4.6). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
+- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.5.0). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
 - 4번의 실행 허용은 그 PowerShell 창을 닫으면 사라집니다 (PC 설정은 바뀌지 않음).
 - `powershell -ExecutionPolicy Bypass -File ...` 형태는 PATH에 `powershell`이 없는 PC에서 `'powershell' 용어가 ... 인식되지 않습니다` 오류가 납니다. 위 4번처럼 열린 창에서 직접 실행하세요. 그래도 빌드 중 같은 오류가 나면 전체 경로로 실행합니다.
 
@@ -155,13 +156,13 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
   & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File scripts\build-win.ps1
   ```
 - 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
-- 태그(`v0.4.6` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
+- 태그(`v0.5.0` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
 
 ## 코드 구조
 
 | 폴더 | 내용 |
 |---|---|
-| `src/shared/` | Windows 앱과 확장 프로그램이 **같이 쓰는** 코드: 서비스 목록·셀렉터(`services.js`), 질문 보내기·종합(`rounds.js`), 답변 감시, 페이지 주입 함수, 기록, 셀렉터 원격 갱신, 단축키, 프로젝트 모드(`project-ignore.js` 제외 규칙, `secret-scan.js`, `project-context.js`, `patch.js`) |
+| `src/shared/` | Windows 앱과 확장 프로그램이 **같이 쓰는** 코드: 서비스 목록·셀렉터(`services.js`), 질문 보내기·종합(`rounds.js`), 답변 감시, 페이지 주입 함수, 기록, 셀렉터 원격 갱신, 단축키, 프로젝트 모드(`project-ignore.js` 제외 규칙, `secret-scan.js`, `project-context.js`, `project-upload.js` 업로드 파일 만들기, `patch.js`) |
 | `src/shared/vendor/` | 포함한 외부 라이브러리: [ignore](https://github.com/kaelzhang/node-ignore) 7.0.12 (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) 9.0.0 (BSD-3-Clause) — 라이선스 파일 함께 |
 | `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`project.js`: 프로젝트 폴더 읽기·쓰기) |
 | `src/renderer/` | 화면 (두 쪽이 같은 파일을 씀) |
@@ -221,11 +222,22 @@ npm start
 |---|---|
 | 1. 열기 | 툴바 **📁 프로젝트** → 폴더 선택. 왼쪽 사이드바(300px)에 파일 트리. `package.json`·`README` 같은 핵심 파일은 처음부터 골라 둠 |
 | 2. 고르기 | 체크한 파일의 내용과, 제외 규칙을 통과한 **전체 구조(파일 이름 목록)** 를 보냄. 입력창 오른쪽 `📁 이름 · 파일 N개 포함`을 끄면 맥락 없이 보냄 |
-| 3. 보내기 | 질문 뒤에 답변 규칙(수정은 파일별 `diff`, 새 파일은 `파일: 경로` + 코드 블록, 더 볼 파일은 `NEED_FILES:`)이 붙음. 10만 자가 넘으면 `project-context.md` 파일로 첨부 (문서를 받지 않는 Duck.ai에는 본문에 잘라서) |
-| 4. 요청 파일 | 답변 끝에 `NEED_FILES: a.js, b.ts`가 있으면 패널에 **📂 요청 파일 N개 보내기** → 그 패널에만 보냄 (제외 규칙·비밀 검사 그대로 적용, 못 보낸 파일은 이유를 함께 알림) |
+| 3. 보내기 | 구조와 파일 내용은 **파일로 업로드**하고, 본문에는 질문과 답변 규칙(수정은 파일별 `diff`, 새 파일은 `파일: 경로` + 코드 블록, 더 볼 파일은 `NEED_FILES:`)만 넣음. 올리는 방식은 아래 표 |
+| 4. 요청 파일 | 답변 끝에 `NEED_FILES: a.js, b.ts`가 있으면 패널에 **📂 요청 파일 N개 보내기** → 그 패널에만 업로드 (제외 규칙·비밀 검사 그대로 적용, 못 보낸 파일은 이유를 함께 알림) |
 | 5. 변경 제안 | **변경 제안**(Ctrl+Shift+P, 확장 Alt+Shift+P) — AI별 수정안 목록(수정·새 파일·삭제, +/− 줄 수). 맞지 않으면 `⚠ 적용 불가` + **전체 파일 다시 요청** |
 | 6. 적용 | **미리보기·적용** → 파일별 diff 확인 → 체크한 파일만 씀. 쓰기 직전에 파일이 바뀌었으면 다시 계산. 앱 내장 제외 경로(`.env`, `.git`, `node_modules` 등)에는 쓰지 않음 |
 | 7. 되돌리기 | **적용 기록**(최근 20개)에서 되돌리기 — 적용 전 내용으로 복구, 새로 만든 파일은 지움. 그 뒤에 다시 바뀐 파일이 있으면 확인을 받음. git은 건드리지 않음 |
+
+### 올리는 방식 (사이드바 아래 `올리는 방식`)
+
+| 방식 | 올리는 것 | 본문 |
+|---|---|---|
+| **묶음 파일** (기본) | 첫 질문 `project-context.md`, 요청 파일 `requested-files.md`, 다시 요청 `refetch-<이름>.md`. 안에는 `[파일: 경로]` + 코드 블록. 100만 자가 넘으면 `-1.md`, `-2.md`로 나눔 | 질문·답변 규칙과 짧은 안내 |
+| **개별 파일** | 파일마다 하나씩. 이름에 경로를 넣음 (`src/a/index.js` → `src__a__index.js`), 자주 안 받는 형식·확장자 없는 파일은 `.txt`를 붙임 (`Dockerfile.txt`) | "올린 이름 → 실제 경로" 목록, 프로젝트 구조, 질문·답변 규칙 |
+
+- 개별 파일이 첨부 한도(직접 올린 파일 포함 10개, 합계 50MB)를 넘으면 그번만 묶음 파일로 보냅니다. AI가 `src__a__index.js` 같은 올린 이름으로 `NEED_FILES`를 요청해도 실제 경로로 찾아 줍니다.
+- **업로드를 못 할 때(내부 예비 경로):** 문서 첨부를 받지 않는 서비스(Duck.ai)와 업로드에 실패한 패널에는 같은 내용을 본문에 넣어 보냅니다 (10만 자에서 자름). 패널에 `📎 업로드 실패 → 본문으로 보냄`이 뜹니다.
+- 서비스에 따라 긴 첨부 문서는 전부 읽지 않고 필요한 부분만 찾아 읽을 수 있습니다.
 
 ### 3단계 제외 규칙
 

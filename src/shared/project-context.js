@@ -7,7 +7,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const INLINE_LIMIT = 100000; // 이 글자 수까지는 질문 본문에 넣고, 넘으면 project-context.md 파일로 첨부한다
+  const INLINE_LIMIT = 100000; // 본문에 넣는 최대 글자 수 (업로드를 못 할 때 본문으로 보내는 글 — project-upload.js의 inlineText)
   const TREE_LINE_LIMIT = 3000; // 구조 목록이 이보다 길면 자른다
   const CONTEXT_FILE = 'project-context.md';
 

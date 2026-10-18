@@ -173,7 +173,7 @@ function flash(el, text) {
 }
 
 const SEND_TEXT = { sending: '보내는 중…', sent: '보냄', error: '보내기 실패' };
-const ATTACH_TEXT = { failed: '첨부 없이 보냄', skipped: '첨부 없이 보냄', partial: '일부 파일은 빼고 보냄' };
+const ATTACH_TEXT = { failed: '첨부 없이 보냄', skipped: '첨부 없이 보냄', partial: '일부 파일은 빼고 보냄', fallback: '업로드 실패 → 본문으로 보냄' };
 
 // 답변을 기다리는 동안 걸린 시간을 1초마다 보여 준다.
 const fmtElapsed = (ms) => {
@@ -749,7 +749,7 @@ async function send() {
     }
     $('#sendHint').textContent = failed.length
       ? `${failed.map((r) => name(r.id)).join(', ')} 보내기 실패 — 입력 내용은 남겨 두었습니다`
-      : `${results.length}곳에 보냈습니다${noAttach.length ? ` · 첨부 없이 보냄: ${noAttach.map((r) => name(r.id)).join(', ')}` : ''}`;
+      : `${results.length}곳에 보냈습니다${noAttach.length ? ` · ${noAttach.map((r) => `${name(r.id)}(${ATTACH_TEXT[r.attach.state]})`).join(', ')}` : ''}`;
   } catch (err) {
     $('#sendHint').textContent = `보내지 못했습니다: ${err.message}`;
   } finally {

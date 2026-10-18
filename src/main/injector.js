@@ -22,12 +22,12 @@ function pressKey(wc, combo) {
   wc.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
 }
 
-/** 질문을 보낸다. 결과: { ok: true, via: 'button' | 'key' } 또는 { ok: false, error } */
 /**
  * 질문을 보낸다. files가 있으면 먼저 첨부하고, 첨부에 실패해도 글은 보낸다.
- * 결과: { ok: true, via, attach?: { ok, via | error } } 또는 { ok: false, error }
+ * 첨부에 실패했는데 fallbackText가 있으면 text 대신 그 글을 보낸다 (프로젝트 파일 업로드의 내부 예비 경로).
+ * 결과: { ok: true, via, attach?: { ok, via | error, fallback? } } 또는 { ok: false, error }
  */
-async function sendPrompt(wc, svc, text, files = []) {
+async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
   const dry = dev.drySend; // 개발용: 입력과 버튼 찾기까지만 하고 실제로 보내지 않는다
   const cfg = { input: svc.input || [], send: svc.send || [], sendText: svc.sendText || null, dry };
 
@@ -38,6 +38,10 @@ async function sendPrompt(wc, svc, text, files = []) {
   if (files.length) {
     attach = await attachFiles(wc, svc, files);
     await run(wc, pageRefocusInput, cfg); // 첨부하면서 포커스가 옮겨 갔을 수 있다
+    if (!attach.ok && typeof fallbackText === 'string' && fallbackText) {
+      text = fallbackText;
+      attach = { ...attach, fallback: true };
+    }
     if (!text && !attach.ok) return { ok: false, error: `첨부하지 못해 보낼 내용이 없습니다 (${attach.error})` };
   }
 
