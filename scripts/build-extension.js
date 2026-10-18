@@ -94,7 +94,8 @@ function buildManifest() {
       default_icon: Object.fromEntries([16, 32].map((s) => [s, `icons/icon-${s}.png`])),
     },
     background: { service_worker: 'background.js' },
-    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite'],
+    // browsingData: 패널을 막는 서비스 워커 등록만 지운다 (host.js clearServiceWorkers)
+    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData'],
     host_permissions: matches,
     content_scripts: [
       {

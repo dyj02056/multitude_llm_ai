@@ -202,7 +202,10 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     return;
   }
   if (loading !== undefined) p.dot.classList.toggle('loading', loading);
-  if (url) p.url.textContent = url;
+  if (url) {
+    p.url.textContent = url;
+    if (!error) p.dot.classList.remove('error'); // 다시 열려서 연결되면 오류 표시를 지운다
+  }
   if (send) {
     p.status.textContent = send === 'error' ? `${SEND_TEXT.error}: ${error}` : SEND_TEXT[send];
     p.status.dataset.state = `send-${send}`;
