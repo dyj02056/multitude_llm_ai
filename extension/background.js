@@ -179,7 +179,7 @@ async function applyCookieWrite(pageUrl, raw) {
 }
 
 const TOKEN_BRIDGES = new Map(
-  MLA.services.SERVICES.filter((s) => s.tokenBridge).flatMap((s) => s.hosts.map((h) => [h, s.tokenBridge])),
+  MLA.services.SERVICES.filter((s) => s.tokenBridge).map((s) => [new URL(s.url).hostname, s.tokenBridge]),
 );
 
 /** 앱 탭 안 서비스 iframe(content script)이 보낸 메시지인지 확인하고 그 페이지 주소를 돌려준다 */
