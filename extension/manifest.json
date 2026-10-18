@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Multitude LLM",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Genspark · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -78,6 +78,27 @@
       ],
       "all_frames": true,
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chat.qwen.ai/*"
+      ],
+      "js": [
+        "cookie-shim.js"
+      ],
+      "world": "MAIN",
+      "all_frames": true,
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://chat.qwen.ai/*"
+      ],
+      "js": [
+        "cookie-bridge.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_start"
     }
   ]
 }

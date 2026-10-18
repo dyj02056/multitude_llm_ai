@@ -13,11 +13,18 @@
 // 붙이지 않는다. 그래서 Grok처럼 답변을 WebSocket으로 주고받는 사이트가 로그인이 안 된 연결로 보고 "네트워크에서 차단"
 // 오류를 낸다. 앱 탭 + 서비스 도메인 + WebSocket 요청에 한해, 크롬이 그 사이트에 가진 쿠키를 그대로 붙이는 규칙을 건다.
 // 쿠키가 바뀌면 다시 맞추고, 앱 화면이 사라지면 iframe 규칙과 함께 지운다. 쿠키 값은 이 세션 규칙(메모리)에만 있다.
+//
+// 화면 스크립트용 쿠키 복사(jsCookies 서비스, 지금은 Qwen): 확장 탭 안 iframe의 화면 스크립트는 document.cookie로
+// SameSite=Lax/Strict 쿠키를 읽지 못해 로그인 쿠키가 없다고 보고 로그아웃 화면을 띄운다. 그 사이트의 (HttpOnly가 아닌)
+// 쿠키를 이 확장 탭 안 iframe에서만 보이는 partitioned 쿠키로 복사해 둔다. 일반 탭의 그 사이트에는 영향이 없다.
+// 화면 스크립트가 쓴 쿠키는 cookie-shim.js → cookie-bridge.js → 여기(mla:setCookie)로 와서 원래 쿠키에 반영한다.
 
 importScripts('lib/shared/services.js');
 
 const APP_URL = chrome.runtime.getURL('app.html');
 const DOMAINS = [...new Set(MLA.services.SERVICES.flatMap((s) => s.hosts))];
+const JS_COOKIE_HOSTS = MLA.services.SERVICES.filter((s) => s.jsCookies).flatMap((s) => s.hosts);
+const PARTITION = { topLevelSite: `chrome-extension://${chrome.runtime.id}` };
 
 chrome.action.onClicked.addListener(async () => {
   try {
@@ -76,7 +83,7 @@ async function syncWsCookies(tabId) {
   for (const host of DOMAINS) {
     let cookies = [];
     try {
-      cookies = await chrome.cookies.getAll({ url: `https://${host}/` });
+      cookies = (await chrome.cookies.getAll({ url: `https://${host}/` })).filter((c) => !c.partitionKey);
     } catch {}
     if (!cookies.length) continue;
     const value = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
@@ -91,13 +98,105 @@ async function syncWsCookies(tabId) {
   wsRules.set(tabId, addRules.map((r) => r.id));
 }
 
-// 사이트가 쿠키를 바꾸면(로그인·토큰 갱신) 열려 있는 앱 탭의 WebSocket 쿠키 규칙을 다시 맞춘다.
+// ---------- 화면 스크립트용 쿠키 복사 (jsCookies) ----------
+
+const sameCookie = (a, b) => a.name === b.name && a.domain === b.domain && a.path === b.path;
+
+/** jsCookies 서비스의 쿠키를 확장 탭 칸(partitioned)에 맞춰 복사하고, 원래 쿠키가 사라진 복사본은 지운다 */
+async function mirrorJsCookies() {
+  for (const host of JS_COOKIE_HOSTS) {
+    const url = `https://${host}/`;
+    const [all, parted] = await Promise.all([chrome.cookies.getAll({ url }), chrome.cookies.getAll({ url, partitionKey: PARTITION })]);
+    // HttpOnly는 화면 스크립트가 원래 못 읽고, SameSite=None은 iframe에서도 이미 읽힌다
+    const src = all.filter((c) => !c.partitionKey && !c.httpOnly && c.sameSite !== 'no_restriction');
+    const copies = parted.filter((c) => c.partitionKey?.topLevelSite === PARTITION.topLevelSite);
+    for (const c of src) {
+      const have = copies.find((m) => sameCookie(m, c));
+      if (have && have.value === c.value && have.expirationDate === c.expirationDate) continue;
+      await chrome.cookies.set({
+        url: `https://${host}${c.path}`,
+        name: c.name,
+        value: c.value,
+        path: c.path,
+        ...(c.hostOnly ? {} : { domain: c.domain }),
+        secure: true,
+        sameSite: 'no_restriction',
+        ...(c.session ? {} : { expirationDate: c.expirationDate }),
+        partitionKey: PARTITION,
+      });
+    }
+    for (const m of copies) {
+      if (!src.some((c) => sameCookie(c, m))) await chrome.cookies.remove({ url: `https://${host}${m.path}`, name: m.name, partitionKey: m.partitionKey });
+    }
+  }
+}
+
+/** document.cookie에 쓰는 문자열("이름=값; Path=/; Max-Age=…")을 나눈다 */
+function parseCookieWrite(raw) {
+  const [pair, ...attrs] = raw.split(';');
+  const eq = pair.indexOf('=');
+  const out = { name: eq < 0 ? '' : pair.slice(0, eq).trim(), value: (eq < 0 ? pair : pair.slice(eq + 1)).trim() };
+  for (const attr of attrs) {
+    const i = attr.indexOf('=');
+    const key = (i < 0 ? attr : attr.slice(0, i)).trim().toLowerCase();
+    const val = i < 0 ? '' : attr.slice(i + 1).trim();
+    if (key === 'path' && val.startsWith('/')) out.path = val;
+    else if (key === 'domain' && val) out.domain = val.toLowerCase();
+    else if (key === 'max-age' && /^-?\d+$/.test(val)) out.maxAge = Number(val);
+    else if (key === 'expires' && !Number.isNaN(Date.parse(val))) out.expires = Date.parse(val) / 1000;
+    else if (key === 'samesite') out.sameSite = { strict: 'strict', lax: 'lax' }[val.toLowerCase()];
+  }
+  return out;
+}
+
+/** 화면 스크립트가 쓴 쿠키를 그 사이트의 원래 쿠키에 반영한다. 보낸 페이지 도메인과 그 상위 도메인 쿠키만 받는다. */
+async function applyCookieWrite(pageUrl, raw) {
+  const host = pageUrl.hostname;
+  const c = parseCookieWrite(raw);
+  if (!c.name && !c.value) return;
+  const domain = c.domain?.replace(/^\./, '');
+  if (domain && domain !== host && !(host.endsWith(`.${domain}`) && domain.includes('.'))) return;
+  // Path가 없으면 브라우저처럼 페이지 주소의 폴더를 쓴다
+  const path = c.path || pageUrl.pathname.replace(/\/[^/]*$/, '') || '/';
+  const url = `https://${host}${path}`;
+  const now = Date.now() / 1000;
+  const expirationDate = c.maxAge !== undefined ? now + c.maxAge : c.expires;
+  if (expirationDate !== undefined && expirationDate <= now) return chrome.cookies.remove({ url, name: c.name });
+  await chrome.cookies.set({
+    url,
+    name: c.name,
+    value: c.value,
+    path,
+    ...(domain ? { domain: `.${domain}` } : {}),
+    secure: true, // https 페이지가 쓴 쿠키다
+    sameSite: c.sameSite || 'unspecified',
+    ...(expirationDate !== undefined ? { expirationDate } : {}),
+  });
+}
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg?.type !== 'mla:setCookie' || typeof msg.raw !== 'string' || sender.id !== chrome.runtime.id) return;
+  let pageUrl;
+  try {
+    pageUrl = new URL(sender.url);
+  } catch {
+    return;
+  }
+  // 앱 탭 안의 jsCookies 서비스 iframe에서 온 것만
+  if (pageUrl.protocol !== 'https:' || !JS_COOKIE_HOSTS.includes(pageUrl.hostname)) return;
+  if (!(sender.frameId > 0) || !owners.has(sender.tab?.id)) return;
+  serial(() => applyCookieWrite(pageUrl, msg.raw.slice(0, 8192)));
+});
+
+// 사이트가 쿠키를 바꾸면(로그인·토큰 갱신) 열려 있는 앱 탭의 WebSocket 쿠키 규칙과 화면 스크립트용 복사본을 다시 맞춘다.
 let cookieTimer = null;
 chrome.cookies.onChanged.addListener(({ cookie }) => {
+  if (cookie.partitionKey) return; // 우리가 만든 복사본(또는 다른 칸) 변화
   const domain = cookie.domain.replace(/^\./, '');
   if (!owners.size || !DOMAINS.some((h) => h === domain || h.endsWith(`.${domain}`) || domain.endsWith(`.${h}`))) return;
   clearTimeout(cookieTimer);
   cookieTimer = setTimeout(() => {
+    serial(mirrorJsCookies);
     for (const tabId of owners.keys()) serial(() => syncWsCookies(tabId));
   }, 300);
 });
@@ -127,6 +226,7 @@ chrome.runtime.onConnect.addListener((port) => {
       serial(async () => {
         await addRule(tabId);
         await syncWsCookies(tabId).catch((err) => console.warn('[background] WebSocket 쿠키 규칙 실패:', err.message));
+        await mirrorJsCookies().catch((err) => console.warn('[background] 쿠키 복사 실패:', err.message));
         try {
           port.postMessage({ type: 'ready' });
         } catch {} // 그사이 화면이 사라졌으면 끊김 처리에서 지운다
