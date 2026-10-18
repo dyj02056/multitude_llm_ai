@@ -13,6 +13,7 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음
 
 | 버전 | 내용 |
 |---|---|
+| **v0.4.1** | **보안 보강**: 앱 탭을 떠나면 iframe 허용 규칙을 즉시 해제, 요청 파일·다시 요청에 확인과 검사, 실행 영향 파일과 삭제는 기본 체크 해제, 원격 설정 범위 축소, iframe 범위·권한 축소, 임시 파일·Windows 경로 정리 ([보안](#보안)) |
 | **v0.4.0** | **프로젝트 모드**: 로컬 폴더를 열어 구조·파일을 AI에게 보내고(3단계 제외 규칙·비밀 정보 검사), `NEED_FILES` 요청에 답하고, 코드 수정안을 비교·미리보기·적용·되돌리기. Windows 앱과 크롬 확장 모두 |
 | **v0.3.0** | Mistral(`chat.mistral.ai/work`) 추가 — 9개 서비스. 공통 입력창 **파일 첨부**(끌어다 놓기 · Ctrl+V · 📎). 크롬 확장에서 Perplexity처럼 서비스 워커가 있는 사이트가 패널에 안 뜨던 문제 수정 |
 | **v0.2.0** | Groq → **Grok**(grok.com). **Perplexity · Qwen · Poe · Duck.ai** 추가, **최대 4개 선택**(처음 값 Gemini · ChatGPT · DeepSeek · Perplexity). **크롬 확장 프로그램** 추가 |
@@ -141,7 +142,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 - 1번의 브랜치 이름은 작업 중인 브랜치입니다. main에 병합한 뒤에는 `git pull origin main`을 씁니다.
-- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.4.0). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
+- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.4.1). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
 - 4번의 실행 허용은 그 PowerShell 창을 닫으면 사라집니다 (PC 설정은 바뀌지 않음).
 - `powershell -ExecutionPolicy Bypass -File ...` 형태는 PATH에 `powershell`이 없는 PC에서 `'powershell' 용어가 ... 인식되지 않습니다` 오류가 납니다. 위 4번처럼 열린 창에서 직접 실행하세요. 그래도 빌드 중 같은 오류가 나면 전체 경로로 실행합니다.
 
@@ -149,7 +150,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
   & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File scripts\build-win.ps1
   ```
 - 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
-- 태그(`v0.4.0` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
+- 태그(`v0.4.1` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
 
 ## 코드 구조
 
@@ -254,6 +255,38 @@ legal/
 | 폴더 접근 | 폴더 선택 창, 다음 실행 때 자동으로 다시 엶 | File System Access API. 앱 탭을 새로 열 때마다 사이드바의 **폴더 접근 허용**을 한 번 눌러야 함 (크롬 정책) |
 | git 전역 제외 파일 | 읽음 (`core.excludesFile`, `~/.config/git/ignore`) | 읽지 못함 |
 | 상태 저장 | 앱 데이터 폴더 `projects/` | 크롬 확장 저장소 |
+
+## 보안
+
+이 앱이 데이터를 다루는 방식과, 확장 프로그램으로 쓸 때 막아 둔 것들입니다.
+
+**데이터가 가는 곳**
+- 질문·첨부 파일·프로젝트 코드는 **사용자가 켠 AI 서비스(최대 4곳)에만** 각 사이트의 웹 채팅으로 보냅니다. 이 앱의 서버는 없고, 아무것도 따로 모으지 않습니다.
+- 기록·설정·적용 기록(되돌리기용 원본 포함)은 **이 PC에만** 암호화 없이 저장됩니다 (Windows 앱: 앱 데이터 폴더 / 크롬 확장: 확장 저장소). 필요하면 기록 화면의 "기록 전체 삭제"로 지웁니다.
+- 받아 오는 것은 GitHub의 `remote/selectors.json`(셀렉터·정규식 문자열)뿐이며 코드는 받지도 실행하지도 않습니다.
+
+**막아 둔 것 (v0.4.1)**
+
+| 위험 | 대응 |
+|---|---|
+| 앱 탭에서 다른 사이트로 이동한 뒤, 그 사이트가 로그인된 AI 사이트를 iframe에 넣어 클릭을 유도 | iframe 허용 규칙은 앱 화면이 열려 있는 동안만 있음. 화면이 사라지면(이동·닫기·새로고침) 백그라운드가 즉시 지우고, 백그라운드가 다시 깨어날 때 남은 규칙도 정리 |
+| AI가 민감한 파일을 요청하거나(프롬프트 인젝션) 엉터리 diff로 파일 내용을 다시 받아 가기 | NEED_FILES는 보낼 파일·보내지 않을 파일과 이유를 확인 창으로 먼저 보여 줌. "전체 파일 다시 요청"도 제외 규칙(L1 차단, L2·L3 확인)과 비밀 검사를 거침 |
+| 수정안에 섞인 실행 파일 변경을 무심코 적용 | CI 설정, git 훅, `.vscode`, Makefile, Dockerfile, 스크립트 파일, `package.json` 실행 항목(`scripts` 등) 변경과 파일 삭제는 `⚠` 표시 + 기본 체크 해제 |
+| 원격 설정이 털려 엉뚱한 버튼을 누르거나 피싱 주소로 보내기 | 버튼·파일 넣기 셀렉터는 원격으로 바꾸지 않음. 새 대화 주소는 그 서비스 도메인만. 위험한 정규식 거절 |
+| 앱 탭에 엉뚱한 사이트가 iframe으로 뜸 | 앱 페이지 CSP `frame-src`를 9개 서비스 도메인으로 한정 |
+| iframe 안 사이트가 클립보드를 읽음 | iframe 권한은 클립보드 쓰기·마이크만 (마이크는 쓸 때 크롬이 다시 물음) |
+| 첨부 임시 파일이 남음 (Windows 앱) | 앱 전용 임시 폴더를 시작·종료 때 정리 |
+| `a.txt:stream`, `CON` 같은 Windows 특수 경로로 엉뚱한 곳에 쓰기 | 경로에서 `:`·예약 이름·끝의 점/공백을 거절 |
+
+**크롬 확장 권한과 쓰는 이유**
+
+| 권한 | 이유 |
+|---|---|
+| 9개 서비스 사이트 접근 (+ `duckduckgo.com`: duck.ai가 그 주소로 열리기도 함) | 앱 탭 안 iframe에서 질문 입력·답변 읽기 (content script는 앱 탭 안 iframe일 때만 동작하고, 일반 탭에서는 아무것도 하지 않음) |
+| `declarativeNetRequest` | 앱 탭 안 서비스 iframe에서만 X-Frame-Options·CSP 헤더를 지워 화면에 띄움 (그 탭·그 도메인에 한정, 일반 탭 영향 없음) |
+| `browsingData` | 패널을 막는 해당 서비스의 서비스 워커 등록만 지움 (쿠키·저장 데이터는 그대로) |
+| `storage`, `unlimitedStorage` | 설정·기록·프로젝트 상태 저장 |
+| `clipboardWrite` | 답변 복사 |
 
 ## 단축키
 

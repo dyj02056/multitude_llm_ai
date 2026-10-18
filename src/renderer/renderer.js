@@ -464,6 +464,7 @@ function renderRemoteStatus() {
     `지금 쓰는 것: ${REMOTE_SOURCE[r.source] || r.source}${r.version ? ` (버전 ${r.version}${r.updated ? `, ${r.updated}` : ''})` : ''}`,
   ];
   if (r.services?.length) parts.push(`바뀐 서비스: ${r.services.join(', ')}`);
+  if (r.ignored?.length) parts.push(`보안상 무시한 항목: ${r.ignored.slice(0, 6).join(', ')}${r.ignored.length > 6 ? ' 외' : ''} (앱 업데이트로만 바뀜)`);
   if (r.checkedAt) parts.push(`마지막 확인 ${fmtTime(r.checkedAt)}`);
   if (r.error) parts.push(`확인 실패: ${r.error}`);
   $('#remoteStatus').textContent =

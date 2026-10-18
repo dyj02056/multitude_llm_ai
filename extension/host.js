@@ -92,28 +92,35 @@
 
   // ---------- iframe 허용 규칙 ----------
   // 서비스 사이트들은 다른 페이지 안(iframe)에 뜨지 않도록 X-Frame-Options·CSP(frame-ancestors) 헤더를 보낸다.
-  // 이 탭 안의 iframe으로 여는 서비스 주소에만 그 두 헤더를 지운다. 다른 탭에서 쓰는 사이트에는 영향이 없다.
-  // 규칙 번호 = 탭 번호. 탭을 닫으면 background.js가 지운다.
-  async function allowFraming() {
-    const domains = [...new Set(SERVICES.flatMap((s) => s.hosts))];
-    await chrome.declarativeNetRequest.updateSessionRules({
-      removeRuleIds: [tabId],
-      addRules: [
-        {
-          id: tabId,
-          priority: 1,
-          action: {
-            type: 'modifyHeaders',
-            responseHeaders: [
-              { header: 'x-frame-options', operation: 'remove' },
-              { header: 'content-security-policy', operation: 'remove' },
-            ],
-          },
-          condition: { tabIds: [tabId], resourceTypes: ['sub_frame'], requestDomains: domains },
-        },
-      ],
+  // 이 탭 안의 서비스 iframe에서만 그 두 헤더를 지우는 규칙을 background.js가 건다.
+  // 이 화면이 연결선을 열어 두는 동안만 규칙이 있고, 화면이 사라지면(다른 주소로 이동·닫기·새로고침) 바로 지워진다.
+  const PAGE_ID = crypto.randomUUID(); // 이 화면의 번호 (새로고침하면 바뀐다)
+  const PING_MS = 25000; // 백그라운드가 잠들지 않게 보내는 신호 간격
+  let port = null;
+
+  /** 백그라운드에 연결하고 규칙이 걸릴 때까지 기다린다. 연결이 끊기면(확장 업데이트 등) 다시 연결한다. */
+  function allowFraming() {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('백그라운드가 응답하지 않습니다')), 10000);
+      port = chrome.runtime.connect({ name: 'mla-app' });
+      port.onMessage.addListener((msg) => {
+        if (msg?.type !== 'ready') return;
+        clearTimeout(timer);
+        resolve();
+      });
+      port.onDisconnect.addListener(() => {
+        port = null;
+        // 화면은 그대로인데 연결만 끊겼다(백그라운드 재시작 등). 다시 연결해 규칙을 되살린다.
+        setTimeout(() => allowFraming().catch((err) => console.warn('[host] 다시 연결하지 못했습니다:', err.message)), 500);
+      });
+      port.postMessage({ type: 'hello', pageId: PAGE_ID });
     });
   }
+  setInterval(() => {
+    try {
+      port?.postMessage({ type: 'ping' });
+    } catch {}
+  }, PING_MS);
 
   // ---------- 패널 (iframe) ----------
 
@@ -123,8 +130,9 @@
     const iframe = document.createElement('iframe');
     iframe.className = 'svc-frame';
     iframe.dataset.id = svc.id;
-    // 답변 복사 버튼·음성 입력이 iframe 안에서도 동작하도록 권한을 넘긴다.
-    iframe.allow = 'clipboard-read; clipboard-write; microphone';
+    // 답변 복사 버튼·음성 입력이 iframe 안에서도 동작하도록 권한을 넘긴다 (마이크는 쓸 때 크롬이 따로 묻는다).
+    // 클립보드 읽기는 넘기지 않는다 — Ctrl+V 붙여넣기는 이 권한 없이도 된다.
+    iframe.allow = 'clipboard-write; microphone';
     const p = { iframe, frameId: null, origin: null, url: svc.url, retried: false, helloTimer: null, loginTimer: null };
     iframe.addEventListener('load', () => {
       sendPanel(svc.id, { loading: false });
@@ -418,6 +426,7 @@
         version: clean.version,
         updated: clean.updated,
         services: Object.keys(clean.overrides),
+        ignored: clean.ignored, // 보안상 원격으로 바꾸지 않는 항목(버튼 셀렉터 등)이라 무시한 것
         checkedAt,
       };
     } catch (err) {

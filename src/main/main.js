@@ -5,7 +5,7 @@ const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf } = require('../shared/services');
 const autologin = require('./autologin');
-const { sendPrompt } = require('./injector');
+const { sendPrompt, cleanupTemp } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
 const { createRounds } = require('../shared/rounds');
@@ -610,6 +610,7 @@ if (!app.requestSingleInstanceLock()) {
     win.focus();
   });
   app.whenReady().then(() => {
+    cleanupTemp(); // 지난번에 남은 첨부 임시 파일
     loadPrefs();
     history.init(app.getPath('userData'));
     remote.init(app.getPath('userData'), SERVICES, { remoteUrl: dev.remoteUrl });
@@ -623,4 +624,5 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
   });
   app.on('window-all-closed', () => app.quit());
+  app.on('will-quit', cleanupTemp);
 }

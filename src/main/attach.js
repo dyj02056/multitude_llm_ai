@@ -17,6 +17,16 @@ const { log } = require('./dev');
 const WORLD = 1001; // 첨부용 격리 공간 번호 (사이트 스크립트와 분리)
 const CHUNK = 2 * 1024 * 1024; // 한 번에 옮기는 base64 글자 수
 const TEMP_TTL_MS = 10 * 60 * 1000; // 개발자 프로토콜용 임시 파일을 지울 때까지
+// 임시 파일은 이 앱 전용 폴더 안에만 만들고, 앱 시작·종료 때 통째로 지운다 (중간에 앱이 꺼져도 남지 않게).
+const TEMP_ROOT = path.join(os.tmpdir(), 'multitude-llm-attach');
+
+function cleanupTemp() {
+  try {
+    fs.rmSync(TEMP_ROOT, { recursive: true, force: true });
+  } catch (err) {
+    log('attach', 'temp cleanup failed', err.message);
+  }
+}
 
 const inWorld = (wc, code) => wc.executeJavaScriptInIsolatedWorld(WORLD, [{ code }], true);
 
@@ -49,7 +59,8 @@ async function transfer(wc, key, files) {
 
 /** 개발자 프로토콜로 파일 선택 칸에 넣는다. 성공하면 true */
 async function attachWithDebugger(wc, svc, files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'multitude-llm-'));
+  fs.mkdirSync(TEMP_ROOT, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(TEMP_ROOT, 'files-'));
   // 사이트가 보는 파일 이름이 원래 이름과 같도록 파일마다 하위 폴더를 만든다 (같은 이름 파일이 여럿이어도 된다).
   const paths = files.map((f, i) => {
     fs.mkdirSync(path.join(dir, String(i)));
@@ -114,4 +125,4 @@ async function attachFiles(wc, svc, files) {
   return res;
 }
 
-module.exports = { attachFiles };
+module.exports = { attachFiles, cleanupTemp };

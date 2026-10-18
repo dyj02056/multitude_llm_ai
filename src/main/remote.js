@@ -67,6 +67,7 @@ async function refresh() {
       version: clean.version,
       updated: clean.updated,
       services: Object.keys(clean.overrides),
+      ignored: clean.ignored, // 보안상 원격으로 바꾸지 않는 항목(버튼 셀렉터 등)이라 무시한 것
       checkedAt,
     };
   } catch (err) {

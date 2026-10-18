@@ -3,7 +3,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; frame-src https:; connect-src https://raw.githubusercontent.com" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; frame-src https://gemini.google.com https://chatgpt.com https://chat.deepseek.com https://www.perplexity.ai https://perplexity.ai https://grok.com https://chat.mistral.ai https://chat.qwen.ai https://poe.com https://duck.ai https://duckduckgo.com; connect-src https://raw.githubusercontent.com" />
   <title>Multitude LLM</title>
   <link rel="stylesheet" href="lib/renderer/styles.css" />
   <link rel="stylesheet" href="ext.css" />
@@ -91,6 +91,7 @@
       <div id="patchBody" class="modal-body"></div>
       <div class="modal-foot">
         <span id="patchStatus" class="muted-label"></span>
+        <button id="patchAll" title="실행 영향 파일과 삭제까지 모두 체크합니다">모두 선택</button>
         <button id="patchApply" class="primary">선택한 파일 적용</button>
         <button id="patchCancel">닫기</button>
       </div>

@@ -382,21 +382,59 @@
     return null;
   }
 
+  const listLines = (items, fmt) => items.slice(0, 15).map(fmt).join('\n') + (items.length > 15 ? `\n… 외 ${items.length - 15}개` : '');
+
+  /**
+   * AI가 요청한 파일 보내기. 보내기 전에 "보낼 파일 / 보내지 않을 파일과 이유" 목록을 확인 창으로 보여 준다.
+   * 비밀 정보로 보이는 파일은 기본으로 빼고, 한 번 더 물어서 사용자가 원할 때만 넣는다.
+   * (확인 창은 브라우저 기본 창이라 Windows 앱에서도 서비스 패널 위에 뜬다)
+   */
   window.onNeedFilesClick = async (id) => {
     if (!has()) return alert('프로젝트가 열려 있지 않습니다');
+    const name = state.services.find((s) => s.id === id)?.name || id;
     const wanted = project.need.get(id) || [];
-    const ok = [];
     const skipped = [];
+    const files = [];
+    const risky = [];
     for (const path of wanted) {
       const why = refuseReason(path);
-      if (why) skipped.push({ path, reason: why });
-      else ok.push(PX.safeRelPath(path));
+      if (why) {
+        skipped.push({ path, reason: why });
+        continue;
+      }
+      const clean = PX.safeRelPath(path);
+      const r = await host.project.readFile(clean).catch((err) => ({ error: err.message }));
+      if (typeof r.text !== 'string') {
+        skipped.push({ path: clean, reason: r.binary ? '바이너리 파일' : r.tooLarge ? '1MB 초과' : r.missing ? '파일이 없습니다' : r.error || '읽지 못함' });
+        continue;
+      }
+      const hits = scanSecrets(r.text);
+      project.secretHits.set(clean, hits);
+      if (hits.length) risky.push({ path: clean, text: r.text, hits });
+      else files.push({ path: clean, text: r.text });
     }
-    const read = await readChosen(ok);
-    if (!read.files.length && !confirm('보낼 수 있는 파일이 없습니다. 이유만 알려 줄까요?')) return;
+    const summary = [
+      `${name}이(가) 요청한 파일을 보냅니다.`,
+      '',
+      `[보낼 파일 ${files.length}개]`,
+      files.length ? listLines(files, (f) => `- ${f.path}`) : '(없음)',
+    ];
+    if (risky.length) summary.push('', `[비밀 정보가 보여 빼는 파일 ${risky.length}개]`, listLines(risky, (f) => `- ${f.path}: ${describeSecrets(f.hits)}`));
+    if (skipped.length) summary.push('', `[보내지 않는 파일 ${skipped.length}개]`, listLines(skipped, (f) => `- ${f.path}: ${f.reason}`));
+    summary.push('', '보낼까요? (보내지 않는 파일은 이유만 함께 알려 줍니다)');
+    if (!confirm(summary.join('\n'))) return;
+    if (risky.length) {
+      const list = listLines(risky, (f) => `- ${f.path}: ${describeSecrets(f.hits)}`);
+      if (confirm(`비밀 정보로 보이는 문자열이 있는 파일입니다:\n${list}\n\n이 파일들도 함께 보낼까요? (취소하면 빼고 보냅니다)`)) {
+        for (const f of risky) {
+          files.push({ path: f.path, text: f.text });
+          project.allowSecret.add(f.path);
+        }
+      } else for (const f of risky) skipped.push({ path: f.path, reason: '비밀 정보로 보이는 문자열이 있어 보내지 않음' });
+    }
     const p = panels.get(id);
     p.needBtn.hidden = true;
-    const res = await host.sendFollowUp(id, PC.buildFollowUp(read.files, [...skipped, ...read.skipped]));
+    const res = await host.sendFollowUp(id, PC.buildFollowUp(files, skipped));
     if (!res?.ok) alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
   };
 
@@ -471,6 +509,12 @@
       const row = document.createElement('div');
       row.className = 'change-row';
       row.append(span(`op ${plan.ok ? plan.op : 'bad'}`, plan.ok ? OP_TEXT[plan.op] : '⚠ 적용 불가'), span('path', plan.path));
+      const risk = plan.ok && PX.executionRisk(plan.path, plan.before, plan.after);
+      if (risk) {
+        const tag = span('op bad', '⚠ 실행 영향');
+        tag.title = `${risk} — 적용 창에서 기본으로 체크하지 않습니다`;
+        row.append(tag);
+      }
       if (plan.ok) row.append(span('add', `+${plan.add}`), span('del', `−${plan.del}`));
       else {
         const err = span('err', plan.error);
@@ -491,10 +535,19 @@
     return col;
   }
 
+  /**
+   * diff가 맞지 않을 때 현재 내용을 주고 전체 파일로 다시 받는다. 다른 전송과 같은 검사를 거친다:
+   * 앱 내장 제외(L1)는 보내지 않고, 다른 제외 규칙(L2·L3)이나 비밀 정보로 보이는 문자열이 있으면 확인을 받는다.
+   */
   async function refetch(ai, path) {
     try {
+      const rule = project.scan.matcher.classify(path, false);
+      if (rule?.layer === 'L1') return alert(`${path}은(는) 앱 내장 제외 규칙에 걸린 파일이라 보낼 수 없습니다.\n(${PI.describe(rule)})`);
+      if (rule && !confirm(`${path}은(는) 제외 규칙에 걸린 파일입니다.\n(${PI.describe(rule)})\n\n현재 내용을 ${ai.name}에게 보내 전체 파일로 다시 받을까요?`)) return;
       const text = await currentText(path);
       if (text === null) return alert('파일이 없습니다');
+      const hits = scanSecrets(text);
+      if (hits.length && !confirm(`${path}에 비밀 정보로 보이는 문자열이 있습니다:\n${describeSecrets(hits)}\n\n그래도 현재 내용을 ${ai.name}에게 보낼까요?`)) return;
       const res = await host.sendFollowUp(ai.id, PC.buildRefetch(path, text));
       if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error}`);
       host.setView('panels');
@@ -522,6 +575,7 @@
     hide() {
       $('#patchModal').hidden = true;
       $('#patchApply').onclick = null;
+      $('#patchAll').onclick = null;
     },
   };
   $('#patchCancel').addEventListener('click', () => modal.hide());
@@ -545,14 +599,25 @@
         pf.className = 'pf';
         const head = document.createElement('label');
         head.className = 'pf-head';
-        const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: true });
+        // 저장만 해도 나중에 실행될 수 있는 파일(실행 영향)과 삭제는 기본으로 체크하지 않는다.
+        const risk = PX.executionRisk(plan.path, plan.before, plan.after);
+        const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !risk && plan.op !== 'delete' });
         boxes.push({ box, plan });
-        head.append(box, span(`op ${plan.op}`, OP_TEXT[plan.op]), span('path', plan.path), span('add', `+${plan.add}`), span('del', `−${plan.del}`));
+        head.append(box, span(`op ${plan.op}`, OP_TEXT[plan.op]), span('path', plan.path));
+        if (risk) {
+          const tag = span('op bad', `⚠ 실행 영향: ${risk}`);
+          tag.title = '저장하면 나중에 자동으로 실행될 수 있는 파일입니다. 내용을 확인한 뒤 직접 체크하세요.';
+          head.append(tag);
+        }
+        if (plan.op === 'delete') head.append(span('op delete', '파일을 지웁니다 — 직접 체크해야 적용'));
+        head.append(span('add', `+${plan.add}`), span('del', `−${plan.del}`));
         pf.append(head, diffPre(plan.preview));
         return pf;
       }),
     );
     $('#patchApply').hidden = false;
+    $('#patchAll').hidden = false;
+    $('#patchAll').onclick = () => boxes.forEach((b) => (b.box.checked = true));
     $('#patchApply').textContent = '선택한 파일 적용';
     $('#patchApply').onclick = async () => {
       const chosen = boxes.filter((b) => b.box.checked).map((b) => b.plan);
@@ -606,6 +671,7 @@
   $('#changesLog').addEventListener('click', () => {
     modal.show('적용 기록', '최근 20개. 되돌리면 적용하기 전 내용으로 돌아갑니다 (새로 만든 파일은 지웁니다).');
     $('#patchApply').hidden = true;
+    $('#patchAll').hidden = true;
     const rows = project.log.map((entry) => {
       const row = document.createElement('div');
       row.className = `log-row${entry.reverted ? ' reverted' : ''}`;
