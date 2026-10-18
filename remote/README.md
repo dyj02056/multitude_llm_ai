@@ -32,11 +32,21 @@ ChatGPT·Gemini 같은 서비스 화면이 바뀌어 **입력창·보내기 버�
 
 | 필드 | 뜻 |
 |---|---|
-| `input`, `send`, `stop`, `response` | CSS 셀렉터 목록. **앱에 들어 있는 목록 앞에 붙습니다** (원격 것이 틀려도 예전 것으로 계속 찾음). `"replace": true`면 원격 목록만 씁니다. |
+| `input`, `stop`, `response` | CSS 셀렉터 목록. **앱에 들어 있는 목록 앞에 붙습니다** (원격 것이 틀려도 예전 것으로 계속 찾음). `"replace": true`면 원격 목록만 씁니다. |
 | `messages` | `{ container, role(정규식), content }` — 메시지마다 USER/ASSISTANT 같은 역할 표시가 붙는 사이트에서 답변을 고를 때 |
 | `loggedOut` | `{ url(정규식), text(정규식), selectors }` — 로그아웃 상태 단서 |
-| `upload` | 파일 첨부 `{ methods, fileInput, attached, busy, accept }` — `methods`는 `paste`·`input`·`drop` 시도 순서, `fileInput`·`attached`(첨부되면 나타나는 요소)·`busy`(업로드 중 표시)는 셀렉터 목록, `accept`는 `image`·`document`. 적은 항목만 바뀝니다. |
-| `loginButton`, `sendText`(정규식), `submitKey`(`Enter`·`Ctrl+Enter`), `newChatUrl`(https) | 그 밖의 설정 |
+| `upload` | 파일 첨부 확인용 `{ attached, busy, accept }` — `attached`(첨부되면 나타나는 요소)·`busy`(업로드 중 표시)는 셀렉터 목록, `accept`는 `image`·`document`. 적은 항목만 바뀝니다. |
+| `newChatUrl` | "새 대화"로 열 주소. **https이고 그 서비스의 도메인일 때만** 받습니다 (예: chatgpt는 `https://chatgpt.com/...`) |
+
+### 원격으로 바꿀 수 없는 것 (v0.4.1부터, 보안상)
+
+페이지에서 무언가를 **누르거나 파일을 넣는** 셀렉터는 원격 설정이 털렸을 때 엉뚱한 버튼(공유·삭제 등)을 누르게 할 수 있어서, 원격 값을 **무시하고 앱 업데이트로만** 바꿉니다.
+
+- `send`, `sendText`, `loginButton`, `submitKey`, `upload.methods`, `upload.fileInput`
+- 정규식은 300자 이하이고, 계산이 폭주할 수 있는 모양(`(a+)+` 같은 반복 안의 반복, `(a|ab)*` 같은 반복되는 선택, `\1` 역참조)은 거절합니다.
+- 무시한 항목은 앱의 `?` → 설정 화면 "사이트 셀렉터 자동 갱신" 아래에 "보안상 무시한 항목"으로 보입니다.
+
+보내기 버튼을 못 찾게 되어도 앱은 Enter 키로 보내는 예비 동작이 있어 대부분 계속 작동합니다. 버튼 셀렉터는 `src/shared/services.js`를 고쳐 새 버전으로 배포합니다.
 
 알 수 없는 서비스·필드, 형식이 틀린 값은 무시합니다. 앱은 셀렉터·정규식 문자열만 받으며 코드는 받지도 실행하지도 않습니다.
 

@@ -22,6 +22,8 @@
     if (s.startsWith('/') || /^[A-Za-z]:/.test(s) || s.startsWith('~')) return null;
     const parts = s.split('/').filter((x) => x && x !== '.');
     if (!parts.length || parts.some((x) => x === '..')) return null;
+    // Windows에서 위험하거나 만들 수 없는 이름: ":"(대체 데이터 스트림), 예약 장치 이름(CON·NUL·COM1 …), 끝의 점·공백
+    if (parts.some((x) => x.includes(':') || /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i.test(x) || /[. ]$/.test(x))) return null;
     return parts.join('/');
   }
 
@@ -237,6 +239,51 @@
     return { ...base, op, after, ok: true, add, del, preview };
   }
 
+  // ---------- 실행에 영향을 주는 파일 ----------
+  // 저장만 해도 나중에 자동으로 실행될 수 있는 파일. 적용 창에서 표시하고 기본 체크를 해제한다.
+  const EXEC_PATHS = [
+    [/^\.github\//, 'GitHub 자동 작업(Actions) 설정'],
+    [/^\.gitlab-ci\.ya?ml$/, 'GitLab CI 설정'],
+    [/^\.circleci\//, 'CircleCI 설정'],
+    [/(^|\/)(\.travis\.ya?ml|azure-pipelines\.ya?ml|Jenkinsfile|bitbucket-pipelines\.yml)$/, 'CI 설정'],
+    [/^\.husky\//, 'git 훅(husky)'],
+    [/(^|\/)\.pre-commit-config\.ya?ml$/, 'git 훅(pre-commit)'],
+    [/^\.vscode\//, 'VS Code 작업·설정 (폴더를 열 때 실행될 수 있음)'],
+    [/^\.idea\//, 'JetBrains 실행 설정'],
+    [/(^|\/)\.envrc$/, 'direnv (폴더에 들어가면 실행)'],
+    [/(^|\/)\.gitattributes$/, 'git 필터 설정'],
+    [/(^|\/)(GNU)?[Mm]akefile$|\.mk$/, 'Makefile'],
+    [/(^|\/)Dockerfile[^/]*$|(^|\/)[^/]*\.dockerfile$/i, 'Dockerfile'],
+    [/(^|\/)(docker-)?compose[^/]*\.ya?ml$/, 'Docker Compose 설정'],
+    [/(^|\/)Procfile$/, 'Procfile'],
+    [/(^|\/)setup\.py$/, '설치 때 실행되는 setup.py'],
+    [/\.(sh|bash|zsh|ps1|psm1|bat|cmd|command)$/i, '스크립트 파일'],
+  ];
+  // package.json에서 설치·실행 때 자동으로 돌아가는 항목
+  const PKG_EXEC_KEYS = ['scripts', 'bin', 'husky', 'lint-staged', 'simple-git-hooks', 'pre-commit', 'gitHooks'];
+
+  /**
+   * 이 변경이 "실행에 영향을 주는지". 그렇다면 이유 글, 아니면 null.
+   * package.json은 scripts 같은 실행 항목이 바뀔 때만 해당한다 (의존성만 바뀌면 null).
+   */
+  function executionRisk(path, before, after) {
+    const name = path.split('/').pop();
+    if (name === 'package.json') {
+      let a = null;
+      let b = null;
+      try {
+        a = before === null ? {} : JSON.parse(before);
+        b = after === null ? {} : JSON.parse(after);
+      } catch {
+        return 'package.json (형식을 읽을 수 없어 실행 항목 변경 여부를 확인하지 못함)';
+      }
+      const changed = PKG_EXEC_KEYS.filter((k) => JSON.stringify(a?.[k] ?? null) !== JSON.stringify(b?.[k] ?? null));
+      return changed.length ? `package.json 실행 항목 변경 (${changed.join(', ')})` : null;
+    }
+    for (const [re, why] of EXEC_PATHS) if (re.test(path)) return why;
+    return null;
+  }
+
   /** 미리보기용 unified diff 글 */
   function previewDiff(path, before, after) {
     const a = (before ?? '').replace(/\r\n/g, '\n');
@@ -247,5 +294,5 @@
       .join('\n');
   }
 
-  return { safeRelPath, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch };
+  return { safeRelPath, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch, executionRisk };
 });

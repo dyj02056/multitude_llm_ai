@@ -65,7 +65,9 @@ function buildAppHtml(html) {
   replace(
     `content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:"`,
     `content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; ` +
-      `frame-src https:; connect-src https://raw.githubusercontent.com"`,
+      // iframe은 서비스 도메인만 (다른 사이트는 이 탭 안에 뜨지 않게)
+      `frame-src ${[...new Set(SERVICES.flatMap((s) => s.hosts))].map((h) => `https://${h}`).join(' ')}; ` +
+      `connect-src https://raw.githubusercontent.com"`,
   );
   replace('<link rel="stylesheet" href="styles.css" />', [
     '<link rel="stylesheet" href="lib/renderer/styles.css" />',

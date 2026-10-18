@@ -6,7 +6,7 @@
 
 const { dev } = require('./dev');
 const { pageFocusInput, pageRefocusInput, pageClickSend } = require('../shared/page');
-const { attachFiles } = require('./attach');
+const { attachFiles, cleanupTemp } = require('./attach');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -60,4 +60,4 @@ async function sendPrompt(wc, svc, text, files = []) {
   return done('key');
 }
 
-module.exports = { sendPrompt };
+module.exports = { sendPrompt, cleanupTemp };
