@@ -15,7 +15,7 @@
 //   fileInput: 파일 선택 칸 셀렉터, attached: 첨부가 생기면 나타나는 요소, busy: 업로드 중에만 보이는 요소
 //   accept: 받는 파일 종류 'image' · 'document' (그 밖의 종류는 보내지 않고 "첨부 없이 보냄"으로 알린다)
 //
-// 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Poe·Duck.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
+// 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Genspark·Duck.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
 // 틀린 것은 remote/selectors.json으로 앱을 다시 배포하지 않고 고칠 수 있다.
 (function (root, factory) {
   const api = factory();
@@ -153,25 +153,20 @@
       newChatUrl: 'https://chat.qwen.ai/',
     },
     {
-      id: 'poe',
-      name: 'Poe',
-      color: '#5d5cde',
-      // 기본 봇(첫 화면의 Assistant)으로 묻는다.
-      url: 'https://poe.com/',
-      hosts: ['poe.com'],
-      loggedOut: { url: '^https://poe\\.com/login', text: '^(로그인|log ?in|sign ?in)$' },
-      // Poe는 CSS 모듈 해시 클래스를 쓴다. 클래스 이름 앞부분으로 찾는다.
-      input: ['textarea[class*="GrowingTextArea_textArea"]', 'footer textarea', 'textarea[placeholder]', 'textarea'],
-      send: [
-        'button[data-button-send="true"]',
-        'button[class*="ChatMessageSendButton_sendButton"]',
-        'button[aria-label="Send message"]',
-        'button[aria-label*="보내기"]',
-      ],
+      id: 'genspark',
+      name: 'Genspark',
+      color: '#3d7bfd',
+      // 첫 화면 검색창에서 묻는다. 보내면 답변 페이지(/agents?...)로 넘어간다.
+      url: 'https://www.genspark.ai/ko',
+      hosts: ['www.genspark.ai', 'genspark.ai'],
+      loggedOut: { text: '^(로그인|log ?in|sign ?in|sign up|가입하기)$' },
+      input: ['textarea[name="query"].search-input', 'textarea.search-input', 'textarea[placeholder]', 'textarea'],
+      // 보내기 버튼 모양을 확인하지 못해 이름에 enter·send가 들어간 요소만 찾고, 못 찾으면 Enter 키로 보낸다.
+      send: ['.input-icon.enter-icon', 'div.enter-icon', '[class*="enter-icon"]', 'button[type="submit"]', 'button[aria-label*="send" i]'],
       submitKey: 'Enter',
-      stop: ['button[class*="ChatStopMessageButton"]', 'button[aria-label*="Stop" i]'],
-      response: ['[class*="Message_botMessageBubble"] [class*="Markdown_markdownContainer"]', '[class*="Message_botMessageBubble"]'],
-      newChatUrl: 'https://poe.com/',
+      stop: ['[class*="stop-icon"]', '[class*="stop-button"]', 'button[aria-label*="Stop" i]'],
+      response: ['.conversation-statement.assistant .markdown-viewer', '.conversation-statement.assistant', '.markdown-viewer', '[class*="answer" i] [class*="markdown" i]'],
+      newChatUrl: 'https://www.genspark.ai/ko',
     },
     {
       id: 'duckai',
@@ -217,7 +212,7 @@
 
   const MAX_SELECTED = 4; // 한 번에 열 수 있는 모델 수 (2×2 격자 / 1×4 가로)
   const DEFAULT_SELECTED = ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
-  const RENAMED = { groq: 'grok' }; // 예전 설정에 남은 서비스 id
+  const RENAMED = { groq: 'grok' }; // 예전 설정에 남은 서비스 id (없어진 poe 등은 normalizeSelected가 뺀다)
 
   /** 저장된 선택을 지금 서비스 목록에 맞춘다: 바뀐 id 정리, 모르는 id 제거, 최대 개수 제한. 비면 기본값. */
   function normalizeSelected(list) {

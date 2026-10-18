@@ -1,8 +1,8 @@
 {
   "name": "multitude-llm-ai",
   "productName": "Multitude LLM",
-  "version": "0.4.1",
-  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Poe · Duck.ai 웹 채팅을 한 화면에서 최대 4개까지 동시에 쓰는 앱 — 파일 첨부, 로컬 프로젝트 코드 작업 (Windows 앱 · 크롬 확장 프로그램)",
+  "version": "0.4.2",
+  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Genspark · Duck.ai 웹 채팅을 한 화면에서 최대 4개까지 동시에 쓰는 앱 — 파일 첨부, 로컬 프로젝트 코드 작업 (Windows 앱 · 크롬 확장 프로그램)",
   "author": "dyj02056",
   "private": true,
   "main": "src/main/main.js",

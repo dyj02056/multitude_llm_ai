@@ -1,6 +1,6 @@
 # multitude_llm_ai
 
-Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Poe · Duck.ai 웹 채팅 중 **최대 4개**를 한 화면에 띄워 같은 질문(과 이미지·문서 파일)을 동시에 보내고 답변을 비교합니다. 로컬 프로젝트 폴더를 열어 **코드 작업**(맥락 보내기 → 수정안 비교 → 적용·되돌리기)도 함께 할 수 있습니다.
+Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Genspark · Duck.ai 웹 채팅 중 **최대 4개**를 한 화면에 띄워 같은 질문(과 이미지·문서 파일)을 동시에 보내고 답변을 비교합니다. 로컬 프로젝트 폴더를 열어 **코드 작업**(맥락 보내기 → 수정안 비교 → 적용·되돌리기)도 함께 할 수 있습니다.
 
 - **Windows 앱** (Electron) — 로그인은 Google 계정 하나로 합니다. [설치](#설치-windows) · [직접 빌드](#설치-파일-직접-만들기-windows)
 - **크롬 확장 프로그램** — 크롬에 이미 로그인된 각 서비스 계정을 그대로 씁니다. [설치](#크롬-확장-프로그램)
@@ -13,6 +13,7 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음
 
 | 버전 | 내용 |
 |---|---|
+| **v0.4.2** | **Genspark** 추가, **Poe** 제거. 크롬 확장에서 Grok이 "네트워크에서 Grok을 차단" 오류로 대화를 시작하지 못하던 문제 수정 (iframe 안 WebSocket 연결에 로그인 쿠키가 빠지던 크롬 동작 보완) |
 | **v0.4.1** | **보안 보강**: 앱 탭을 떠나면 iframe 허용 규칙을 즉시 해제, 요청 파일·다시 요청에 확인과 검사, 실행 영향 파일과 삭제는 기본 체크 해제, 원격 설정 범위 축소, iframe 범위·권한 축소, 임시 파일·Windows 경로 정리 ([보안](#보안)) |
 | **v0.4.0** | **프로젝트 모드**: 로컬 폴더를 열어 구조·파일을 AI에게 보내고(3단계 제외 규칙·비밀 정보 검사), `NEED_FILES` 요청에 답하고, 코드 수정안을 비교·미리보기·적용·되돌리기. Windows 앱과 크롬 확장 모두 |
 | **v0.3.0** | Mistral(`chat.mistral.ai/work`) 추가 — 9개 서비스. 공통 입력창 **파일 첨부**(끌어다 놓기 · Ctrl+V · 📎). 크롬 확장에서 Perplexity처럼 서비스 워커가 있는 사이트가 패널에 안 뜨던 문제 수정 |
@@ -142,7 +143,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 - 1번의 브랜치 이름은 작업 중인 브랜치입니다. main에 병합한 뒤에는 `git pull origin main`을 씁니다.
-- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.4.1). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
+- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.4.2). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
 - 4번의 실행 허용은 그 PowerShell 창을 닫으면 사라집니다 (PC 설정은 바뀌지 않음).
 - `powershell -ExecutionPolicy Bypass -File ...` 형태는 PATH에 `powershell`이 없는 PC에서 `'powershell' 용어가 ... 인식되지 않습니다` 오류가 납니다. 위 4번처럼 열린 창에서 직접 실행하세요. 그래도 빌드 중 같은 오류가 나면 전체 경로로 실행합니다.
 
@@ -150,7 +151,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
   & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File scripts\build-win.ps1
   ```
 - 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
-- 태그(`v0.4.1` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
+- 태그(`v0.4.2` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
 
 ## 코드 구조
 
@@ -285,6 +286,7 @@ legal/
 | 9개 서비스 사이트 접근 (+ `duckduckgo.com`: duck.ai가 그 주소로 열리기도 함) | 앱 탭 안 iframe에서 질문 입력·답변 읽기 (content script는 앱 탭 안 iframe일 때만 동작하고, 일반 탭에서는 아무것도 하지 않음) |
 | `declarativeNetRequest` | 앱 탭 안 서비스 iframe에서만 X-Frame-Options·CSP 헤더를 지워 화면에 띄움 (그 탭·그 도메인에 한정, 일반 탭 영향 없음) |
 | `browsingData` | 패널을 막는 해당 서비스의 서비스 워커 등록만 지움 (쿠키·저장 데이터는 그대로) |
+| `cookies` + 서비스 `wss://` 접근 | 크롬은 확장 탭 안 iframe의 WebSocket 연결에 로그인 쿠키를 붙이지 않아 Grok 등이 대화를 시작하지 못함. 앱 탭 안·서비스 도메인·WebSocket 요청에 한해 크롬이 가진 그 사이트 쿠키를 붙이는 규칙을 걸고, 앱 탭을 떠나면 지움 (쿠키 값은 메모리의 세션 규칙에만 있고 밖으로 보내지 않음) |
 | `storage`, `unlimitedStorage` | 설정·기록·프로젝트 상태 저장 |
 | `clipboardWrite` | 답변 복사 |
 

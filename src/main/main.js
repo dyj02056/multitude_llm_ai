@@ -369,7 +369,9 @@ const rounds = createRounds({
   services: SERVICES,
   hasPanel: (id) => panels.has(id),
   sendPrompt: (id, text, files) =>
-    sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text, files),
+    panels.has(id)
+      ? sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text, files)
+      : { ok: false, error: '패널이 닫혔습니다' },
   snapshot: (id, opts) =>
     panels.has(id) ? snapshot(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), opts) : null,
   watch: (id, before, isCurrent, onState) => {
@@ -378,8 +380,9 @@ const rounds = createRounds({
       maxMs: dev.answerTimeoutMs || prefs.answerTimeoutMin * 60 * 1000,
       startMs: dev.answerStartMs || undefined,
     };
-    const svc = SERVICES.find((s) => s.id === id);
-    watchAnswer(panels.get(id).view.webContents, svc, before, isCurrent, onState, opts);
+    const p = panels.get(id);
+    if (!p) return; // 보내는 사이 패널을 닫았다
+    watchAnswer(p.view.webContents, SERVICES.find((s) => s.id === id), before, isCurrent, onState, opts);
   },
   sendPanel,
   sendSynthStatus,
