@@ -199,9 +199,13 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   const url = appFrameUrl(sender, [...TOKEN_BRIDGES.keys()]);
   if (!url) return reply(null);
   const bridge = TOKEN_BRIDGES.get(url.hostname);
-  chrome.cookies
-    .get({ url: `https://${url.hostname}/`, name: bridge.cookie })
-    .then((c) => reply(c?.value ? { storage: bridge.storage, value: c.value } : null), () => reply(null));
+  (async () => {
+    for (const name of bridge.cookies) {
+      const c = await chrome.cookies.get({ url: `https://${url.hostname}/`, name });
+      if (c?.value) return { storage: bridge.storage, value: c.value };
+    }
+    return null;
+  })().then(reply, () => reply(null));
   return true;
 });
 
