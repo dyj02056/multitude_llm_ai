@@ -4,6 +4,7 @@
 > (처음 값: Gemini · ChatGPT · DeepSeek · Perplexity). 크롬 확장 프로그램(`extension/`)을 추가하고, 두 쪽이 같이 쓰는 코드를 `src/shared/`로 옮겼다.
 > **v0.3 (2026-10-18) 변경:** Mistral(chat.mistral.ai/work)을 더해 9개 서비스가 됐고, 공통 입력창에 파일 첨부(끌어다 놓기 · Ctrl+V · 📎)를 넣었다.
 > **v0.4 (2026-10-18) 변경:** 프로젝트 모드 — 로컬 폴더를 열어 3단계 제외 규칙(L1 내장 · L2 .gitignore 계열·AI ignore·.mlaignore · L3 .dockerignore 등 선택)과 비밀 정보 검사를 거친 맥락을 보내고, NEED_FILES 요청 응답, 코드 수정안 비교·적용·되돌리기를 Windows 앱과 크롬 확장에 넣었다.
+> **v0.4.2 (2026-10-18) 변경:** Genspark 추가·Poe 제거, 크롬 확장 iframe의 WebSocket 쿠키 누락(Grok 대화 실패) 보완.
 > **v0.4.1 (2026-10-18) 변경:** 확장 배포 전 보안 보강 — 앱 탭 이탈 시 iframe 허용 규칙 즉시 해제, 요청 파일·다시 요청 검사, 실행 영향 파일 기본 해제, 원격 설정 범위 축소, frame-src·iframe 권한 축소, 임시 파일·Windows 경로 정리.
 > 아래는 v0.1 계획 당시의 기록이다.
 
