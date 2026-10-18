@@ -1,5 +1,10 @@
 # 멀티 LLM 동시 질문 앱 — 계획 초안 (v0.1)
 
+> **v0.2 (2026-10-18) 변경:** Groq를 Grok(grok.com)으로 바꾸고 Perplexity · Qwen · Poe · Duck.ai를 더해 8개 서비스 중 최대 4개를 고르게 했다
+> (처음 값: Gemini · ChatGPT · DeepSeek · Perplexity). 크롬 확장 프로그램(`extension/`)을 추가하고, 두 쪽이 같이 쓰는 코드를 `src/shared/`로 옮겼다.
+> **v0.3 (2026-10-18) 변경:** Mistral(chat.mistral.ai/work)을 더해 9개 서비스가 됐고, 공통 입력창에 파일 첨부(끌어다 놓기 · Ctrl+V · 📎)를 넣었다.
+> 아래는 v0.1 계획 당시의 기록이다.
+
 > 작성일: 2026-10-17
 > 대상 서비스: **Gemini · ChatGPT · DeepSeek · Groq** (모두 웹 채팅, 무료 플랜)
 

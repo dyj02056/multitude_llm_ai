@@ -8,7 +8,8 @@ contextBridge.exposeInMainWorld('host', {
   openModels: (ids) => ipcRenderer.send('models:open', ids),
   pickModels: () => ipcRenderer.send('models:pick'),
   logout: () => ipcRenderer.send('logout'),
-  sendPrompt: (text, targets) => ipcRenderer.invoke('prompt:send', { text, targets }),
+  // files: [{ name, type, lastModified, data: ArrayBuffer }]
+  sendPrompt: (text, targets, files) => ipcRenderer.invoke('prompt:send', { text, targets, files }),
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
   setView: (value) => ipcRenderer.send('view:set', value),
   getAnswers: () => ipcRenderer.invoke('answers:get'),

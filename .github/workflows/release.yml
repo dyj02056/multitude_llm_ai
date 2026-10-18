@@ -1,4 +1,4 @@
-# v로 시작하는 태그(예: v0.1.0)를 올리면 Windows 설치 파일을 만들어 GitHub Release에 붙인다.
+# v로 시작하는 태그(예: v0.1.0)를 올리면 Windows 설치 파일과 크롬 확장 프로그램 zip을 만들어 GitHub Release에 붙인다.
 # 릴리스 설명은 docs/release-notes/<태그>.md 를 쓴다.
 name: Release
 
@@ -32,10 +32,19 @@ jobs:
 
       - run: npm ci
 
+      - name: Check extension folder is up to date
+        run: npm run check:ext
+
       - name: Build installer
         run: |
           node scripts/make-icon.js
           npx electron-builder --win nsis --x64 --publish never
+
+      - name: Zip Chrome extension
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          Compress-Archive -Path extension\* -DestinationPath "dist\MultitudeLLM-Extension-$version.zip"
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -45,3 +54,4 @@ jobs:
             dist/MultitudeLLM-Setup-*.exe
             dist/MultitudeLLM-Setup-*.exe.blockmap
             dist/latest.yml
+            dist/MultitudeLLM-Extension-*.zip

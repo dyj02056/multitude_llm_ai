@@ -1,0 +1,122 @@
+// 사이트 셀렉터 원격 갱신에서 받은 데이터를 검사하고 서비스 목록에 적용하는 부분.
+// 받는 것은 CSS 셀렉터·정규식 "문자열"뿐이다. 코드는 받지도 실행하지도 않는다.
+// 받아 오기·저장은 쓰는 쪽이 한다 (Electron: 파일 / 크롬 확장 프로그램: chrome.storage).
+// Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.remoteCore)이 같이 쓴다.
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else (root.MLA = root.MLA || {}).remoteCore = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const DEFAULT_URL = 'https://raw.githubusercontent.com/dyj02056/multitude_llm_ai/main/remote/selectors.json';
+
+  // 바꿀 수 있는 필드와 모양
+  const LIST_FIELDS = ['input', 'send', 'stop', 'response']; // 셀렉터 목록
+  const STRING_FIELDS = ['loginButton', 'sendText', 'submitKey', 'newChatUrl'];
+  const MAX_ITEMS = 20;
+  const MAX_LEN = 300;
+
+  const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  const isStr = (s) => typeof s === 'string' && s.length > 0 && s.length <= MAX_LEN;
+
+  function validRegex(s) {
+    if (!isStr(s)) return false;
+    try {
+      new RegExp(s);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function validSelector(s) {
+    // 셀렉터를 검사할 DOM이 없을 수 있어서 모양만 본다. 잘못된 셀렉터는 페이지에서 그냥 아무것도 못 찾는다.
+    return isStr(s) && !/[{}]/.test(s);
+  }
+
+  /** 원격 데이터 한 서비스 몫을 검사해서 쓸 수 있는 필드만 돌려준다. */
+  function sanitizeService(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const out = { replace: raw.replace === true };
+    for (const f of LIST_FIELDS) {
+      if (Array.isArray(raw[f])) out[f] = raw[f].filter(validSelector).slice(0, MAX_ITEMS);
+    }
+    for (const f of STRING_FIELDS) {
+      if (isStr(raw[f])) out[f] = raw[f];
+    }
+    if (out.sendText && !validRegex(out.sendText)) delete out.sendText;
+    if (out.submitKey && !/^(Ctrl\+|Shift\+|Alt\+)*Enter$/.test(out.submitKey)) delete out.submitKey;
+    if (out.newChatUrl && !/^https:\/\//.test(out.newChatUrl)) delete out.newChatUrl;
+    if (raw.messages && typeof raw.messages === 'object') {
+      const m = raw.messages;
+      if (validSelector(m.container) && validRegex(m.role) && validSelector(m.content)) {
+        out.messages = { container: m.container, role: m.role, content: m.content };
+      }
+    }
+    if (raw.upload && typeof raw.upload === 'object') {
+      const u = raw.upload;
+      const up = {};
+      const pick = (list, allowed) => list.filter((x) => allowed.includes(x)).slice(0, allowed.length);
+      if (Array.isArray(u.methods)) up.methods = pick(u.methods, ['paste', 'input', 'drop']);
+      if (Array.isArray(u.accept)) up.accept = pick(u.accept, ['image', 'document']);
+      for (const f of ['fileInput', 'attached', 'busy']) {
+        if (Array.isArray(u[f])) up[f] = u[f].filter(validSelector).slice(0, MAX_ITEMS);
+      }
+      if (Object.keys(up).length) out.upload = up;
+    }
+    if (raw.loggedOut && typeof raw.loggedOut === 'object') {
+      const lo = {};
+      if (validRegex(raw.loggedOut.url)) lo.url = raw.loggedOut.url;
+      if (validRegex(raw.loggedOut.text)) lo.text = raw.loggedOut.text;
+      if (Array.isArray(raw.loggedOut.selectors)) lo.selectors = raw.loggedOut.selectors.filter(validSelector).slice(0, MAX_ITEMS);
+      if (Object.keys(lo).length) out.loggedOut = lo;
+    }
+    return out;
+  }
+
+  /** 원격 데이터 전체를 검사한다. 형식이 틀리면 null. 모르는 서비스는 버린다. */
+  function sanitize(data, services) {
+    if (!data || typeof data !== 'object' || !Number.isInteger(data.version)) return null;
+    const overrides = {};
+    const known = new Set(services.map((s) => s.id));
+    for (const [id, raw] of Object.entries(data.services || {})) {
+      if (!known.has(id)) continue;
+      const s = sanitizeService(raw);
+      if (s) overrides[id] = s;
+    }
+    return { version: data.version, updated: isStr(data.updated) ? data.updated : '', overrides };
+  }
+
+  /** 앱에 들어 있던 값 (원격 갱신을 끄거나 다시 적용할 때 되돌릴 기준). Map(id -> 필드들) */
+  function snapshotBase(services) {
+    return new Map(
+      services.map((s) => [
+        s.id,
+        Object.fromEntries([...LIST_FIELDS, ...STRING_FIELDS, 'messages', 'loggedOut', 'upload'].map((f) => [f, clone(s[f])])),
+      ]),
+    );
+  }
+
+  /**
+   * 덮어쓰기를 적용한다. 셀렉터 목록은 원격 것을 앞에 두고 앱에 들어 있던 것을 뒤에 남긴다
+   * (원격 셀렉터가 틀려도 예전 셀렉터로 계속 찾을 수 있게). replace: true면 원격 목록만 쓴다.
+   */
+  function apply(services, base, overrides) {
+    for (const svc of services) {
+      const b = base.get(svc.id);
+      for (const [k, v] of Object.entries(b)) svc[k] = clone(v);
+      const o = overrides[svc.id];
+      if (!o) continue;
+      for (const f of LIST_FIELDS) {
+        if (!o[f]) continue;
+        svc[f] = o.replace ? [...o[f]] : [...new Set([...o[f], ...(b[f] || [])])];
+      }
+      for (const f of [...STRING_FIELDS, 'messages']) if (o[f]) svc[f] = clone(o[f]);
+      if (o.loggedOut) svc.loggedOut = { ...(b.loggedOut || {}), ...clone(o.loggedOut) };
+      if (o.upload) svc.upload = { ...(b.upload || {}), ...clone(o.upload) };
+    }
+  }
+
+  return { DEFAULT_URL, sanitize, snapshotBase, apply };
+});

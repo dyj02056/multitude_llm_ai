@@ -1,0 +1,123 @@
+<!doctype html>
+<!-- 자동 생성 파일 — 직접 고치지 말고 원본을 고친 뒤 npm run build:ext (원본: src/renderer/index.html) -->
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; frame-src https:; connect-src https://raw.githubusercontent.com" />
+  <title>Multitude LLM</title>
+  <link rel="stylesheet" href="lib/renderer/styles.css" />
+  <link rel="stylesheet" href="ext.css" />
+  <link rel="icon" href="icons/icon-32.png" />
+</head>
+<body data-mode="login">
+  <header id="toolbar">
+    <strong class="brand">Multitude LLM</strong>
+    <span class="hint" id="hint"></span>
+    <div class="spacer"></div>
+    <div class="seg only-chat" role="group" aria-label="레이아웃">
+      <button data-layout="grid">격자</button>
+      <button data-layout="row">가로</button>
+    </div>
+    <button class="only-chat" id="historyBtn" title="지금까지 보낸 질문과 답변 (Ctrl+H)">기록</button>
+    <button class="only-chat" id="compareBtn" title="열린 패널의 최신 답변을 나란히 봅니다 (Ctrl+Shift+D)">답변 비교</button>
+    <button class="only-chat" id="copyAll" title="열린 패널의 최신 답변을 한 번에 복사 (Ctrl+Shift+C)">모든 답변 복사</button>
+    <button class="only-chat" id="newChatAll" title="Ctrl+Shift+N">모두 새 대화</button>
+    <button class="only-chat" id="reloadAll" title="Ctrl+Shift+R">모두 새로고침</button>
+    <button class="only-chat" id="helpBtn" title="설정 · 단축키 (Ctrl+/)">?</button>
+    <button class="only-chat" id="pickBtn">모델 선택</button>
+    <button class="only-auth danger" id="logoutBtn">로그아웃</button>
+  </header>
+
+  <section id="pick" class="only-pick">
+    <h1>사용할 모델을 고르세요</h1>
+    <p class="muted" id="pickNote"></p>
+    <div id="modelList"></div>
+    <div class="pick-foot">
+      <button id="openBtn" class="primary">선택한 모델 열기</button>
+      <span id="pickCount" class="pick-count"></span>
+    </div>
+  </section>
+
+  <main id="panels" class="only-chat"></main>
+
+  <section id="compare" class="only-compare">
+    <div class="compare-head">
+      <span class="muted-label">질문</span>
+      <span id="compareQuestion" class="compare-question"></span>
+      <button id="compareRefresh" title="답변을 다시 읽어 옵니다">새로고침</button>
+      <button id="compareClose">패널로 돌아가기</button>
+    </div>
+    <div id="compareCols" class="compare-cols"></div>
+  </section>
+
+  <section id="history" class="only-history">
+    <aside class="history-side">
+      <input id="historySearch" type="search" placeholder="질문·답변에서 찾기" />
+      <div id="historyList" class="history-list"></div>
+      <div class="history-side-foot">
+        <button id="historyClear" class="danger">기록 전체 삭제</button>
+        <button id="historyClose">패널로 돌아가기</button>
+      </div>
+    </aside>
+    <div id="historyDetail" class="history-detail"></div>
+  </section>
+
+  <section id="help" class="only-help">
+    <div class="help-box">
+      <h2>설정</h2>
+      <div class="setting-row">
+        <label for="timeoutSelect">답변 최대 대기 시간</label>
+        <select id="timeoutSelect"></select>
+      </div>
+      <p class="muted small">이 시간이 지나면 "시간 초과"로 표시하지만, 그 뒤에도 1시간 동안 계속 지켜보다가 끝나면 "완료"로 바꿉니다.</p>
+      <div class="setting-row">
+        <label class="check-label"><input type="checkbox" id="remoteToggle" /> 사이트 셀렉터 자동 갱신</label>
+        <button id="remoteRefresh">지금 확인</button>
+      </div>
+      <p class="muted small" id="remoteStatus"></p>
+      <h2>단축키</h2>
+      <p class="muted">서비스 패널 안에 커서가 있어도 동작합니다.</p>
+      <table id="helpTable"></table>
+      <button id="helpClose">닫기 (Esc)</button>
+    </div>
+  </section>
+
+  <footer id="composer" class="only-chat">
+    <div class="targets">
+      <span class="muted-label">보낼 대상</span>
+      <div id="targetChips"></div>
+      <span class="hint" id="sendHint">Enter 보내기 · Shift+Enter 줄바꿈</span>
+      <div class="synth" title="다른 AI들의 답변을 모아 한 AI에게 비교·정리를 부탁합니다">
+        <span class="muted-label">종합</span>
+        <select id="synthTarget" aria-label="종합을 맡을 AI"></select>
+        <button id="synthBtn" title="Ctrl+Shift+S">종합 요청</button>
+        <label class="check"><input type="checkbox" id="autoSynth" /> 완료 후 자동</label>
+      </div>
+    </div>
+    <div class="attach-row">
+      <button id="attachBtn" title="파일 첨부 — 끌어다 놓기나 Ctrl+V로도 올릴 수 있습니다">📎 파일</button>
+      <input type="file" id="fileInput" multiple hidden />
+      <div id="attachList" class="attach-list"></div>
+      <span id="attachHint" class="attach-hint"></span>
+    </div>
+    <div class="compose-row">
+      <div class="tpl">
+        <select id="tplSelect" aria-label="질문 템플릿" title="질문 앞뒤에 붙일 템플릿"></select>
+        <span id="tplPreview" class="tpl-preview"></span>
+      </div>
+      <textarea id="prompt" rows="2" placeholder="모든 AI에게 한 번에 물어보기"></textarea>
+      <button id="sendBtn" class="primary">보내기</button>
+    </div>
+  </footer>
+  <script src="lib/shared/services.js"></script>
+  <script src="lib/shared/synth.js"></script>
+  <script src="lib/shared/shortcuts.js"></script>
+  <script src="lib/shared/watch.js"></script>
+  <script src="lib/shared/history-core.js"></script>
+  <script src="lib/shared/remote-core.js"></script>
+  <script src="lib/shared/rounds.js"></script>
+  <script src="host.js"></script>
+  <script src="lib/renderer/templates.js"></script>
+  <script src="lib/renderer/renderer.js"></script>
+</body>
+</html>
