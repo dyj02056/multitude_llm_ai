@@ -10,8 +10,12 @@
 // stop: 답변을 쓰는 중에만 보이는 "중지" 버튼 후보. response: AI 답변 덩어리 후보 (마지막 것이 최신 답변).
 // messages: 역할 표시로 답변을 고르는 사이트용 { container, role(정규식), content }.
 // newChatUrl: "새 대화"로 열 주소.
+// upload: 공통 입력창에 올린 파일을 넣는 방법 (없으면 DEFAULT_UPLOAD).
+//   methods: 시도 순서 'paste'(입력창에 붙여넣기) · 'input'(input[type=file]에 넣기) · 'drop'(입력창에 끌어다 놓기)
+//   fileInput: 파일 선택 칸 셀렉터, attached: 첨부가 생기면 나타나는 요소, busy: 업로드 중에만 보이는 요소
+//   accept: 받는 파일 종류 'image' · 'document' (그 밖의 종류는 보내지 않고 "첨부 없이 보냄"으로 알린다)
 //
-// 새로 넣은 서비스(Perplexity·Grok·Qwen·Poe·Duck.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
+// 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Poe·Duck.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
 // 틀린 것은 remote/selectors.json으로 앱을 다시 배포하지 않고 고칠 수 있다.
 (function (root, factory) {
   const api = factory();
@@ -82,6 +86,8 @@
       submitKey: 'Enter',
       stop: [],
       response: ['.ds-markdown'],
+      // 붙여넣기보다 파일 선택 칸이 확실하다. 이미지는 글자만 뽑아 읽는다.
+      upload: { methods: ['input', 'paste', 'drop'] },
       newChatUrl: 'https://chat.deepseek.com/',
     },
     {
@@ -117,6 +123,21 @@
       newChatUrl: 'https://grok.com/',
     },
     {
+      id: 'mistral',
+      name: 'Mistral',
+      color: '#fa500f',
+      url: 'https://chat.mistral.ai/work',
+      hosts: ['chat.mistral.ai'],
+      // 로그인은 auth.mistral.ai에서 한다 (Google · Microsoft · Apple · 이메일).
+      loggedOut: { url: '^https://(v2\\.)?auth\\.mistral\\.ai/', text: '^(로그인|log ?in|sign ?in|se connecter)$' },
+      input: ['div.ProseMirror[contenteditable="true"]', 'textarea[name="message.text"]', 'textarea[placeholder]', 'textarea'],
+      send: ['button[type="submit"][aria-label*="Send" i]', 'button[aria-label*="보내기"]', 'form button[type="submit"]'],
+      submitKey: 'Enter',
+      stop: ['button[aria-label*="Stop" i]', 'button[aria-label*="중지"]'],
+      response: ['[data-message-author-role="assistant"] .prose', '[data-message-author-role="assistant"]', '.prose'],
+      newChatUrl: 'https://chat.mistral.ai/work',
+    },
+    {
       id: 'qwen',
       name: 'Qwen',
       color: '#615ced',
@@ -128,6 +149,7 @@
       submitKey: 'Enter',
       stop: ['button.stop-button', 'button[aria-label*="stop" i]'],
       response: ['.response-message-content .markdown-content', '#response-content-container', '.chat-response-message .markdown-content-container', '.markdown-content'],
+      upload: { methods: ['input', 'paste', 'drop'] },
       newChatUrl: 'https://chat.qwen.ai/',
     },
     {
@@ -164,9 +186,34 @@
       submitKey: 'Enter',
       stop: ['button[aria-label*="Stop" i]', 'button[aria-label*="중지"]'],
       response: ['[data-activeresponse]', '[class*="assistant" i] [class*="markdown" i]', '[class*="markdown" i]', '.prose'],
+      // 일부 모델만 이미지를 받는다. 문서는 받지 않는다.
+      upload: { accept: ['image'] },
       newChatUrl: 'https://duck.ai/chat',
     },
   ];
+
+  // 첨부 기본값. 서비스의 upload에 없는 항목은 이 값을 쓴다.
+  const DEFAULT_UPLOAD = {
+    methods: ['paste', 'input', 'drop'],
+    fileInput: ['input[type="file"]'],
+    attached: [
+      '[data-testid*="attachment" i]',
+      '[data-testid*="file-preview" i]',
+      '[aria-label*="remove file" i]',
+      '[aria-label*="remove attachment" i]',
+      '[aria-label*="파일 삭제"]',
+      '[aria-label*="첨부 파일"]',
+    ],
+    busy: ['[role="progressbar"]'],
+    accept: ['image', 'document'],
+  };
+  // 공통 입력창 첨부 한도
+  const ATTACH_LIMITS = { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 };
+
+  /** 서비스의 첨부 설정 (기본값과 합친 것) */
+  const uploadOf = (svc) => ({ ...DEFAULT_UPLOAD, ...(svc.upload || {}) });
+  /** 파일 종류: 'image' | 'document' */
+  const fileKind = (type) => (/^image\//.test(type || '') ? 'image' : 'document');
 
   const MAX_SELECTED = 4; // 한 번에 열 수 있는 모델 수 (2×2 격자 / 1×4 가로)
   const DEFAULT_SELECTED = ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
@@ -187,5 +234,14 @@
     return SERVICES.find((s) => s.hosts.some((h) => host === h || host.endsWith(`.${h}`))) || null;
   }
 
-  return { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, normalizeSelected, serviceForHost };
+  return {
+    SERVICES,
+    MAX_SELECTED,
+    DEFAULT_SELECTED,
+    ATTACH_LIMITS,
+    normalizeSelected,
+    serviceForHost,
+    uploadOf,
+    fileKind,
+  };
 });

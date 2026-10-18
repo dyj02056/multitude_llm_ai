@@ -2,13 +2,14 @@
 // 공통 입력창으로 보낸 질문 한 번을 "라운드"라고 부른다. 자동 종합은 라운드의 모든 답변이 끝났을 때 한 번만 실행한다.
 // 패널을 다루는 방법만 바꿔 끼워서(adapter) Electron 앱과 크롬 확장 프로그램(전역 MLA.rounds)이 같이 쓴다.
 (function (root, factory) {
-  const api = factory(root.MLA && root.MLA.synth);
+  const api = factory(root.MLA && root.MLA.synth, root.MLA && root.MLA.services);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.MLA = root.MLA || {}).rounds = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services) {
   'use strict';
 
   const { buildSynthPrompt } = synth || require('./synth');
+  const { uploadOf, fileKind } = services || require('./services');
   const FINISHED = new Set(['done', 'timeout', 'no-answer']);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -16,12 +17,14 @@
    * a (adapter):
    *   services: 서비스 목록
    *   hasPanel(id): 패널이 열려 있는지
-   *   sendPrompt(id, text): 패널에 글을 넣고 보낸다 → { ok, via } | { ok: false, error }
+   *   sendPrompt(id, text, files): 패널에 파일을 첨부하고 글을 넣어 보낸다
+   *     files: [{ name, type, size, lastModified, data: ArrayBuffer }] (이 서비스가 받는 종류만)
+   *     → { ok, via, attach?: { ok, error } } | { ok: false, error }
    *   snapshot(id, { markdown }): 패널의 지금 상태 { stop, count, text, md } (못 읽으면 null)
    *   watch(id, before, isCurrent, onState): 답변 감시 (shared/watch.js의 watchAnswer)
    *   sendPanel(id, patch): 패널 상태를 화면에 알린다
    *   sendSynthStatus(patch): 종합 상태를 화면에 알린다
-   *   history: { add, setAnswer, addSynth }
+   *   history: { add, setAnswer, addSynth }  (add는 { question, targets, files(이름·크기·종류) })
    *   prefs(): { synthTarget, autoSynth }
    *   log(tag, ...args)
    */
@@ -37,20 +40,43 @@
       tokens.set(id, (tokens.get(id) || 0) + 1);
     }
 
-    /** 패널 하나에 글을 보내고 답변을 지켜본다. onFinish(state): 답변이 끝났거나 실패했을 때 */
-    async function sendToPanel(id, text, onFinish) {
+    /**
+     * 첨부 결과를 화면용으로 정리한다. → { state: 'ok' | 'partial' | 'failed' | 'skipped', error? } (첨부가 없으면 undefined)
+     * 받지 않는 종류는 보내지 않고(skipped), 첨부에 실패하면 글만 보낸다(failed).
+     */
+    function attachResult(sent, skipped, res) {
+      if (!sent.length && !skipped.length) return undefined;
+      const names = (list) => list.map((f) => f.name).join(', ');
+      if (!sent.length) return { state: 'skipped', error: `받지 않는 파일 종류: ${names(skipped)}` };
+      if (!res.attach?.ok) return { state: 'failed', error: res.attach?.error || '첨부하지 못했습니다' };
+      if (skipped.length) return { state: 'partial', error: `받지 않는 파일 종류: ${names(skipped)}` };
+      return { state: 'ok' };
+    }
+
+    /** 패널 하나에 글(과 첨부 파일)을 보내고 답변을 지켜본다. onFinish(state): 답변이 끝났거나 실패했을 때 */
+    async function sendToPanel(id, text, onFinish, files = []) {
       cancelWatch(id);
       const token = tokens.get(id);
-      a.sendPanel(id, { send: 'sending' });
+      const svc = a.services.find((s) => s.id === id);
+      const accept = uploadOf(svc).accept;
+      const sendFiles = files.filter((f) => accept.includes(fileKind(f.type)));
+      const skipped = files.filter((f) => !sendFiles.includes(f));
+      a.sendPanel(id, { send: 'sending', attaching: sendFiles.length || undefined });
       const before = await a.snapshot(id);
       let res;
       try {
-        res = await a.sendPrompt(id, text);
+        // 글 없이 파일만 보내는데 이 서비스가 받는 파일이 하나도 없으면 보낼 것이 없다.
+        res =
+          !text && !sendFiles.length
+            ? { ok: false, error: `보낼 내용이 없습니다 (받지 않는 파일 종류: ${skipped.map((f) => f.name).join(', ')})` }
+            : await a.sendPrompt(id, text, sendFiles);
       } catch (err) {
         res = { ok: false, error: err.message };
       }
-      a.log('send', id, JSON.stringify(res));
-      a.sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error });
+      const attach = res.ok ? attachResult(sendFiles, skipped, res) : undefined;
+      a.log('send', id, JSON.stringify(res), attach ? JSON.stringify(attach) : '');
+      res = { ...res, attach };
+      a.sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error, attach });
       if (!res.ok) {
         onFinish?.('error');
       } else {
@@ -86,12 +112,13 @@
       runSynth(null, 'auto');
     }
 
-    /** 공통 입력창: 고른 패널들에 같은 질문을 동시에 보낸다. */
-    function sendAll(text, targets) {
+    /** 공통 입력창: 고른 패널들에 같은 질문(과 첨부 파일)을 동시에 보낸다. 종합 요청에는 첨부를 다시 보내지 않는다. */
+    function sendAll(text, targets, files = []) {
       const ids = targets.filter((id) => a.hasPanel(id));
-      const historyId = a.history.add({ question: text, targets: ids });
+      const meta = files.map(({ name, size, type }) => ({ name, size, type }));
+      const historyId = a.history.add({ question: text, targets: ids, files: meta });
       const r = (round = { question: text, targets: ids, finished: new Map(), synthDone: false, historyId });
-      return Promise.all(ids.map((id) => sendToPanel(id, text, (state) => onRoundAnswer(r, id, state))));
+      return Promise.all(ids.map((id) => sendToPanel(id, text, (state) => onRoundAnswer(r, id, state), files)));
     }
 
     /** 종합 요청. judgeId가 없으면 설정된 종합 담당 AI를 쓴다. */

@@ -116,6 +116,8 @@ function createPanel(svc) {
   const dot = span('dot');
   const url = span('url', svc.url);
   const status = span('status');
+  const attachBadge = span('attach-badge');
+  attachBadge.hidden = true;
   const loginBtn = button(UI.loginButton.label, UI.loginButton.title, () => host.panelAction(svc.id, 'login'));
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
@@ -125,6 +127,7 @@ function createPanel(svc) {
     span('name', svc.name),
     url,
     status,
+    attachBadge,
     loginBtn,
     button('복사', '최신 답변 복사', async () => {
       const r = await host.copyAnswer(svc.id);
@@ -138,7 +141,7 @@ function createPanel(svc) {
   if (UI.devtools) head.append(button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')));
   el.append(head);
   panelsEl.append(el);
-  const p = { el, dot, url, status, loginBtn };
+  const p = { el, dot, url, status, loginBtn, attachBadge };
   panels.set(svc.id, p);
   return p;
 }
@@ -165,6 +168,7 @@ function flash(el, text) {
 }
 
 const SEND_TEXT = { sending: '보내는 중…', sent: '보냄', error: '보내기 실패' };
+const ATTACH_TEXT = { failed: '첨부 없이 보냄', skipped: '첨부 없이 보냄', partial: '일부 파일은 빼고 보냄' };
 
 // 답변을 기다리는 동안 걸린 시간을 1초마다 보여 준다.
 const fmtElapsed = (ms) => {
@@ -182,9 +186,10 @@ function tickAnswerTimers() {
 }
 setInterval(tickAnswerTimers, 1000);
 
-host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late }) => {
+host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching }) => {
   const p = panels.get(id);
   if (!p) return;
+  if (answer === 'clear') p.attachBadge.hidden = true;
   if (answer) {
     if (answer === 'answering') p.answerStart = Date.now();
     p.status.textContent =
@@ -202,7 +207,23 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
   if (send) {
     p.status.textContent = send === 'error' ? `${SEND_TEXT.error}: ${error}` : SEND_TEXT[send];
     p.status.dataset.state = `send-${send}`;
-    if (send === 'sent') setTimeout(() => p.status.dataset.state === 'send-sent' && (p.status.textContent = ''), 3000);
+    if (send === 'sending') {
+      p.attachBadge.hidden = true;
+      if (attaching) p.status.textContent = `파일 ${attaching}개 첨부 후 보내는 중…`;
+    }
+    // 첨부에 실패한 패널은 글만 보냈다. 머리줄에 표시를 남겨 둔다 (다음에 보내거나 새 대화를 열 때까지).
+    const warn = send === 'sent' && attach && ATTACH_TEXT[attach.state];
+    if (warn) {
+      p.status.textContent = `보냄 · ${warn}`;
+      p.status.dataset.state = 'send-attach-warn';
+      p.attachBadge.hidden = false;
+      p.attachBadge.textContent = `📎 ${warn}`;
+      p.attachBadge.title = attach.error || warn;
+    }
+    if (send === 'sent') {
+      const st = p.status.dataset.state;
+      setTimeout(() => p.status.dataset.state === st && (p.status.textContent = ''), warn ? 8000 : 3000);
+    }
     return;
   }
   if (error) {
@@ -252,6 +273,7 @@ function renderTargets() {
     chip.classList.toggle('on', targets.has(id));
     box.append(chip);
   }
+  renderAttachHint();
 }
 
 // ---------- 답변 비교 ----------
@@ -314,8 +336,10 @@ async function renderHistoryList() {
       const row = document.createElement('button');
       row.className = 'history-item';
       row.classList.toggle('active', it.id === historySelected);
-      const meta = `${fmtTime(it.at)} · 답변 ${it.answered}/${it.targets}${it.synth ? ` · 종합 ${it.synth}` : ''}`;
-      row.append(span('history-q', it.question), span('history-meta', meta));
+      const meta =
+        `${fmtTime(it.at)} · 답변 ${it.answered}/${it.targets}` +
+        `${it.files ? ` · 첨부 ${it.files}` : ''}${it.synth ? ` · 종합 ${it.synth}` : ''}`;
+      row.append(span('history-q', it.question || NO_TEXT), span('history-meta', meta));
       row.addEventListener('click', () => {
         historySelected = it.id;
         renderHistoryList();
@@ -326,8 +350,13 @@ async function renderHistoryList() {
   renderHistoryDetail();
 }
 
+const NO_TEXT = '(글 없이 첨부 파일만 보냄)';
+const filesLine = (files) => files.map((f) => `${f.name} (${fmtSize(f.size)})`).join(' · ');
+
 function recordToMarkdown(rec) {
-  const parts = [`# ${rec.question.split('\n')[0]}`, '', `> ${fmtTime(rec.at)}`, '', '## 질문', '', rec.question];
+  const question = rec.question || NO_TEXT;
+  const parts = [`# ${question.split('\n')[0]}`, '', `> ${fmtTime(rec.at)}`, '', '## 질문', '', question];
+  if (rec.files?.length) parts.push('', `첨부: ${filesLine(rec.files)}`);
   for (const id of rec.targets) {
     const a = rec.answers[id];
     if (a?.text) parts.push('', `## ${a.name}`, '', a.md || a.text);
@@ -364,7 +393,8 @@ async function renderHistoryDetail() {
 
   const question = document.createElement('div');
   question.className = 'history-question';
-  question.textContent = rec.question;
+  question.textContent = rec.question || NO_TEXT;
+  if (rec.files?.length) question.append(document.createElement('br'), span('history-files', `📎 ${filesLine(rec.files)}`));
 
   const cols = document.createElement('div');
   cols.className = 'compare-cols';
@@ -533,23 +563,175 @@ try {
   setTemplate('none');
 }
 
+// ---------- 첨부 파일 ----------
+// 공통 입력창에 끌어다 놓기 · Ctrl+V · 📎 버튼으로 올린 파일을 보낼 대상 패널마다 첨부한다.
+// 한도는 메인(Electron) / host.js(확장 프로그램)에서 state.attachLimits로 받는다.
+
+let attachments = []; // [{ file, url(이미지 미리보기) }]
+
+const fmtSize = (bytes) =>
+  bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`;
+const fileKind = (type) => (/^image\//.test(type || '') ? 'image' : 'document');
+const KIND_TEXT = { image: '이미지', document: '문서' };
+
+function attachHint(text, cls = '') {
+  const hint = $('#attachHint');
+  hint.textContent = text;
+  hint.className = `attach-hint ${cls}`;
+}
+
+/** 파일을 첨부 목록에 더한다. 한도를 넘는 파일은 빼고 이유를 보여 준다. */
+function addFiles(list) {
+  const limits = state?.attachLimits;
+  if (!limits || state.mode !== 'chat') return;
+  const rejected = [];
+  let total = attachments.reduce((n, a) => n + a.file.size, 0);
+  for (const file of list) {
+    if (attachments.length >= limits.maxFiles) rejected.push(`${file.name}: 최대 ${limits.maxFiles}개`);
+    else if (file.size > limits.maxFileBytes) rejected.push(`${file.name}: 파일당 ${fmtSize(limits.maxFileBytes)} 초과`);
+    else if (total + file.size > limits.maxTotalBytes) rejected.push(`${file.name}: 합계 ${fmtSize(limits.maxTotalBytes)} 초과`);
+    else if (!file.size && !file.type) rejected.push(`${file.name}: 폴더나 빈 파일은 올릴 수 없습니다`);
+    else {
+      total += file.size;
+      attachments.push({ file, url: fileKind(file.type) === 'image' ? URL.createObjectURL(file) : null });
+    }
+  }
+  renderAttachments();
+  if (rejected.length) attachHint(`올리지 못함 — ${rejected.join(' / ')}`, 'error');
+  $('#prompt').focus();
+}
+
+function removeAttachment(i) {
+  const [a] = attachments.splice(i, 1);
+  if (a?.url) URL.revokeObjectURL(a.url);
+  renderAttachments();
+}
+
+function clearAttachments() {
+  for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
+  attachments = [];
+  renderAttachments();
+}
+
+function renderAttachments() {
+  $('#attachList').replaceChildren(
+    ...attachments.map((a, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'attach-chip';
+      chip.title = `${a.file.name} (${fmtSize(a.file.size)})`;
+      if (a.url) chip.append(Object.assign(document.createElement('img'), { src: a.url, alt: '' }));
+      else chip.append(span('file-icon', '📄'));
+      chip.append(span('file-name', a.file.name), span('file-size', fmtSize(a.file.size)));
+      chip.append(button('✕', '첨부에서 빼기', () => removeAttachment(i)));
+      return chip;
+    }),
+  );
+  renderAttachHint();
+}
+
+/** 첨부가 없으면 사용법, 있으면 합계와 "이 종류는 받지 않는 대상"을 미리 알려 준다. */
+function renderAttachHint() {
+  const limits = state?.attachLimits;
+  if (!limits) return;
+  if (!attachments.length) {
+    return attachHint(
+      `끌어다 놓기 · Ctrl+V로도 올릴 수 있습니다 (최대 ${limits.maxFiles}개, 파일당 ${fmtSize(limits.maxFileBytes)}, 합계 ${fmtSize(limits.maxTotalBytes)})`,
+    );
+  }
+  const total = attachments.reduce((n, a) => n + a.file.size, 0);
+  const kinds = [...new Set(attachments.map((a) => fileKind(a.file.type)))];
+  const warns = [...targets]
+    .map((id) => state.services.find((s) => s.id === id))
+    .filter((svc) => svc && kinds.some((k) => !svc.accept.includes(k)))
+    .map((svc) => `${svc.name}은(는) ${kinds.filter((k) => !svc.accept.includes(k)).map((k) => KIND_TEXT[k]).join('·')} 빼고 보냄`);
+  attachHint(`${attachments.length}개 · ${fmtSize(total)}${warns.length ? ` — ${warns.join(', ')}` : ''}`, warns.length ? 'warn' : '');
+}
+
+$('#attachBtn').addEventListener('click', () => $('#fileInput').click());
+$('#fileInput').addEventListener('change', (e) => {
+  addFiles([...e.target.files]);
+  e.target.value = '';
+});
+
+// 붙여넣기: 글이 함께 있으면(문서에서 복사한 글 등) 글만 붙이고, 파일·스크린샷만 있을 때 첨부한다.
+document.addEventListener('paste', (e) => {
+  if (state?.mode !== 'chat' || state.chatView !== 'panels') return;
+  const target = e.target;
+  if (target !== $('#prompt') && target !== document.body) return;
+  const files = [...(e.clipboardData?.files || [])];
+  if (!files.length || e.clipboardData.getData('text/plain')) return;
+  e.preventDefault();
+  const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+  addFiles(
+    files.map((f, i) =>
+      // 스크린샷은 이름이 모두 "image.png"라 구분되게 바꾼다.
+      /^image\.\w+$/.test(f.name)
+        ? new File([f], `붙여넣은-이미지-${stamp}${files.length > 1 ? `-${i + 1}` : ''}.${f.name.split('.').pop()}`, { type: f.type })
+        : f,
+    ),
+  );
+});
+
+// 끌어다 놓기: 앱 화면 어디에 놓아도 공통 입력창에 첨부한다 (패널 위에 놓으면 그 사이트가 받는다).
+// 파일을 창에 떨어뜨리면 그 파일로 이동해 버리는 기본 동작도 여기서 막는다.
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+let dragDepth = 0;
+document.addEventListener('dragenter', (e) => {
+  if (!hasFiles(e)) return;
+  dragDepth++;
+  if (state?.mode === 'chat') document.body.classList.add('drag-files');
+});
+document.addEventListener('dragleave', (e) => {
+  if (!hasFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) document.body.classList.remove('drag-files');
+});
+document.addEventListener('dragover', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = state?.mode === 'chat' ? 'copy' : 'none';
+});
+document.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove('drag-files');
+  addFiles([...e.dataTransfer.files]);
+});
+
 let sending = false;
 
 async function send() {
   const box = $('#prompt');
   const text = box.value.trim();
-  if (!text || sending) return;
+  if ((!text && !attachments.length) || sending) return;
   const ids = [...targets];
   if (!ids.length) return alert('보낼 대상을 하나 이상 켜 주세요.');
   sending = true;
   $('#sendBtn').disabled = true;
   try {
-    const results = await host.sendPrompt(applyTemplate(template, text), ids);
+    const files = await Promise.all(
+      attachments.map(async ({ file }) => ({
+        name: file.name,
+        type: file.type,
+        lastModified: file.lastModified,
+        data: await file.arrayBuffer(),
+      })),
+    );
+    // 글 없이 파일만 보낼 때는 템플릿을 붙이지 않는다.
+    const results = await host.sendPrompt(text ? applyTemplate(template, text) : '', ids, files);
     const failed = results.filter((r) => !r.ok);
-    if (!failed.length) box.value = '';
+    const noAttach = results.filter((r) => r.ok && r.attach && r.attach.state !== 'ok');
+    const name = (id) => state.services.find((s) => s.id === id)?.name || id;
+    if (!failed.length) {
+      box.value = '';
+      clearAttachments();
+    }
     $('#sendHint').textContent = failed.length
-      ? `${failed.map((r) => r.id).join(', ')} 보내기 실패 — 입력 내용은 남겨 두었습니다`
-      : `${results.length}곳에 보냈습니다`;
+      ? `${failed.map((r) => name(r.id)).join(', ')} 보내기 실패 — 입력 내용은 남겨 두었습니다`
+      : `${results.length}곳에 보냈습니다${noAttach.length ? ` · 첨부 없이 보냄: ${noAttach.map((r) => name(r.id)).join(', ')}` : ''}`;
+  } catch (err) {
+    $('#sendHint').textContent = `보내지 못했습니다: ${err.message}`;
   } finally {
     sending = false;
     $('#sendBtn').disabled = false;

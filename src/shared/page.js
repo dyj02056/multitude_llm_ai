@@ -22,7 +22,133 @@
     return { ok: document.activeElement === input || input.contains(document.activeElement) };
   }
 
-  /** 보내기 버튼을 찾아 누른다. 찾았으면 true. cfg: { send, sendText, dry } */
+  /** 입력창에 포커스만 다시 준다 (내용은 그대로). cfg: { input } */
+  function pageRefocusInput(cfg) {
+    const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    const input = cfg.input.flatMap((s) => [...document.querySelectorAll(s)]).find(visible);
+    if (!input) return false;
+    input.focus();
+    // 편집기(contenteditable)는 커서를 맨 끝으로 옮긴다. 첨부가 앞에 끼어들었어도 글은 뒤에 붙는다.
+    if (input.isContentEditable) {
+      const range = document.createRange();
+      range.selectNodeContents(input);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    return true;
+  }
+
+  /**
+   * 파일을 입력창에 첨부한다. 사람이 하는 방법(붙여넣기 · 파일 선택 칸 · 끌어다 놓기)을 cfg.upload.methods 순서로 시도한다.
+   * cfg: { input, upload: { methods, fileInput, attached, busy } }, files: File[]
+   * 결과: { ok: true, via } | { ok: false, error }
+   *
+   * 첨부됐는지는 (1) 사이트가 이벤트를 처리했는지(preventDefault), (2) 첨부 표시 요소·미리보기 이미지·파일 이름이
+   * 새로 나타났는지로 본다. 첨부된 뒤에는 업로드 중 표시(busy)가 사라질 때까지 기다린다.
+   */
+  async function pageAttachFiles(cfg, files) {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    const up = cfg.upload;
+    const input = cfg.input.flatMap((s) => [...document.querySelectorAll(s)]).find(visible);
+    if (!input) return { ok: false, error: '입력창을 찾지 못했습니다' };
+
+    const transfer = () => {
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(f);
+      return dt;
+    };
+    const count = (sel) => sel.reduce((n, s) => n + document.querySelectorAll(s).length, 0);
+    const occurrences = (text, word) => (word ? text.split(word).length - 1 : 0);
+    const evidence = () => {
+      const text = document.body.innerText;
+      return {
+        marks: count(up.attached),
+        images: [...document.images].filter((i) => /^(blob|data):/.test(i.currentSrc || i.src)).length,
+        names: files.reduce((n, f) => n + occurrences(text, f.name), 0),
+      };
+    };
+    const before = evidence();
+    const changed = () => {
+      const now = evidence();
+      return now.marks > before.marks || now.images > before.images || now.names > before.names;
+    };
+    async function waitAttached(handled) {
+      if (handled) return true;
+      for (let i = 0; i < 15; i++) {
+        await sleep(200);
+        if (changed()) return true;
+      }
+      return false;
+    }
+
+    const tries = {
+      paste() {
+        input.focus();
+        const ev = new ClipboardEvent('paste', { clipboardData: transfer(), bubbles: true, cancelable: true });
+        input.dispatchEvent(ev);
+        return ev.defaultPrevented;
+      },
+      input() {
+        const accepts = (el) => {
+          const acc = (el.getAttribute('accept') || '').trim();
+          if (!acc) return true;
+          const rules = acc.split(',').map((a) => a.trim().toLowerCase());
+          return files.every((f) =>
+            rules.some((r) =>
+              r.startsWith('.') ? f.name.toLowerCase().endsWith(r) : r.endsWith('/*') ? f.type.startsWith(r.slice(0, -1)) : f.type === r,
+            ),
+          );
+        };
+        const el = up.fileInput.flatMap((s) => [...document.querySelectorAll(s)]).find((e) => !e.disabled && accepts(e));
+        if (!el) return null; // 이 방법은 쓸 수 없다
+        if (!el.multiple && files.length > 1) return null;
+        el.files = transfer().files;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return false;
+      },
+      drop() {
+        const target = input.closest('form') || input.parentElement || input;
+        const dt = transfer();
+        for (const type of ['dragenter', 'dragover']) {
+          target.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+        }
+        const ev = new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true });
+        target.dispatchEvent(ev);
+        return ev.defaultPrevented;
+      },
+    };
+
+    let attachedVia = null;
+    for (const method of up.methods) {
+      if (!tries[method]) continue;
+      let handled;
+      try {
+        handled = tries[method]();
+      } catch {
+        continue;
+      }
+      if (handled === null) continue;
+      if (await waitAttached(handled)) {
+        attachedVia = method;
+        break;
+      }
+    }
+    if (!attachedVia) return { ok: false, error: '사이트가 파일을 받지 않았습니다' };
+
+    // 업로드 중 표시가 사라질 때까지 기다린다 (최대 60초). 보내기 버튼이 다시 켜지는 것은 보낼 때 따로 기다린다.
+    const busy = () => up.busy.some((s) => [...document.querySelectorAll(s)].some(visible));
+    for (let i = 0; i < 120 && busy(); i++) await sleep(500);
+    return { ok: true, via: attachedVia };
+  }
+
+  /**
+   * 보내기 버튼을 찾아 누른다. cfg: { send, sendText, dry }
+   * 결과: true(눌렀음) · null(버튼은 있지만 꺼져 있음 — 업로드 중 등) · false(버튼이 없음)
+   */
   function pageClickSend(cfg) {
     const usable = (el) =>
       !!el &&
@@ -38,7 +164,10 @@
         (el) => usable(el) && re.test(String(el.innerText || el.getAttribute('aria-label') || '').trim()),
       );
     }
-    if (!btn) return false;
+    if (!btn) {
+      const seen = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+      return cfg.send.some((s) => [...document.querySelectorAll(s)].some(seen)) ? null : false;
+    }
     if (!cfg.dry) btn.click();
     return true;
   }
@@ -101,5 +230,5 @@
     return false;
   }
 
-  return { pageFocusInput, pageClickSend, pageSnapshot, pageIsLoggedOut };
+  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut };
 });

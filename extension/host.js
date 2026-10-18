@@ -9,7 +9,8 @@
 // 서비스 페이지와는 content.js(각 iframe 안에서 실행)와 메시지로 주고받는다.
 
 (() => {
-  const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, normalizeSelected, serviceForHost } = MLA.services;
+  const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, serviceForHost, uploadOf } =
+    MLA.services;
   const { watchAnswer } = MLA.watch;
   const { createRounds } = MLA.rounds;
   const { createHistory } = MLA.historyCore;
@@ -18,7 +19,7 @@
 
   const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이 (styles.css와 같게)
   const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
-  const COMPOSER_H = 104; // 채팅 화면 맨 아래 공통 입력창 높이
+  const COMPOSER_H = 132; // 채팅 화면 맨 아래 공통 입력창 높이 (첨부 파일 줄 포함)
   const GAP = 4;
   const TIMEOUT_CHOICES = [5, 10, 20, 30, 60]; // 답변 최대 대기 시간(분) 선택지
   const REMOTE_REFRESH_MS = 6 * 60 * 60 * 1000;
@@ -81,7 +82,7 @@
   let mode = 'pick'; // 'pick' | 'chat'  (확장 프로그램은 크롬에 로그인된 계정을 그대로 써서 로그인 화면이 없다)
   let chatView = 'panels'; // 'panels' | 'compare' | 'history' | 'help'
   let tabId = null;
-  const panels = new Map(); // id -> { iframe, frameId, helloTimer, loginTimer }
+  const panels = new Map(); // id -> { iframe, frameId, origin, helloTimer, loginTimer }
 
   const framesEl = document.createElement('div');
   framesEl.id = 'frames';
@@ -122,7 +123,7 @@
     iframe.dataset.id = svc.id;
     // 답변 복사 버튼·음성 입력이 iframe 안에서도 동작하도록 권한을 넘긴다.
     iframe.allow = 'clipboard-read; clipboard-write; microphone';
-    const p = { iframe, frameId: null, helloTimer: null, loginTimer: null };
+    const p = { iframe, frameId: null, origin: null, helloTimer: null, loginTimer: null };
     iframe.addEventListener('load', () => {
       sendPanel(svc.id, { loading: false });
       // content.js가 연결되지 않으면 사이트가 iframe을 막았거나 로그인 화면(다른 도메인)으로 넘어간 것이다.
@@ -185,6 +186,7 @@
     if (msg.type === 'mla:hello') {
       log('hello', svc.id, sender.frameId, msg.url);
       p.frameId = sender.frameId;
+      p.origin = new URL(msg.url).origin; // 첨부 파일은 이 주소의 페이지에만 넘긴다
       clearTimeout(p.helloTimer);
       sendPanel(svc.id, { url: msg.url, loading: false });
       scheduleLoginCheck(svc.id);
@@ -260,13 +262,14 @@
       layout: prefs.layout,
       selected: prefs.selected,
       maxSelected: MAX_SELECTED,
+      attachLimits: ATTACH_LIMITS,
       synthTarget: prefs.synthTarget,
       autoSynth: prefs.autoSynth,
       answerTimeoutMin: prefs.answerTimeoutMin,
       timeoutChoices: TIMEOUT_CHOICES,
       remoteSelectors: prefs.remoteSelectors,
       remote: remoteStatus,
-      services: SERVICES.map(({ id, name, color, url }) => ({ id, name, color, url })),
+      services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept })),
       rects,
     });
   }
@@ -294,8 +297,19 @@
   const rounds = createRounds({
     services: SERVICES,
     hasPanel: (id) => panels.has(id),
-    sendPrompt: async (id, text) => {
-      const res = await callFrame(id, { type: 'mla:send', cfg: sendCfg(svcOf(id)), text });
+    sendPrompt: async (id, text, files) => {
+      const svc = svcOf(id);
+      let upload = null;
+      if (files.length) {
+        // 확장 메시지는 JSON만 실을 수 있어서, 파일은 iframe에 postMessage로 그대로(구조적 복제) 넘긴다.
+        // content.js는 이 번호(nonce)로 받은 파일을 찾아 첨부한다.
+        const p = panels.get(id);
+        if (!p?.origin) throw new Error('패널 페이지와 아직 연결되지 않았습니다');
+        const nonce = crypto.randomUUID();
+        p.iframe.contentWindow.postMessage({ mla: 'files', nonce, files }, p.origin);
+        upload = { nonce, cfg: uploadOf(svc) };
+      }
+      const res = await callFrame(id, { type: 'mla:send', cfg: sendCfg(svc), text, upload });
       return res || { ok: false, error: '패널 페이지가 응답하지 않았습니다' };
     },
     snapshot,
@@ -307,6 +321,18 @@
     prefs: () => prefs,
     log,
   });
+
+  /** 첨부 파일 한도 검사 (화면에서도 막지만 한 번 더 본다) */
+  function checkFiles(files) {
+    if (!Array.isArray(files) || files.length > ATTACH_LIMITS.maxFiles) return false;
+    let total = 0;
+    for (const f of files) {
+      if (!f || typeof f.name !== 'string' || !(f.data instanceof ArrayBuffer)) return false;
+      total += f.data.byteLength;
+      if (f.data.byteLength > ATTACH_LIMITS.maxFileBytes || total > ATTACH_LIMITS.maxTotalBytes) return false;
+    }
+    return true;
+  }
 
   async function copyText(text) {
     try {
@@ -444,8 +470,12 @@
     openModels: (ids) => Array.isArray(ids) && showChat(ids.filter((id) => typeof id === 'string')),
     pickModels: () => mode === 'chat' && showPick(),
     logout: () => {},
-    sendPrompt: (text, targets) =>
-      typeof text === 'string' && text.trim() && Array.isArray(targets) ? rounds.sendAll(text, targets) : Promise.resolve([]),
+    sendPrompt: async (text, targets, files = []) => {
+      if (typeof text !== 'string' || !Array.isArray(targets)) return [];
+      if (!checkFiles(files)) return targets.map((id) => ({ id, ok: false, error: '첨부 파일이 한도를 넘었습니다' }));
+      if (!text.trim() && !files.length) return [];
+      return rounds.sendAll(text, targets, files);
+    },
     copyAnswer: async (id) => {
       const { text, copied, total } = await rounds.collectMarkdown(id);
       if (copied) await copyText(text);

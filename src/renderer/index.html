@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:" />
   <title>Multitude LLM</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -90,6 +90,12 @@
         <button id="synthBtn" title="Ctrl+Shift+S">종합 요청</button>
         <label class="check"><input type="checkbox" id="autoSynth" /> 완료 후 자동</label>
       </div>
+    </div>
+    <div class="attach-row">
+      <button id="attachBtn" title="파일 첨부 — 끌어다 놓기나 Ctrl+V로도 올릴 수 있습니다">📎 파일</button>
+      <input type="file" id="fileInput" multiple hidden />
+      <div id="attachList" class="attach-list"></div>
+      <span id="attachHint" class="attach-hint"></span>
     </div>
     <div class="compose-row">
       <div class="tpl">

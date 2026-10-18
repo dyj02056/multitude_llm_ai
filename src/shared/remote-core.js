@@ -54,6 +54,17 @@
         out.messages = { container: m.container, role: m.role, content: m.content };
       }
     }
+    if (raw.upload && typeof raw.upload === 'object') {
+      const u = raw.upload;
+      const up = {};
+      const pick = (list, allowed) => list.filter((x) => allowed.includes(x)).slice(0, allowed.length);
+      if (Array.isArray(u.methods)) up.methods = pick(u.methods, ['paste', 'input', 'drop']);
+      if (Array.isArray(u.accept)) up.accept = pick(u.accept, ['image', 'document']);
+      for (const f of ['fileInput', 'attached', 'busy']) {
+        if (Array.isArray(u[f])) up[f] = u[f].filter(validSelector).slice(0, MAX_ITEMS);
+      }
+      if (Object.keys(up).length) out.upload = up;
+    }
     if (raw.loggedOut && typeof raw.loggedOut === 'object') {
       const lo = {};
       if (validRegex(raw.loggedOut.url)) lo.url = raw.loggedOut.url;
@@ -82,7 +93,7 @@
     return new Map(
       services.map((s) => [
         s.id,
-        Object.fromEntries([...LIST_FIELDS, ...STRING_FIELDS, 'messages', 'loggedOut'].map((f) => [f, clone(s[f])])),
+        Object.fromEntries([...LIST_FIELDS, ...STRING_FIELDS, 'messages', 'loggedOut', 'upload'].map((f) => [f, clone(s[f])])),
       ]),
     );
   }
@@ -103,6 +114,7 @@
       }
       for (const f of [...STRING_FIELDS, 'messages']) if (o[f]) svc[f] = clone(o[f]);
       if (o.loggedOut) svc.loggedOut = { ...(b.loggedOut || {}), ...clone(o.loggedOut) };
+      if (o.upload) svc.upload = { ...(b.upload || {}), ...clone(o.upload) };
     }
   }
 

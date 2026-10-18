@@ -1,7 +1,8 @@
 // 자동 생성 파일 — 직접 고치지 말고 원본을 고친 뒤 npm run build:ext (원본: src/shared/history-core.js)
 // 질문·답변 기록. 최근 것부터 담는다. 저장 방법(파일 / chrome.storage)은 쓰는 쪽이 save로 넘긴다.
 // 기록 하나 = 공통 입력창으로 보낸 질문 한 번(라운드):
-//   { id, at, question, targets: [id], answers: { [svcId]: { name, state, text, md } }, synth: [{ judge, at, text, md }] }
+//   { id, at, question, targets: [id], files: [{ name, size, type }], answers: { [svcId]: { name, state, text, md } },
+//     synth: [{ judge, at, text, md }] }   (첨부 파일은 이름·크기·종류만 남기고 내용은 저장하지 않는다)
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.historyCore)이 같이 쓴다.
 (function (root, factory) {
   const api = factory();
@@ -27,12 +28,13 @@
       records = Array.isArray(data) ? data : [];
     }
 
-    function add({ question, targets }) {
+    function add({ question, targets, files = [] }) {
       const rec = {
         id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         at: Date.now(),
         question,
         targets,
+        files,
         answers: {},
         synth: [],
       };
@@ -64,6 +66,7 @@
       const hit = (r) =>
         !q ||
         r.question.toLowerCase().includes(q) ||
+        (r.files || []).some((f) => f.name.toLowerCase().includes(q)) ||
         Object.values(r.answers).some((a) => (a.text || '').toLowerCase().includes(q)) ||
         r.synth.some((s) => (s.text || '').toLowerCase().includes(q));
       return records.filter(hit).map((r) => ({
@@ -73,6 +76,7 @@
         answered: Object.values(r.answers).filter((a) => a.text).length,
         targets: r.targets.length,
         synth: r.synth.length,
+        files: (r.files || []).length,
       }));
     }
 

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
-const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, normalizeSelected } = require('../shared/services');
+const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf } = require('../shared/services');
 const autologin = require('./autologin');
 const { sendPrompt } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
@@ -15,7 +15,7 @@ const { shortcutList, shortcutFor } = require('../shared/shortcuts');
 
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
-const COMPOSER_H = 104; // 채팅 화면 맨 아래 공통 입력창 높이
+const COMPOSER_H = 132; // 채팅 화면 맨 아래 공통 입력창 높이 (첨부 파일 줄 포함)
 const GAP = 4;
 
 // 모든 패널이 한 세션을 같이 쓴다. 그래야 Google 로그인 한 번으로 다른 서비스의 "Google로 계속하기"가 이어진다.
@@ -29,7 +29,7 @@ const CHROME_UA =
 // Google 로그인은 임베디드 Chromium을 "안전하지 않은 브라우저"로 막는다. 로그인 도메인에만 Firefox UA를 보낸다.
 const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
 const AUTH_URL_RE =
-  /accounts\.google\.com|accounts\.x\.ai|appleid\.apple\.com|auth0|auth\.openai\.com|\/oauth|\/auth\/|\/login|\/signin|sso/i;
+  /accounts\.google\.com|accounts\.x\.ai|auth\.mistral\.ai|appleid\.apple\.com|auth0|auth\.openai\.com|\/oauth|\/auth\/|\/login|\/signin|sso/i;
 
 app.userAgentFallback = CHROME_UA;
 if (dev.profile) app.setPath('userData', dev.profile);
@@ -289,13 +289,14 @@ function pushState() {
     layout: prefs.layout,
     selected: prefs.selected,
     maxSelected: MAX_SELECTED,
+    attachLimits: ATTACH_LIMITS,
     synthTarget: prefs.synthTarget,
     autoSynth: prefs.autoSynth,
     answerTimeoutMin: prefs.answerTimeoutMin,
     timeoutChoices: TIMEOUT_CHOICES,
     remoteSelectors: prefs.remoteSelectors,
     remote: remote.getStatus(),
-    services: SERVICES.map(({ id, name, color, url }) => ({ id, name, color, url })),
+    services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept })),
     rects: rects.panels,
   });
 }
@@ -362,7 +363,8 @@ function sendSynthStatus(patch) {
 const rounds = createRounds({
   services: SERVICES,
   hasPanel: (id) => panels.has(id),
-  sendPrompt: (id, text) => sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text),
+  sendPrompt: (id, text, files) =>
+    sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text, files),
   snapshot: (id, opts) =>
     panels.has(id) ? snapshot(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), opts) : null,
   watch: (id, before, isCurrent, onState) => {
@@ -381,10 +383,29 @@ const rounds = createRounds({
   log,
 });
 
-// 공통 입력창: 고른 패널들에 같은 질문을 동시에 보낸다.
-ipcMain.handle('prompt:send', async (_e, { text, targets }) => {
-  if (typeof text !== 'string' || !text.trim() || !Array.isArray(targets)) return [];
-  return rounds.sendAll(text, targets);
+/** 화면에서 받은 첨부 파일을 검사한다. 모양이 틀리거나 한도를 넘으면 null */
+function checkFiles(files) {
+  if (files === undefined) return [];
+  if (!Array.isArray(files) || files.length > ATTACH_LIMITS.maxFiles) return null;
+  let total = 0;
+  const out = [];
+  for (const f of files) {
+    if (!f || typeof f.name !== 'string' || !(f.data instanceof ArrayBuffer || ArrayBuffer.isView(f.data))) return null;
+    const size = f.data.byteLength;
+    total += size;
+    if (size > ATTACH_LIMITS.maxFileBytes || total > ATTACH_LIMITS.maxTotalBytes) return null;
+    out.push({ name: f.name.slice(0, 200), type: String(f.type || ''), size, lastModified: Number(f.lastModified) || Date.now(), data: f.data });
+  }
+  return out;
+}
+
+// 공통 입력창: 고른 패널들에 같은 질문(과 첨부 파일)을 동시에 보낸다.
+ipcMain.handle('prompt:send', async (_e, { text, targets, files }) => {
+  if (typeof text !== 'string' || !Array.isArray(targets)) return [];
+  const checked = checkFiles(files);
+  if (checked && !text.trim() && !checked.length) return [];
+  if (!checked) return targets.map((id) => ({ id, ok: false, error: '첨부 파일이 한도를 넘었습니다' }));
+  return rounds.sendAll(text, targets, checked);
 });
 
 ipcMain.handle('synth:run', (_e, judgeId) => rounds.runSynth(typeof judgeId === 'string' ? judgeId : null));

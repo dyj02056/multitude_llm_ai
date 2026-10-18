@@ -27,7 +27,7 @@ ChatGPT·Gemini 같은 서비스 화면이 바뀌어 **입력창·보내기 버�
 ```
 
 - `version`: 정수. 바꿀 때마다 올립니다.
-- `services`의 키: `gemini`, `chatgpt`, `deepseek`, `perplexity`, `grok`, `qwen`, `poe`, `duckai`
+- `services`의 키: `gemini`, `chatgpt`, `deepseek`, `perplexity`, `grok`, `mistral`, `qwen`, `poe`, `duckai`
 - 고칠 수 있는 필드 (모두 문자열, 300자 이하)
 
 | 필드 | 뜻 |
@@ -35,6 +35,7 @@ ChatGPT·Gemini 같은 서비스 화면이 바뀌어 **입력창·보내기 버�
 | `input`, `send`, `stop`, `response` | CSS 셀렉터 목록. **앱에 들어 있는 목록 앞에 붙습니다** (원격 것이 틀려도 예전 것으로 계속 찾음). `"replace": true`면 원격 목록만 씁니다. |
 | `messages` | `{ container, role(정규식), content }` — 메시지마다 USER/ASSISTANT 같은 역할 표시가 붙는 사이트에서 답변을 고를 때 |
 | `loggedOut` | `{ url(정규식), text(정규식), selectors }` — 로그아웃 상태 단서 |
+| `upload` | 파일 첨부 `{ methods, fileInput, attached, busy, accept }` — `methods`는 `paste`·`input`·`drop` 시도 순서, `fileInput`·`attached`(첨부되면 나타나는 요소)·`busy`(업로드 중 표시)는 셀렉터 목록, `accept`는 `image`·`document`. 적은 항목만 바뀝니다. |
 | `loginButton`, `sendText`(정규식), `submitKey`(`Enter`·`Ctrl+Enter`), `newChatUrl`(https) | 그 밖의 설정 |
 
 알 수 없는 서비스·필드, 형식이 틀린 값은 무시합니다. 앱은 셀렉터·정규식 문자열만 받으며 코드는 받지도 실행하지도 않습니다.

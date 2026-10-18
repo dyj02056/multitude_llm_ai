@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Multitude LLM",
-  "version": "0.2.0",
-  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Qwen · Poe · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
+  "version": "0.3.0",
+  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Poe · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon-16.png",
@@ -33,6 +33,7 @@
     "https://www.perplexity.ai/*",
     "https://perplexity.ai/*",
     "https://grok.com/*",
+    "https://chat.mistral.ai/*",
     "https://chat.qwen.ai/*",
     "https://poe.com/*",
     "https://duck.ai/*",
@@ -47,6 +48,7 @@
         "https://www.perplexity.ai/*",
         "https://perplexity.ai/*",
         "https://grok.com/*",
+        "https://chat.mistral.ai/*",
         "https://chat.qwen.ai/*",
         "https://poe.com/*",
         "https://duck.ai/*",

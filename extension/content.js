@@ -13,7 +13,7 @@
   } catch {}
   if (!embedded) return;
 
-  const { pageFocusInput, pageClickSend, pageSnapshot, pageIsLoggedOut } = MLA.page;
+  const { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut } = MLA.page;
   const { htmlToMarkdown } = MLA.markdown;
   const { shortcutFor } = MLA.shortcuts;
 
@@ -28,6 +28,27 @@
   const hasText = (el, text) => squash(fieldText(el)).includes(squash(text).slice(0, 40));
 
   post({ type: 'mla:hello', url: location.href });
+
+  // 앱 탭이 postMessage로 넘긴 첨부 파일. 확장 프로그램 탭(바로 위 부모)에서 온 것만 받는다.
+  const received = new Map(); // nonce -> File[]
+  window.addEventListener('message', (e) => {
+    if (e.source !== window.parent || e.origin !== EXT_ORIGIN || e.data?.mla !== 'files') return;
+    const { nonce, files } = e.data;
+    if (typeof nonce !== 'string' || !Array.isArray(files)) return;
+    received.set(
+      nonce,
+      files.map((f) => new File([f.data], f.name, { type: f.type || '', lastModified: f.lastModified || Date.now() })),
+    );
+    setTimeout(() => received.delete(nonce), 120000); // 쓰지 않은 파일은 버린다
+  });
+
+  async function takeFiles(nonce) {
+    // 파일(postMessage)과 보내기 요청(확장 메시지)은 다른 길로 와서 순서가 바뀔 수 있다. 잠깐 기다린다.
+    for (let i = 0; i < 30 && !received.has(nonce); i++) await sleep(100);
+    const files = received.get(nonce);
+    received.delete(nonce);
+    return files || null;
+  }
 
   // 사이트 안에서 주소가 바뀌면(새 대화, 로그인 이동 등) 앱에 알린다.
   let lastUrl = location.href;
@@ -82,19 +103,37 @@
     }
   }
 
-  async function send({ cfg, text }) {
+  /** 질문을 보낸다. upload가 있으면 먼저 첨부하고, 첨부에 실패해도 글은 보낸다. */
+  async function send({ cfg, text, upload }) {
     const focus = pageFocusInput(cfg);
-    const el = findInput(cfg);
+    let el = findInput(cfg);
     if (!el) return { ok: false, error: focus.error || '입력창을 찾지 못했습니다' };
 
-    await insertText(el, text);
-    await sleep(100);
-    if (!hasText(el, text)) return { ok: false, error: '입력창에 글을 넣지 못했습니다' };
+    let attach;
+    if (upload) {
+      const files = await takeFiles(upload.nonce);
+      attach = files
+        ? await pageAttachFiles({ input: cfg.input, upload: upload.cfg }, files).catch((err) => ({ ok: false, error: err.message }))
+        : { ok: false, error: '첨부 파일을 받지 못했습니다' };
+      pageRefocusInput(cfg); // 첨부하면서 포커스가 옮겨 갔을 수 있다
+      el = findInput(cfg) || el;
+      if (!text && !attach.ok) return { ok: false, error: `첨부하지 못해 보낼 내용이 없습니다 (${attach.error})` };
+    }
 
-    // 보내기 버튼은 글자가 들어간 뒤에야 나타나거나 활성화되는 경우가 많아 잠깐 기다리며 찾는다.
-    for (let i = 0; i < 12; i++) {
+    if (text) {
+      await insertText(el, text);
+      await sleep(100);
+      if (!hasText(el, text)) return { ok: false, error: '입력창에 글을 넣지 못했습니다' };
+    }
+    const done = (via) => ({ ok: true, via, attach });
+
+    // 보내기 버튼은 글자가 들어간 뒤에야 나타나거나 활성화되는 경우가 많아 잠깐 기다리며 찾는다 (3초).
+    // 첨부가 있으면 버튼이 보이는데 꺼져 있는 동안(업로드 중)은 최대 60초까지 더 기다린다.
+    for (let i = 0; i < 240; i++) {
       await sleep(250);
-      if (pageClickSend(cfg)) return { ok: true, via: 'button' };
+      const clicked = pageClickSend(cfg);
+      if (clicked === true) return done('button');
+      if (i >= 11 && !(attach?.ok && clicked === null)) break;
     }
 
     // 버튼을 못 찾으면 Enter 키 이벤트를 보내고, 그래도 글이 남아 있으면 form을 직접 제출한다.
@@ -102,8 +141,8 @@
     pressEnter(el, cfg.submitKey);
     await sleep(500);
     const form = el.closest('form');
-    if (hasText(el, text) && form) form.requestSubmit();
-    return { ok: true, via: 'key' };
+    if (text && hasText(el, text) && form) form.requestSubmit();
+    return done('key');
   }
 
   const HANDLERS = {

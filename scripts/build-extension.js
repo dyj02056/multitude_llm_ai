@@ -59,8 +59,8 @@ function buildAppHtml(html) {
     html = html.replace(from, to);
   };
   replace(
-    `content="default-src 'self'; style-src 'self'; script-src 'self'"`,
-    `content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; ` +
+    `content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:"`,
+    `content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; ` +
       `frame-src https:; connect-src https://raw.githubusercontent.com"`,
   );
   replace('<link rel="stylesheet" href="styles.css" />', [
