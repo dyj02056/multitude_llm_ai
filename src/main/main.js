@@ -12,11 +12,13 @@ const { createRounds } = require('../shared/rounds');
 const history = require('./history');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
+const project = require('./project');
 
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
 const COMPOSER_H = 132; // 채팅 화면 맨 아래 공통 입력창 높이 (첨부 파일 줄 포함)
 const GAP = 4;
+const SIDEBAR_W = 300; // 프로젝트 사이드바 폭 (styles.css와 같게)
 
 // 모든 패널이 한 세션을 같이 쓴다. 그래야 Google 로그인 한 번으로 다른 서비스의 "Google로 계속하기"가 이어진다.
 const PARTITION = 'persist:shared';
@@ -37,7 +39,8 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 let win = null;
 let mode = 'login'; // 'login' | 'pick' | 'chat'
-let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'history' (기록) | 'help' (단축키)
+let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'history' (기록) | 'help' (단축키)
+let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
 
@@ -52,6 +55,7 @@ let prefs = {
   autoSynth: false,
   answerTimeoutMin: 20,
   remoteSelectors: true, // 사이트 셀렉터 원격 갱신
+  projectRoot: null, // 마지막으로 연 프로젝트 폴더
 };
 
 function loadPrefs() {
@@ -244,7 +248,8 @@ async function logout() {
 
 function computeRects() {
   const [w, h] = win.getContentSize();
-  const area = { x: 0, y: TOOLBAR_H, width: w, height: h - TOOLBAR_H };
+  const side = mode === 'chat' && sidebarOpen ? SIDEBAR_W : 0;
+  const area = { x: side, y: TOOLBAR_H, width: w - side, height: h - TOOLBAR_H };
   if (mode === 'login') return { login: area, panels: [] };
   if (mode !== 'chat') return { panels: [] };
 
@@ -252,13 +257,13 @@ function computeRects() {
   const n = ids.length;
   const cols = prefs.layout === 'row' || n <= 3 ? n : 2;
   const rows = Math.ceil(n / cols);
-  const cellW = Math.floor((w - GAP * (cols + 1)) / cols);
+  const cellW = Math.floor((area.width - GAP * (cols + 1)) / cols);
   const panelsH = area.height - COMPOSER_H;
   const cellH = Math.floor((panelsH - GAP * (rows + 1)) / rows);
 
   return {
     panels: ids.map((id, i) => {
-      const x = GAP + (i % cols) * (cellW + GAP);
+      const x = area.x + GAP + (i % cols) * (cellW + GAP);
       const y = area.y + GAP + Math.floor(i / cols) * (cellH + GAP);
       return {
         id,
@@ -400,15 +405,83 @@ function checkFiles(files) {
 }
 
 // 공통 입력창: 고른 패널들에 같은 질문(과 첨부 파일)을 동시에 보낸다.
-ipcMain.handle('prompt:send', async (_e, { text, targets, files }) => {
+ipcMain.handle('prompt:send', async (_e, { text, targets, files, opts }) => {
   if (typeof text !== 'string' || !Array.isArray(targets)) return [];
   const checked = checkFiles(files);
   if (checked && !text.trim() && !checked.length) return [];
   if (!checked) return targets.map((id) => ({ id, ok: false, error: '첨부 파일이 한도를 넘었습니다' }));
-  return rounds.sendAll(text, targets, checked);
+  return rounds.sendAll(text, targets, checked, sendOpts(opts));
 });
 
-ipcMain.handle('synth:run', (_e, judgeId) => rounds.runSynth(typeof judgeId === 'string' ? judgeId : null));
+ipcMain.handle('synth:run', (_e, judgeId, kind) =>
+  rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', kind === 'code' ? 'code' : 'text'),
+);
+
+/** 화면이 넘긴 보내기 옵션 검사: { question, textById } */
+function sendOpts(opts) {
+  if (!opts || typeof opts !== 'object') return {};
+  const out = {};
+  if (typeof opts.question === 'string') out.question = opts.question.slice(0, 20000);
+  if (opts.textById && typeof opts.textById === 'object') {
+    out.textById = {};
+    for (const s of SERVICES) if (typeof opts.textById[s.id] === 'string') out.textById[s.id] = opts.textById[s.id];
+  }
+  return out;
+}
+
+// 패널 하나에만 이어서 보내기 (프로젝트 모드: 요청한 파일 보내기, 전체 파일 다시 요청)
+ipcMain.handle('prompt:followup', async (_e, { id, text, files }) => {
+  if (typeof id !== 'string' || typeof text !== 'string' || !text.trim()) return { ok: false, error: '보낼 내용이 없습니다' };
+  const checked = checkFiles(files);
+  if (!checked) return { id, ok: false, error: '첨부 파일이 한도를 넘었습니다' };
+  return rounds.sendFollowUp(id, text, checked);
+});
+
+// ---------- 프로젝트 모드 (로컬 폴더 읽기·쓰기는 project.js, 처리는 화면 쪽 공통 모듈) ----------
+
+ipcMain.on('layout:sidebar', (_e, open) => {
+  sidebarOpen = !!open;
+  pushState();
+});
+
+async function rememberProject(p) {
+  prefs.projectRoot = p ? p.id : null;
+  savePrefs();
+  return p;
+}
+
+const projectCall = (fn) => async (_e, ...args) => {
+  try {
+    return { ok: true, value: await fn(...args) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+};
+
+ipcMain.handle('project:pick', projectCall(async () => rememberProject(await project.pick(win))));
+// Windows 앱은 접근 허용을 다시 받을 필요가 없어 restore·reconnect가 같다.
+const restoreProject = async () => {
+  if (!prefs.projectRoot) return null;
+  try {
+    return await project.open(prefs.projectRoot);
+  } catch {
+    return rememberProject(null); // 폴더가 없어졌으면 잊는다
+  }
+};
+ipcMain.handle('project:restore', projectCall(restoreProject));
+ipcMain.handle('project:reconnect', projectCall(restoreProject));
+ipcMain.handle('project:close', projectCall(async () => {
+  project.close();
+  await rememberProject(null);
+  return true;
+}));
+ipcMain.handle('project:readDir', projectCall((rel) => project.readDir(String(rel))));
+ipcMain.handle('project:readFile', projectCall((rel, opts) => project.readFile(String(rel), opts || {})));
+ipcMain.handle('project:writeFile', projectCall((rel, text) => project.writeFile(String(rel), text)));
+ipcMain.handle('project:deleteFile', projectCall((rel) => project.deleteFile(String(rel))));
+ipcMain.handle('project:globalExclude', projectCall(() => project.globalExclude()));
+ipcMain.handle('project:loadState', projectCall(() => (project.info() ? project.loadState(project.info().id) : null)));
+ipcMain.handle('project:saveState', projectCall((data) => (project.info() ? project.saveState(project.info().id, data) : false)));
 
 ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors }) => {
   if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
@@ -436,7 +509,7 @@ ipcMain.handle('answer:copy', async (_e, id) => {
 });
 
 ipcMain.on('view:set', (_e, value) => {
-  if (mode === 'chat' && ['panels', 'compare', 'history', 'help'].includes(value)) {
+  if (mode === 'chat' && ['panels', 'compare', 'changes', 'history', 'help'].includes(value)) {
     chatView = value;
     pushState();
   }

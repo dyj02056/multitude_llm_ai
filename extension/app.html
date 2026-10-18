@@ -18,6 +18,8 @@
       <button data-layout="grid">격자</button>
       <button data-layout="row">가로</button>
     </div>
+    <button class="only-chat" id="projectBtn" title="로컬 프로젝트 폴더를 열어 AI에게 코드 맥락을 함께 보냅니다">📁 프로젝트</button>
+    <button class="only-chat" id="changesBtn" title="AI 답변의 코드 수정안을 비교하고 적용합니다 (Ctrl+Shift+P)">변경 제안</button>
     <button class="only-chat" id="historyBtn" title="지금까지 보낸 질문과 답변 (Ctrl+H)">기록</button>
     <button class="only-chat" id="compareBtn" title="열린 패널의 최신 답변을 나란히 봅니다 (Ctrl+Shift+D)">답변 비교</button>
     <button class="only-chat" id="copyAll" title="열린 패널의 최신 답변을 한 번에 복사 (Ctrl+Shift+C)">모든 답변 복사</button>
@@ -40,6 +42,27 @@
 
   <main id="panels" class="only-chat"></main>
 
+  <aside id="projectSide" class="project-side">
+    <div class="ps-head">
+      <span class="ps-title">📁 <b id="psName"></b></span>
+      <button id="psRescan" title="폴더를 다시 읽습니다">⟳</button>
+      <button id="psHide" title="사이드바 접기 (프로젝트는 열린 채로)">⟨</button>
+      <button id="psClose" class="danger" title="프로젝트 닫기">✕</button>
+    </div>
+    <div id="psConnect" class="ps-connect" hidden>
+      <span>크롬 정책상 폴더 접근을 다시 허용해야 합니다.</span>
+      <button id="psReconnect" class="primary">폴더 접근 허용</button>
+    </div>
+    <details id="psRules" class="ps-rules">
+      <summary>제외 규칙</summary>
+      <div id="psRulesBody"></div>
+    </details>
+    <div id="psTree" class="ps-tree"></div>
+    <div class="ps-foot">
+      <span id="psSummary" class="muted-label"></span>
+    </div>
+  </aside>
+
   <section id="compare" class="only-compare">
     <div class="compare-head">
       <span class="muted-label">질문</span>
@@ -49,6 +72,30 @@
     </div>
     <div id="compareCols" class="compare-cols"></div>
   </section>
+
+  <section id="changes" class="only-changes">
+    <div class="compare-head">
+      <span class="muted-label">변경 제안</span>
+      <span id="changesInfo" class="compare-question"></span>
+      <button id="changesLog" title="적용한 수정안 목록과 되돌리기">적용 기록</button>
+      <button id="changesMerge" title="여러 AI의 수정안을 종합 담당 AI에게 하나로 합쳐 달라고 합니다">종합으로 합치기</button>
+      <button id="changesRefresh" title="답변을 다시 읽어 옵니다">새로고침</button>
+      <button id="changesClose">패널로 돌아가기</button>
+    </div>
+    <div id="changesCols" class="compare-cols"></div>
+  </section>
+
+  <div id="patchModal" class="modal" hidden>
+    <div class="modal-box">
+      <div class="modal-head"><b id="patchTitle"></b><span id="patchNote" class="muted-label"></span></div>
+      <div id="patchBody" class="modal-body"></div>
+      <div class="modal-foot">
+        <span id="patchStatus" class="muted-label"></span>
+        <button id="patchApply" class="primary">선택한 파일 적용</button>
+        <button id="patchCancel">닫기</button>
+      </div>
+    </div>
+  </div>
 
   <section id="history" class="only-history">
     <aside class="history-side">
@@ -99,6 +146,9 @@
       <input type="file" id="fileInput" multiple hidden />
       <div id="attachList" class="attach-list"></div>
       <span id="attachHint" class="attach-hint"></span>
+      <label id="projectChip" class="project-chip" hidden title="켜 두면 질문에 프로젝트 구조와 고른 파일 내용을 함께 보냅니다">
+        <input type="checkbox" id="projectInclude" /> <span id="projectChipText"></span>
+      </label>
     </div>
     <div class="compose-row">
       <div class="tpl">
@@ -109,6 +159,12 @@
       <button id="sendBtn" class="primary">보내기</button>
     </div>
   </footer>
+  <script src="lib/shared/vendor/ignore.js"></script>
+  <script src="lib/shared/vendor/diff.js"></script>
+  <script src="lib/shared/project-ignore.js"></script>
+  <script src="lib/shared/secret-scan.js"></script>
+  <script src="lib/shared/project-context.js"></script>
+  <script src="lib/shared/patch.js"></script>
   <script src="lib/shared/services.js"></script>
   <script src="lib/shared/synth.js"></script>
   <script src="lib/shared/shortcuts.js"></script>
@@ -116,8 +172,10 @@
   <script src="lib/shared/history-core.js"></script>
   <script src="lib/shared/remote-core.js"></script>
   <script src="lib/shared/rounds.js"></script>
+  <script src="project-fs.js"></script>
   <script src="host.js"></script>
   <script src="lib/renderer/templates.js"></script>
   <script src="lib/renderer/renderer.js"></script>
+  <script src="lib/renderer/project.js"></script>
 </body>
 </html>

@@ -4,11 +4,11 @@
 //   node scripts/build-extension.js          만들기 (npm run build:ext)
 //   node scripts/build-extension.js --check  만든 결과가 src/와 맞는지만 확인 (다르면 실패)
 //
-// 직접 고치는 파일: extension/host.js · content.js · background.js · ext.css
+// 직접 고치는 파일: extension/host.js · project-fs.js · content.js · background.js · ext.css
 // 이 스크립트가 만드는 파일 (직접 고치지 말 것):
 //   extension/manifest.json        서비스 목록(src/shared/services.js)과 package.json 버전으로 생성
 //   extension/app.html             src/renderer/index.html에서 생성
-//   extension/lib/shared/*.js      src/shared/*.js 복사
+//   extension/lib/shared/*.js      src/shared/*.js 복사 (vendor/ 안의 외부 라이브러리·라이선스 포함)
 //   extension/lib/renderer/*       src/renderer/renderer.js · templates.js · styles.css 복사
 //   extension/icons/icon-*.png     scripts/make-icon.js로 생성
 //
@@ -41,7 +41,11 @@ function buildFiles() {
     if (!name.endsWith('.js')) continue;
     files[`lib/shared/${name}`] = `// ${GENERATED} (원본: src/shared/${name})\n${read(`src/shared/${name}`)}`;
   }
-  for (const name of ['renderer.js', 'templates.js']) {
+  for (const name of fs.readdirSync(path.join(ROOT, 'src/shared/vendor'))) {
+    const body = read(`src/shared/vendor/${name}`);
+    files[`lib/shared/vendor/${name}`] = name.endsWith('.js') ? `// ${GENERATED} (원본: src/shared/vendor/${name})\n${body}` : body;
+  }
+  for (const name of ['renderer.js', 'templates.js', 'project.js']) {
     files[`lib/renderer/${name}`] = `// ${GENERATED} (원본: src/renderer/${name})\n${read(`src/renderer/${name}`)}`;
   }
   files['lib/renderer/styles.css'] = `/* ${GENERATED} (원본: src/renderer/styles.css) */\n${read('src/renderer/styles.css')}`;
@@ -68,11 +72,17 @@ function buildAppHtml(html) {
     '  <link rel="stylesheet" href="ext.css" />',
     '  <link rel="icon" href="icons/icon-32.png" />',
   ].join('\n'));
-  replace('  <script src="templates.js"></script>\n  <script src="renderer.js"></script>', [
+  // 화면이 읽는 공통 모듈(../shared/…)은 lib/shared/로, host.js(window.host)는 화면 스크립트보다 먼저 읽힌다.
+  html = html.replaceAll('<script src="../shared/', '<script src="lib/shared/');
+  replace('  <script src="templates.js"></script>', [
     ...APP_SHARED.map((n) => `  <script src="lib/shared/${n}.js"></script>`),
+    '  <script src="project-fs.js"></script>',
     '  <script src="host.js"></script>',
     '  <script src="lib/renderer/templates.js"></script>',
+  ].join('\n'));
+  replace('  <script src="renderer.js"></script>\n  <script src="project.js"></script>', [
     '  <script src="lib/renderer/renderer.js"></script>',
+    '  <script src="lib/renderer/project.js"></script>',
   ].join('\n'));
   replace('<!doctype html>\n', `<!doctype html>\n<!-- ${GENERATED} (원본: src/renderer/index.html) -->\n`);
   return html;
@@ -134,7 +144,7 @@ function main() {
   // src/shared에서 지운 모듈의 복사본도 지운다.
   const libShared = path.join(EXT, 'lib/shared');
   for (const name of fs.existsSync(libShared) ? fs.readdirSync(libShared) : []) {
-    if (files[`lib/shared/${name}`]) continue;
+    if (files[`lib/shared/${name}`] || name === 'vendor') continue;
     if (CHECK) stale.push(`lib/shared/${name} (남은 파일)`);
     else {
       fs.rmSync(path.join(libShared, name));

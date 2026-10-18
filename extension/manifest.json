@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Multitude LLM",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Poe · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
   "minimum_chrome_version": "116",
   "icons": {

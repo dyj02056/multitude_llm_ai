@@ -112,17 +112,42 @@
       runSynth(null, 'auto');
     }
 
-    /** 공통 입력창: 고른 패널들에 같은 질문(과 첨부 파일)을 동시에 보낸다. 종합 요청에는 첨부를 다시 보내지 않는다. */
-    function sendAll(text, targets, files = []) {
+    /**
+     * 공통 입력창: 고른 패널들에 같은 질문(과 첨부 파일)을 동시에 보낸다. 종합 요청에는 첨부를 다시 보내지 않는다.
+     * opts.question: 기록·종합에 쓸 질문 (프로젝트 맥락을 붙여 보낼 때는 사용자가 쓴 요청만 남긴다)
+     * opts.textById: 서비스별로 다른 글을 보낼 때 { id: 글 } (예: 문서 첨부를 받지 않는 서비스에는 맥락을 본문으로)
+     */
+    function sendAll(text, targets, files = [], opts = {}) {
       const ids = targets.filter((id) => a.hasPanel(id));
       const meta = files.map(({ name, size, type }) => ({ name, size, type }));
-      const historyId = a.history.add({ question: text, targets: ids, files: meta });
-      const r = (round = { question: text, targets: ids, finished: new Map(), synthDone: false, historyId });
-      return Promise.all(ids.map((id) => sendToPanel(id, text, (state) => onRoundAnswer(r, id, state), files)));
+      const question = typeof opts.question === 'string' && opts.question ? opts.question : text;
+      const historyId = a.history.add({ question, targets: ids, files: meta });
+      const r = (round = { question, targets: ids, finished: new Map(), synthDone: false, historyId });
+      const textFor = (id) => (typeof opts.textById?.[id] === 'string' ? opts.textById[id] : text);
+      return Promise.all(ids.map((id) => sendToPanel(id, textFor(id), (state) => onRoundAnswer(r, id, state), files)));
     }
 
-    /** 종합 요청. judgeId가 없으면 설정된 종합 담당 AI를 쓴다. */
-    async function runSynth(judgeId, cause = 'manual') {
+    /**
+     * 패널 하나에만 이어서 보낸다 (프로젝트 모드: 요청한 파일 보내기, 전체 파일 다시 요청).
+     * 지금 라운드가 있으면 그 기록의 이 서비스 답변을 새 답변으로 바꿔 남긴다.
+     */
+    function sendFollowUp(id, text, files = []) {
+      if (!a.hasPanel(id)) return Promise.resolve({ id, ok: false, error: '패널이 열려 있지 않습니다' });
+      const r = round;
+      return sendToPanel(
+        id,
+        text,
+        async (state) => {
+          if (!r || state !== 'done') return;
+          const { text: answer, md } = await readAnswer(id);
+          a.history.setAnswer(r.historyId, id, { name: nameOf(id), state, text: answer, md });
+        },
+        files,
+      );
+    }
+
+    /** 종합 요청. judgeId가 없으면 설정된 종합 담당 AI를 쓴다. mode 'code'는 코드 수정안 합치기. */
+    async function runSynth(judgeId, cause = 'manual', mode = 'text') {
       const judge = judgeId || a.prefs().synthTarget;
       if (!round) return fail('먼저 공통 입력창으로 질문을 보내 주세요');
       if (!a.hasPanel(judge)) return fail('종합을 맡을 AI 패널이 열려 있지 않습니다');
@@ -142,6 +167,7 @@
         question: round.question,
         answers,
         judgeAnswered: round.targets.includes(judge),
+        mode,
       });
       const judgeName = nameOf(judge);
       a.sendSynthStatus({ state: 'sending', judge: judgeName, count: answers.length, cause });
@@ -181,7 +207,7 @@
       return { question: round?.question || '', answers: list };
     }
 
-    return { sendAll, runSynth, collectMarkdown, answers, cancelWatch };
+    return { sendAll, sendFollowUp, runSynth, collectMarkdown, answers, cancelWatch };
   }
 
   return { createRounds };
