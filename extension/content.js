@@ -104,7 +104,7 @@
   }
 
   /** 질문을 보낸다. upload가 있으면 먼저 첨부하고, 첨부에 실패해도 글은 보낸다. */
-  async function send({ cfg, text, upload }) {
+  async function send({ cfg, text, upload, fallbackText }) {
     const focus = pageFocusInput(cfg);
     let el = findInput(cfg);
     if (!el) return { ok: false, error: focus.error || '입력창을 찾지 못했습니다' };
@@ -117,6 +117,11 @@
         : { ok: false, error: '첨부 파일을 받지 못했습니다' };
       pageRefocusInput(cfg); // 첨부하면서 포커스가 옮겨 갔을 수 있다
       el = findInput(cfg) || el;
+      // 첨부에 실패하면 예비 글(프로젝트 파일 내용을 본문에 넣은 글)을 대신 보낸다
+      if (!attach.ok && typeof fallbackText === 'string' && fallbackText) {
+        text = fallbackText;
+        attach = { ...attach, fallback: true };
+      }
       if (!text && !attach.ok) return { ok: false, error: `첨부하지 못해 보낼 내용이 없습니다 (${attach.error})` };
     }
 

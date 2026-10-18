@@ -59,6 +59,13 @@
     </details>
     <div id="psTree" class="ps-tree"></div>
     <div class="ps-foot">
+      <div class="ps-upload">
+        <span class="muted-label">올리는 방식</span>
+        <div id="psUploadMode" class="seg">
+          <button data-umode="bundle" title="구조와 파일 내용을 경로가 붙은 .md 파일로 묶어 올립니다 (크면 나눔)">묶음 파일</button>
+          <button data-umode="files" title="파일마다 하나씩 올립니다. 이름에 경로를 넣고(src__a__index.js), 한도를 넘으면 그번만 묶음 파일로 보냅니다">개별 파일</button>
+        </div>
+      </div>
       <span id="psSummary" class="muted-label"></span>
     </div>
   </aside>
@@ -165,6 +172,7 @@
   <script src="lib/shared/project-ignore.js"></script>
   <script src="lib/shared/secret-scan.js"></script>
   <script src="lib/shared/project-context.js"></script>
+  <script src="lib/shared/project-upload.js"></script>
   <script src="lib/shared/patch.js"></script>
   <script src="lib/shared/services.js"></script>
   <script src="lib/shared/synth.js"></script>

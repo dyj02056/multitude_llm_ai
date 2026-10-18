@@ -333,7 +333,7 @@
   const rounds = createRounds({
     services: SERVICES,
     hasPanel: (id) => panels.has(id),
-    sendPrompt: async (id, text, files) => {
+    sendPrompt: async (id, text, files, { fallbackText } = {}) => {
       const svc = svcOf(id);
       let upload = null;
       if (files.length) {
@@ -345,7 +345,7 @@
         p.iframe.contentWindow.postMessage({ mla: 'files', nonce, files }, p.origin);
         upload = { nonce, cfg: uploadOf(svc) };
       }
-      const res = await callFrame(id, { type: 'mla:send', cfg: sendCfg(svc), text, upload });
+      const res = await callFrame(id, { type: 'mla:send', cfg: sendCfg(svc), text, upload, fallbackText });
       return res || { ok: false, error: '패널 페이지가 응답하지 않았습니다' };
     },
     snapshot,
@@ -508,17 +508,18 @@
     openModels: (ids) => Array.isArray(ids) && showChat(ids.filter((id) => typeof id === 'string')),
     pickModels: () => mode === 'chat' && showPick(),
     logout: () => {},
-    // opts: { question(기록·종합용 질문), textById({ 서비스 id: 그 서비스에 보낼 글 }) }
+    // opts: { question(기록·종합용 질문), textById({ 서비스 id: 그 서비스에 보낼 글 }), fallbackText(첨부 실패 때 대신 보낼 글) }
     sendPrompt: async (text, targets, files = [], opts = {}) => {
       if (typeof text !== 'string' || !Array.isArray(targets)) return [];
       if (!checkFiles(files)) return targets.map((id) => ({ id, ok: false, error: '첨부 파일이 한도를 넘었습니다' }));
       if (!text.trim() && !files.length) return [];
       return rounds.sendAll(text, targets, files, opts || {});
     },
-    sendFollowUp: async (id, text, files = []) => {
+    // opts: { fallbackText(첨부 실패 때 대신 보낼 글) }
+    sendFollowUp: async (id, text, files = [], opts = {}) => {
       if (typeof text !== 'string' || !text.trim()) return { id, ok: false, error: '보낼 내용이 없습니다' };
       if (!checkFiles(files)) return { id, ok: false, error: '첨부 파일이 한도를 넘었습니다' };
-      return rounds.sendFollowUp(id, text, files);
+      return rounds.sendFollowUp(id, text, files, opts || {});
     },
     copyAnswer: async (id) => {
       const { text, copied, total } = await rounds.collectMarkdown(id);

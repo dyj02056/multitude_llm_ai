@@ -368,9 +368,9 @@ function sendSynthStatus(patch) {
 const rounds = createRounds({
   services: SERVICES,
   hasPanel: (id) => panels.has(id),
-  sendPrompt: (id, text, files) =>
+  sendPrompt: (id, text, files, extra) =>
     panels.has(id)
-      ? sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text, files)
+      ? sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text, files, extra)
       : { ok: false, error: '패널이 닫혔습니다' },
   snapshot: (id, opts) =>
     panels.has(id) ? snapshot(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), opts) : null,
@@ -420,11 +420,12 @@ ipcMain.handle('synth:run', (_e, judgeId, kind) =>
   rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', kind === 'code' ? 'code' : 'text'),
 );
 
-/** 화면이 넘긴 보내기 옵션 검사: { question, textById } */
+/** 화면이 넘긴 보내기 옵션 검사: { question, textById, fallbackText } */
 function sendOpts(opts) {
   if (!opts || typeof opts !== 'object') return {};
   const out = {};
   if (typeof opts.question === 'string') out.question = opts.question.slice(0, 20000);
+  if (typeof opts.fallbackText === 'string') out.fallbackText = opts.fallbackText.slice(0, 200000);
   if (opts.textById && typeof opts.textById === 'object') {
     out.textById = {};
     for (const s of SERVICES) if (typeof opts.textById[s.id] === 'string') out.textById[s.id] = opts.textById[s.id];
@@ -433,11 +434,11 @@ function sendOpts(opts) {
 }
 
 // 패널 하나에만 이어서 보내기 (프로젝트 모드: 요청한 파일 보내기, 전체 파일 다시 요청)
-ipcMain.handle('prompt:followup', async (_e, { id, text, files }) => {
+ipcMain.handle('prompt:followup', async (_e, { id, text, files, opts }) => {
   if (typeof id !== 'string' || typeof text !== 'string' || !text.trim()) return { ok: false, error: '보낼 내용이 없습니다' };
   const checked = checkFiles(files);
   if (!checked) return { id, ok: false, error: '첨부 파일이 한도를 넘었습니다' };
-  return rounds.sendFollowUp(id, text, checked);
+  return rounds.sendFollowUp(id, text, checked, sendOpts(opts));
 });
 
 // ---------- 프로젝트 모드 (로컬 폴더 읽기·쓰기는 project.js, 처리는 화면 쪽 공통 모듈) ----------
