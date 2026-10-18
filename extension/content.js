@@ -154,10 +154,6 @@
       el?.focus();
       return !!el;
     },
-    'mla:reload': () => {
-      setTimeout(() => location.reload(), 0);
-      return true;
-    },
     'mla:back': () => {
       history.back();
       return true;

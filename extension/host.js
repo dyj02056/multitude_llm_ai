@@ -82,7 +82,7 @@
   let mode = 'pick'; // 'pick' | 'chat'  (확장 프로그램은 크롬에 로그인된 계정을 그대로 써서 로그인 화면이 없다)
   let chatView = 'panels'; // 'panels' | 'compare' | 'history' | 'help'
   let tabId = null;
-  const panels = new Map(); // id -> { iframe, frameId, origin, helloTimer, loginTimer }
+  const panels = new Map(); // id -> { iframe, frameId, origin, url, retried, helloTimer, loginTimer }
 
   const framesEl = document.createElement('div');
   framesEl.id = 'frames';
@@ -123,13 +123,20 @@
     iframe.dataset.id = svc.id;
     // 답변 복사 버튼·음성 입력이 iframe 안에서도 동작하도록 권한을 넘긴다.
     iframe.allow = 'clipboard-read; clipboard-write; microphone';
-    const p = { iframe, frameId: null, origin: null, helloTimer: null, loginTimer: null };
+    const p = { iframe, frameId: null, origin: null, url: svc.url, retried: false, helloTimer: null, loginTimer: null };
     iframe.addEventListener('load', () => {
       sendPanel(svc.id, { loading: false });
       // content.js가 연결되지 않으면 사이트가 iframe을 막았거나 로그인 화면(다른 도메인)으로 넘어간 것이다.
       clearTimeout(p.helloTimer);
       p.helloTimer = setTimeout(() => {
         if (p.frameId !== null) return;
+        // 사이트의 서비스 워커가 그사이 다시 생겨 막혔을 수 있다. 한 번은 지우고 다시 열어 본다.
+        if (!p.retried) {
+          p.retried = true;
+          log('retry', svc.id, 'no hello — clearing service worker and reloading');
+          navigate(svc.id, p.url || svc.url);
+          return;
+        }
         sendPanel(svc.id, { login: 'needs-login' });
         sendPanel(svc.id, { error: '페이지와 연결되지 않았습니다 — "로그인 탭"에서 로그인한 뒤 ↻를 눌러 주세요' });
       }, HELLO_TIMEOUT_MS);
@@ -139,11 +146,26 @@
     navigate(svc.id, svc.url);
   }
 
-  function navigate(id, url) {
+  // 사이트가 서비스 워커(PWA)를 등록해 두면 iframe 페이지를 그 서비스 워커가 대신 받아 온다.
+  // 서비스 워커의 요청은 이 탭 소속이 아니라서 iframe 허용 규칙(allowFraming)이 적용되지 않고,
+  // 원래의 X-Frame-Options·CSP가 남아 크롬이 iframe을 막는다 (회색 "연결 거부" 화면 — Perplexity에서 확인).
+  // 그래서 패널을 열 때마다 그 서비스의 서비스 워커 등록만 지운다. 로그인(쿠키)·저장된 데이터는 지우지 않는다.
+  async function clearServiceWorkers(svc) {
+    try {
+      await chrome.browsingData.removeServiceWorkers({ origins: svc.hosts.map((h) => `https://${h}`) });
+    } catch (err) {
+      console.warn(`[sw] ${svc.id} 서비스 워커를 지우지 못했습니다:`, err.message);
+    }
+  }
+
+  async function navigate(id, url) {
     const p = panels.get(id);
+    if (!p) return;
     p.frameId = null; // 새 페이지의 content.js가 다시 연결한다
+    p.url = url;
     sendPanel(id, { loading: true, url });
-    p.iframe.src = url;
+    await clearServiceWorkers(svcOf(id));
+    if (panels.get(id) === p) p.iframe.src = url;
   }
 
   function closePanel(id) {
@@ -187,10 +209,13 @@
       log('hello', svc.id, sender.frameId, msg.url);
       p.frameId = sender.frameId;
       p.origin = new URL(msg.url).origin; // 첨부 파일은 이 주소의 페이지에만 넘긴다
+      p.url = msg.url;
+      p.retried = false;
       clearTimeout(p.helloTimer);
       sendPanel(svc.id, { url: msg.url, loading: false });
       scheduleLoginCheck(svc.id);
     } else if (msg.type === 'mla:nav' && p.frameId === sender.frameId) {
+      p.url = msg.url;
       sendPanel(svc.id, { url: msg.url });
       scheduleLoginCheck(svc.id);
     }
@@ -353,8 +378,9 @@
       const svc = svcOf(pid);
       const p = panels.get(pid);
       if (action === 'reload') {
-        // 페이지가 연결돼 있으면 지금 주소 그대로 새로고침, 아니면 처음 주소로 다시 연다.
-        callFrame(pid, { type: 'mla:reload' }).catch(() => navigate(pid, p.iframe.src || svc.url));
+        // 지금 주소로 다시 연다. 페이지 안에서 새로고침하면 서비스 워커가 다시 받아 와 막힐 수 있어 navigate를 쓴다.
+        p.retried = false;
+        navigate(pid, p.url || svc.url);
       } else if (action === 'home') navigate(pid, svc.url);
       else if (action === 'back') callFrame(pid, { type: 'mla:back' }).catch(() => {});
       else if (action === 'login') chrome.tabs.create({ url: svc.url }); // 일반 탭에서 로그인 → 돌아와서 ↻

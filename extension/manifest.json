@@ -24,7 +24,8 @@
     "storage",
     "unlimitedStorage",
     "declarativeNetRequest",
-    "clipboardWrite"
+    "clipboardWrite",
+    "browsingData"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
