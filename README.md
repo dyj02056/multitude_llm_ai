@@ -2,54 +2,75 @@
 
 Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Poe · Duck.ai 웹 채팅 중 **최대 4개**를 한 화면에 띄워 같은 질문(과 이미지·문서 파일)을 동시에 보내고 답변을 비교합니다.
 
-- **Windows 앱** (Electron) — 로그인은 Google 계정 하나로 합니다.
-- **크롬 확장 프로그램** — 크롬에 이미 로그인된 각 서비스 계정을 그대로 씁니다. [설치 방법](#크롬-확장-프로그램)
+- **Windows 앱** (Electron) — 로그인은 Google 계정 하나로 합니다. [설치](#설치-windows) · [직접 빌드](#설치-파일-직접-만들기-windows)
+- **크롬 확장 프로그램** — 크롬에 이미 로그인된 각 서비스 계정을 그대로 씁니다. [설치](#크롬-확장-프로그램)
 
 API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음 고른 모델은 Gemini · ChatGPT · DeepSeek · Perplexity이고, 격자(2×2)·가로(1×4) 배치를 고를 수 있습니다.
 
-> 아래 스크린샷은 v0.1(4개 서비스) 화면입니다.
-
 ![네 AI에 동시에 질문하고 답변을 나란히 받는 화면](docs/screenshots/02-ask-all.png)
+
+## 버전별 변경 사항
+
+| 버전 | 내용 |
+|---|---|
+| **v0.3.0** | Mistral(`chat.mistral.ai/work`) 추가 — 9개 서비스. 공통 입력창 **파일 첨부**(끌어다 놓기 · Ctrl+V · 📎). 크롬 확장에서 Perplexity처럼 서비스 워커가 있는 사이트가 패널에 안 뜨던 문제 수정 |
+| **v0.2.0** | Groq → **Grok**(grok.com). **Perplexity · Qwen · Poe · Duck.ai** 추가, **최대 4개 선택**(처음 값 Gemini · ChatGPT · DeepSeek · Perplexity). **크롬 확장 프로그램** 추가 |
+| v0.1.0 | Gemini · ChatGPT · DeepSeek · Groq 4개, Windows 앱 첫 배포 |
+
+자세한 내용은 [docs/release-notes](docs/release-notes)를 보세요.
 
 ## 한눈에 보기
 
-> 스크린샷의 계정 정보(이름·프로필)와 이전 대화 목록은 흐리게 처리했습니다.
+> 스크린샷의 패널 안은 실제 서비스 화면이 아니라 **테스트용 채팅 페이지와 예시 답변**입니다. 앱 화면(툴바·패널 머리줄·공통 입력창·비교·기록·설정)은 실제 앱 그대로입니다.
+> 실제로는 각 패널에 해당 서비스의 웹 채팅이 그대로 열립니다.
 
 ### 1. 모델 고르기
 
-Google로 로그인한 뒤 쓸 모델을 9개 중 최대 4개까지 고릅니다. 고른 모델만 패널로 열리고, 각 서비스에는 "Google로 계속하기"로 자동 로그인합니다.
+쓸 모델을 9개 중 최대 4개까지 고릅니다. 4개를 고르면 나머지는 선택이 막히고 "4 / 4 선택"이 표시됩니다. 고른 모델만 패널로 열리고, Windows 앱은 각 서비스에 "Google로 계속하기"로 자동 로그인합니다.
 
 ![모델 선택 화면](docs/screenshots/01-model-picker.png)
 
 ### 2. 한 번에 질문하기
 
-아래 공통 입력창에 쓰면 켜 둔 AI 모두에게 동시에 보냅니다. 왼쪽 아래 **템플릿**(예: 장단점 비교)을 고르면 질문을 자동으로 감싸 줍니다. 패널마다 "답변 중… → 답변 완료 · N자"가 표시됩니다.
+아래 공통 입력창에 쓰면 켜 둔 AI 모두에게 동시에 보냅니다. 왼쪽 아래 **템플릿**(예: 장단점 비교)을 고르면 질문을 자동으로 감싸 줍니다. 패널마다 "답변 중… → 답변 완료 · N자"가 표시됩니다. 위쪽 **격자 / 가로**로 2×2 · 1×4 배치를 바꿉니다.
 
 ![네 패널에 동시에 질문한 화면](docs/screenshots/02-ask-all.png)
 
-### 3. 교차검토(종합)
+### 3. 파일 첨부
 
-**종합 요청**을 누르면 다른 AI들의 답변을 모아, 고른 AI 하나(여기서는 Gemini)에게 오류·빠진 내용·최종 답변을 정리해 달라고 보냅니다. "완료 후 자동"을 켜면 모든 답변이 끝나는 순간 알아서 요청합니다.
+이미지·문서를 공통 입력창에 **끌어다 놓거나**, **Ctrl+V**로 붙여 넣거나(스크린샷), **📎 파일** 버튼으로 올리면 보낼 대상 패널마다 첨부해서 보냅니다. 받지 않는 종류가 있는 서비스는 올릴 때 미리 알려 주고(예: "Duck.ai은(는) 문서 빼고 보냄"), 보낸 뒤 패널 머리줄에 `📎 일부 파일은 빼고 보냄` · `📎 첨부 없이 보냄`으로 표시합니다. [자세히](#파일-첨부)
+
+![파일을 첨부해 네 AI에 보낸 화면](docs/screenshots/07-attachments.png)
+
+### 4. 교차검토(종합)
+
+**종합 요청**을 누르면 다른 AI들의 답변을 모아, 고른 AI 하나(여기서는 Gemini)에게 오류·빠진 내용·최종 답변을 정리해 달라고 보냅니다. "완료 후 자동"을 켜면 모든 답변이 끝나는 순간 알아서 요청합니다. 종합 요청에는 첨부 파일을 다시 보내지 않습니다.
 
 ![Gemini가 다른 세 AI의 답변을 종합하는 화면](docs/screenshots/03-synthesis.png)
 
-### 4. 답변 비교
+### 5. 답변 비교
 
 **답변 비교**(Ctrl+Shift+D)는 마지막 질문과 각 AI의 최신 답변을 칸별로 나란히 보여 줍니다. 칸마다 Markdown(표·코드 블록 유지)으로 복사할 수 있습니다.
 
 ![답변 비교 화면](docs/screenshots/04-compare.png)
 
-### 5. 기록
+### 6. 기록
 
-**기록**(Ctrl+H)에는 보낸 질문과 각 답변·종합 결과가 저장됩니다. 검색, Markdown 복사, 질문 다시 쓰기를 할 수 있습니다. 기록은 이 PC에만 저장됩니다.
+**기록**(Ctrl+H)에는 보낸 질문과 각 답변·종합 결과, 첨부한 파일 이름이 저장됩니다(파일 내용은 저장하지 않음). 검색, Markdown 복사, 질문 다시 쓰기를 할 수 있습니다. 기록은 이 PC에만 저장됩니다.
 
 ![질문·답변 기록 화면](docs/screenshots/05-history.png)
 
-### 6. 설정 · 단축키
+### 7. 설정 · 단축키
 
 `?`(Ctrl+/) 화면에서 답변 대기 시간, 사이트 셀렉터 자동 갱신을 설정하고 단축키를 볼 수 있습니다.
 
 ![설정과 단축키 화면](docs/screenshots/06-settings-shortcuts.png)
+
+### 8. 크롬 확장 프로그램
+
+같은 화면을 크롬 탭 하나에서 씁니다. 각 서비스는 크롬에 로그인된 계정을 그대로 쓰고, 로그인이 필요한 패널은 머리줄의 **로그인 탭**으로 일반 탭에서 로그인합니다. [설치 방법](#크롬-확장-프로그램)
+
+![크롬 확장 프로그램 화면](docs/screenshots/08-chrome-extension.png)
 
 ## 크롬 확장 프로그램
 
@@ -85,15 +106,37 @@ Google로 로그인한 뒤 쓸 모델을 9개 중 최대 4개까지 고릅니다
 [Releases](https://github.com/dyj02056/multitude_llm_ai/releases)의 `MultitudeLLM-Setup-<버전>.exe`를 실행합니다.
 코드 서명이 없어서 처음 실행할 때 Windows SmartScreen 경고가 뜰 수 있습니다 ("추가 정보" → "실행").
 
-직접 만들려면:
+> `dist` 폴더의 설치 파일은 GitHub에 올라가지 않습니다(`.gitignore`). 코드를 새로 받았다면 아래처럼 **다시 빌드해야** 새 버전이 들어간 설치 파일이 생깁니다. 파일 이름의 버전은 `package.json`의 `version`을 따릅니다.
+
+## 설치 파일 직접 만들기 (Windows)
+
+저장소 폴더에서 연 **PowerShell** 창에서 차례로 실행합니다.
 
 ```powershell
-# 이미 열린 PowerShell 창에서 실행 (이 창에서만 스크립트 실행 허용)
+# 1) 최신 코드 받기
+git pull origin claude/magical-pasteur-ksk533
+
+# 2) 예전 빌드 결과(0.1.0 등) 지우기
+Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+
+# 3) 의존성 맞추기
+npm install
+
+# 4) 이 창에서만 스크립트 실행을 허용하고 빌드 실행
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\scripts\build-win.ps1
 ```
 
-결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다. 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
+- 1번의 브랜치 이름은 작업 중인 브랜치입니다. main에 병합한 뒤에는 `git pull origin main`을 씁니다.
+- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.3.0). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
+- 4번의 실행 허용은 그 PowerShell 창을 닫으면 사라집니다 (PC 설정은 바뀌지 않음).
+- `powershell -ExecutionPolicy Bypass -File ...` 형태는 PATH에 `powershell`이 없는 PC에서 `'powershell' 용어가 ... 인식되지 않습니다` 오류가 납니다. 위 4번처럼 열린 창에서 직접 실행하세요. 그래도 빌드 중 같은 오류가 나면 전체 경로로 실행합니다.
+
+  ```powershell
+  & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File scripts\build-win.ps1
+  ```
+- 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
+- 태그(`v0.3.0` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
 
 ## 코드 구조
 
