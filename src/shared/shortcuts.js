@@ -19,12 +19,13 @@
     { keys: 'Ctrl+Shift+S', action: 'synth', label: '종합 요청' },
     { keys: 'Ctrl+Shift+C', action: 'copy-all', label: '모든 답변 복사 (Markdown)' },
     { keys: 'Ctrl+Shift+D', action: 'view:compare', label: '답변 비교 화면 열기/닫기' },
+    { keys: 'Ctrl+Shift+P', browserKeys: 'Alt+Shift+P', action: 'view:changes', label: '변경 제안(프로젝트 수정안) 화면 열기/닫기' },
     { keys: 'Ctrl+H', action: 'view:history', label: '기록 화면 열기/닫기' },
     { keys: 'Ctrl+Shift+R', action: 'reload-all', label: '모두 새로고침' },
     { keys: 'Ctrl+1~9', browserKeys: 'Alt+Shift+1~4', action: 'target:N', label: 'N번째 보낼 대상 켜기/끄기' },
     { keys: 'Alt+1~9', browserKeys: 'Alt+1~4', action: 'panel:N', label: 'N번째 패널로 포커스 이동' },
     { keys: 'Ctrl+/', action: 'view:help', label: '단축키 도움말' },
-    { keys: 'Esc', action: 'view:panels', label: '비교·기록·도움말 화면에서 패널로 돌아가기' },
+    { keys: 'Esc', action: 'view:panels', label: '비교·변경 제안·기록·도움말 화면에서 패널로 돌아가기' },
   ];
 
   /** 도움말 표에 보여 줄 목록 [{ keys, label }] */
@@ -49,13 +50,14 @@
     if (input.alt && !ctrl && !input.shift && digit) return `panel:${digit}`;
     if (browser && input.alt && input.shift && !ctrl) {
       if (digit) return `target:${digit}`;
-      return key === 'n' ? 'newchat-all' : null;
+      return { n: 'newchat-all', p: 'view:changes' }[key] || null;
     }
     if (!ctrl || input.alt) return null;
 
     if (input.shift) {
       const map = { s: 'synth', c: 'copy-all', d: 'view:compare', r: 'reload-all' };
-      if (!browser) map.n = 'newchat-all';
+      // 크롬은 Ctrl+Shift+N(시크릿 창)을 넘겨주지 않고, Ctrl+Shift+P는 인쇄 대화상자라 확장에서는 Alt+Shift+를 쓴다.
+      if (!browser) Object.assign(map, { n: 'newchat-all', p: 'view:changes' });
       return map[key] || null;
     }
     if (digit) return browser ? null : `target:${digit}`;

@@ -21,6 +21,7 @@
   const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
   const COMPOSER_H = 132; // 채팅 화면 맨 아래 공통 입력창 높이 (첨부 파일 줄 포함)
   const GAP = 4;
+  const SIDEBAR_W = 300; // 프로젝트 사이드바 폭 (styles.css와 같게)
   const TIMEOUT_CHOICES = [5, 10, 20, 30, 60]; // 답변 최대 대기 시간(분) 선택지
   const REMOTE_REFRESH_MS = 6 * 60 * 60 * 1000;
   const FETCH_TIMEOUT_MS = 8000;
@@ -80,7 +81,8 @@
   // ---------- 상태 ----------
 
   let mode = 'pick'; // 'pick' | 'chat'  (확장 프로그램은 크롬에 로그인된 계정을 그대로 써서 로그인 화면이 없다)
-  let chatView = 'panels'; // 'panels' | 'compare' | 'history' | 'help'
+  let chatView = 'panels'; // 'panels' | 'compare' | 'changes' | 'history' | 'help'
+  let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
   let tabId = null;
   const panels = new Map(); // id -> { iframe, frameId, origin, url, retried, helloTimer, loginTimer }
 
@@ -243,7 +245,8 @@
   // Electron 앱(main.js computeRects)과 같은 배치: 격자는 4개일 때 2×2, 가로는 한 줄에 모두.
   function computeRects() {
     if (mode !== 'chat') return [];
-    const w = window.innerWidth;
+    const side = sidebarOpen ? SIDEBAR_W : 0;
+    const w = window.innerWidth - side;
     const h = window.innerHeight;
     const ids = SERVICES.map((s) => s.id).filter((id) => panels.has(id));
     const n = ids.length;
@@ -253,7 +256,7 @@
     const panelsH = h - TOOLBAR_H - COMPOSER_H;
     const cellH = Math.floor((panelsH - GAP * (rows + 1)) / rows);
     return ids.map((id, i) => {
-      const x = GAP + (i % cols) * (cellW + GAP);
+      const x = side + GAP + (i % cols) * (cellW + GAP);
       const y = TOOLBAR_H + GAP + Math.floor(i / cols) * (cellH + GAP);
       return {
         id,
@@ -496,11 +499,17 @@
     openModels: (ids) => Array.isArray(ids) && showChat(ids.filter((id) => typeof id === 'string')),
     pickModels: () => mode === 'chat' && showPick(),
     logout: () => {},
-    sendPrompt: async (text, targets, files = []) => {
+    // opts: { question(기록·종합용 질문), textById({ 서비스 id: 그 서비스에 보낼 글 }) }
+    sendPrompt: async (text, targets, files = [], opts = {}) => {
       if (typeof text !== 'string' || !Array.isArray(targets)) return [];
       if (!checkFiles(files)) return targets.map((id) => ({ id, ok: false, error: '첨부 파일이 한도를 넘었습니다' }));
       if (!text.trim() && !files.length) return [];
-      return rounds.sendAll(text, targets, files);
+      return rounds.sendAll(text, targets, files, opts || {});
+    },
+    sendFollowUp: async (id, text, files = []) => {
+      if (typeof text !== 'string' || !text.trim()) return { id, ok: false, error: '보낼 내용이 없습니다' };
+      if (!checkFiles(files)) return { id, ok: false, error: '첨부 파일이 한도를 넘었습니다' };
+      return rounds.sendFollowUp(id, text, files);
     },
     copyAnswer: async (id) => {
       const { text, copied, total } = await rounds.collectMarkdown(id);
@@ -508,7 +517,7 @@
       return { copied, total };
     },
     setView: (value) => {
-      if (mode === 'chat' && ['panels', 'compare', 'history', 'help'].includes(value)) {
+      if (mode === 'chat' && ['panels', 'compare', 'changes', 'history', 'help'].includes(value)) {
         chatView = value;
         pushState();
       }
@@ -522,7 +531,8 @@
     },
     copyText: (text) => typeof text === 'string' && copyText(text),
     shortcuts: async () => shortcutList({ browser: true }),
-    runSynth: (judgeId) => rounds.runSynth(typeof judgeId === 'string' ? judgeId : null),
+    runSynth: (judgeId, kind) =>
+      rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', kind === 'code' ? 'code' : 'text'),
     setSynth: ({ target, auto }) => {
       if (typeof target === 'string' && SERVICES.some((s) => s.id === target)) prefs.synthTarget = target;
       if (typeof auto === 'boolean') prefs.autoSynth = auto;
@@ -540,6 +550,12 @@
       pushState();
     },
     refreshRemote: () => refreshRemote(),
+    setSidebar: (open) => {
+      sidebarOpen = !!open;
+      pushState();
+    },
+    // 프로젝트 모드: 고른 폴더 읽기·쓰기 (project-fs.js, File System Access API)
+    project: window.MLA_PROJECT_FS,
     setLayout: (value) => {
       if (value === 'grid' || value === 'row') {
         prefs.layout = value;

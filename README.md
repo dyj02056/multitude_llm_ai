@@ -1,6 +1,6 @@
 # multitude_llm_ai
 
-Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Poe · Duck.ai 웹 채팅 중 **최대 4개**를 한 화면에 띄워 같은 질문(과 이미지·문서 파일)을 동시에 보내고 답변을 비교합니다.
+Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Poe · Duck.ai 웹 채팅 중 **최대 4개**를 한 화면에 띄워 같은 질문(과 이미지·문서 파일)을 동시에 보내고 답변을 비교합니다. 로컬 프로젝트 폴더를 열어 **코드 작업**(맥락 보내기 → 수정안 비교 → 적용·되돌리기)도 함께 할 수 있습니다.
 
 - **Windows 앱** (Electron) — 로그인은 Google 계정 하나로 합니다. [설치](#설치-windows) · [직접 빌드](#설치-파일-직접-만들기-windows)
 - **크롬 확장 프로그램** — 크롬에 이미 로그인된 각 서비스 계정을 그대로 씁니다. [설치](#크롬-확장-프로그램)
@@ -13,6 +13,7 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음
 
 | 버전 | 내용 |
 |---|---|
+| **v0.4.0** | **프로젝트 모드**: 로컬 폴더를 열어 구조·파일을 AI에게 보내고(3단계 제외 규칙·비밀 정보 검사), `NEED_FILES` 요청에 답하고, 코드 수정안을 비교·미리보기·적용·되돌리기. Windows 앱과 크롬 확장 모두 |
 | **v0.3.0** | Mistral(`chat.mistral.ai/work`) 추가 — 9개 서비스. 공통 입력창 **파일 첨부**(끌어다 놓기 · Ctrl+V · 📎). 크롬 확장에서 Perplexity처럼 서비스 워커가 있는 사이트가 패널에 안 뜨던 문제 수정 |
 | **v0.2.0** | Groq → **Grok**(grok.com). **Perplexity · Qwen · Poe · Duck.ai** 추가, **최대 4개 선택**(처음 값 Gemini · ChatGPT · DeepSeek · Perplexity). **크롬 확장 프로그램** 추가 |
 | v0.1.0 | Gemini · ChatGPT · DeepSeek · Groq 4개, Windows 앱 첫 배포 |
@@ -66,7 +67,19 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음
 
 ![설정과 단축키 화면](docs/screenshots/06-settings-shortcuts.png)
 
-### 8. 크롬 확장 프로그램
+### 8. 프로젝트 모드 (로컬 코드 작업)
+
+툴바의 **📁 프로젝트**로 로컬 폴더를 열면 왼쪽에 파일 트리가 뜹니다. 빼야 할 파일은 `L1`·`L2`·`L3` 표시와 이유(예: `.gitignore 1행 (dist/)`)가 붙고, 비밀 정보로 보이는 파일은 `⚠ 비밀?`로 경고합니다. 질문을 보내면 프로젝트 구조와 고른 파일 내용이 함께 갑니다. AI가 답변 끝에 `NEED_FILES:`로 파일을 요청하면 패널 머리줄에 **📂 요청 파일 N개 보내기** 버튼이 생깁니다. [자세히](#프로젝트-모드)
+
+![프로젝트를 열고 네 AI에 코드 작업을 요청한 화면](docs/screenshots/09-project.png)
+
+**변경 제안**(Ctrl+Shift+P)에서 AI마다 낸 수정안을 파일별로 비교하고, **미리보기·적용**으로 diff를 확인한 뒤 고른 파일만 씁니다. 맞지 않는 diff는 **전체 파일 다시 요청**으로, 여러 안은 **종합으로 합치기**로 처리합니다. 적용한 것은 **적용 기록**에서 되돌릴 수 있습니다.
+
+![AI별 코드 수정안을 비교하는 변경 제안 화면](docs/screenshots/10-changes.png)
+
+![수정안 미리보기와 적용](docs/screenshots/11-patch-preview.png)
+
+### 9. 크롬 확장 프로그램
 
 같은 화면을 크롬 탭 하나에서 씁니다. 각 서비스는 크롬에 로그인된 계정을 그대로 쓰고, 로그인이 필요한 패널은 머리줄의 **로그인 탭**으로 일반 탭에서 로그인합니다. [설치 방법](#크롬-확장-프로그램)
 
@@ -128,7 +141,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 - 1번의 브랜치 이름은 작업 중인 브랜치입니다. main에 병합한 뒤에는 `git pull origin main`을 씁니다.
-- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.3.0). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
+- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.4.0). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
 - 4번의 실행 허용은 그 PowerShell 창을 닫으면 사라집니다 (PC 설정은 바뀌지 않음).
 - `powershell -ExecutionPolicy Bypass -File ...` 형태는 PATH에 `powershell`이 없는 PC에서 `'powershell' 용어가 ... 인식되지 않습니다` 오류가 납니다. 위 4번처럼 열린 창에서 직접 실행하세요. 그래도 빌드 중 같은 오류가 나면 전체 경로로 실행합니다.
 
@@ -136,22 +149,25 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
   & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File scripts\build-win.ps1
   ```
 - 아이콘은 `node scripts/make-icon.js`로 다시 만들 수 있습니다.
-- 태그(`v0.3.0` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
+- 태그(`v0.4.0` 등)를 푸시하면 GitHub Actions가 설치 파일과 확장 프로그램 zip을 만들어 Releases에 올립니다 (`.github/workflows/release.yml`).
 
 ## 코드 구조
 
 | 폴더 | 내용 |
 |---|---|
-| `src/shared/` | Windows 앱과 확장 프로그램이 **같이 쓰는** 코드: 서비스 목록·셀렉터(`services.js`), 질문 보내기·종합(`rounds.js`), 답변 감시, 페이지 주입 함수, 기록, 셀렉터 원격 갱신, 단축키 |
-| `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 |
+| `src/shared/` | Windows 앱과 확장 프로그램이 **같이 쓰는** 코드: 서비스 목록·셀렉터(`services.js`), 질문 보내기·종합(`rounds.js`), 답변 감시, 페이지 주입 함수, 기록, 셀렉터 원격 갱신, 단축키, 프로젝트 모드(`project-ignore.js` 제외 규칙, `secret-scan.js`, `project-context.js`, `patch.js`) |
+| `src/shared/vendor/` | 포함한 외부 라이브러리: [ignore](https://github.com/kaelzhang/node-ignore) 7.0.12 (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) 9.0.0 (BSD-3-Clause) — 라이선스 파일 함께 |
+| `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`project.js`: 프로젝트 폴더 읽기·쓰기) |
 | `src/renderer/` | 화면 (두 쪽이 같은 파일을 씀) |
-| `extension/` | 크롬 확장 프로그램. 직접 고치는 파일은 `host.js`·`content.js`·`background.js`·`ext.css`뿐이고, 나머지(`manifest.json`, `app.html`, `lib/`, `icons/`)는 생성 파일 |
+| `test/` | 공통 모듈 단위 테스트 (`npm test`) |
+| `extension/` | 크롬 확장 프로그램. 직접 고치는 파일은 `host.js`·`project-fs.js`·`content.js`·`background.js`·`ext.css`뿐이고, 나머지(`manifest.json`, `app.html`, `lib/`, `icons/`)는 생성 파일 |
 
 `src/shared/`나 `src/renderer/`를 고친 뒤에는 확장 프로그램 폴더를 다시 만들어 함께 커밋합니다.
 
 ```bash
 npm run build:ext   # extension/ 다시 만들기
 npm run check:ext   # extension/ 이 src/와 맞는지 확인
+npm test            # 공통 모듈 단위 테스트 (제외 규칙·비밀 검사·맥락·diff 적용)
 ```
 
 ## 실행 (개발)
@@ -169,6 +185,7 @@ npm start
 ## 기능
 
 - 9개 서비스 중 최대 4개를 골라 질문 동시 전송 (대상 켜기/끄기), 격자(2×2)·가로(1×4) 배치
+- 프로젝트 모드: 로컬 폴더의 구조·파일을 함께 보내고, AI 수정안을 비교·미리보기·적용·되돌리기 ([자세히](#프로젝트-모드))
 - 파일 첨부: 공통 입력창에 끌어다 놓기 · Ctrl+V(스크린샷) · 📎 버튼 → 보낼 대상 패널마다 첨부해서 보냄 ([자세히](#파일-첨부))
 - 답변 완료 감지, 패널별·전체 답변 복사 (Markdown — 표·코드 블록·목록 서식 유지)
 - 사이트 셀렉터 원격 갱신: 서비스 화면이 바뀌면 [remote/selectors.json](remote/README.md)만 고쳐 바로잡음 (6시간마다 확인, 설정에서 끄기 가능)
@@ -190,6 +207,54 @@ npm start
   받지 않는 종류(예: Duck.ai의 문서)는 빼고 보내며 `📎 일부 파일은 빼고 보냄`으로 알립니다. 올릴 때 미리 알려 줍니다.
 - 기록에는 첨부 파일의 이름·크기만 남고 내용은 저장하지 않습니다. 종합 요청에는 첨부를 다시 보내지 않습니다.
 
+## 프로젝트 모드
+
+로컬 프로젝트 폴더를 열어 AI 4곳과 함께 코드 작업을 합니다. 웹 채팅의 AI가 폴더를 직접 열어 보는 것이 아니라, **앱이 고른 내용만 대화에 넣어 주고**, AI 답변의 수정안을 **사용자가 확인한 뒤** 파일에 씁니다.
+
+| 단계 | 하는 일 |
+|---|---|
+| 1. 열기 | 툴바 **📁 프로젝트** → 폴더 선택. 왼쪽 사이드바(300px)에 파일 트리. `package.json`·`README` 같은 핵심 파일은 처음부터 골라 둠 |
+| 2. 고르기 | 체크한 파일의 내용과, 제외 규칙을 통과한 **전체 구조(파일 이름 목록)** 를 보냄. 입력창 오른쪽 `📁 이름 · 파일 N개 포함`을 끄면 맥락 없이 보냄 |
+| 3. 보내기 | 질문 뒤에 답변 규칙(수정은 파일별 `diff`, 새 파일은 `파일: 경로` + 코드 블록, 더 볼 파일은 `NEED_FILES:`)이 붙음. 10만 자가 넘으면 `project-context.md` 파일로 첨부 (문서를 받지 않는 Duck.ai에는 본문에 잘라서) |
+| 4. 요청 파일 | 답변 끝에 `NEED_FILES: a.js, b.ts`가 있으면 패널에 **📂 요청 파일 N개 보내기** → 그 패널에만 보냄 (제외 규칙·비밀 검사 그대로 적용, 못 보낸 파일은 이유를 함께 알림) |
+| 5. 변경 제안 | **변경 제안**(Ctrl+Shift+P, 확장 Alt+Shift+P) — AI별 수정안 목록(수정·새 파일·삭제, +/− 줄 수). 맞지 않으면 `⚠ 적용 불가` + **전체 파일 다시 요청** |
+| 6. 적용 | **미리보기·적용** → 파일별 diff 확인 → 체크한 파일만 씀. 쓰기 직전에 파일이 바뀌었으면 다시 계산. 앱 내장 제외 경로(`.env`, `.git`, `node_modules` 등)에는 쓰지 않음 |
+| 7. 되돌리기 | **적용 기록**(최근 20개)에서 되돌리기 — 적용 전 내용으로 복구, 새로 만든 파일은 지움. 그 뒤에 다시 바뀐 파일이 있으면 확인을 받음. git은 건드리지 않음 |
+
+### 3단계 제외 규칙
+
+| 단계 | 기본 | 대상 | 직접 체크 |
+|---|---|---|---|
+| **L1 항상 제외** | 항상 | 앱 내장: `.git/` `node_modules/` `.env*`(`.env.example` 제외) 키·인증서(`*.pem` `*.key` `id_rsa*` …) 자격 증명(`credentials*.json` `.npmrc` `.aws/` `.ssh/` …) 바이너리·미디어·압축·문서(`*.png` `*.pdf` `*.zip` `*.exe` …) 1MB 초과 파일, 바로가기 링크 | 불가 |
+| **L2 기본 적용** | 켜짐 | `.gitignore`(하위 폴더 것 포함), `.git/info/exclude`, git 전역 제외 파일(Windows 앱만), AI 전용 `.cursorignore` `.aiexclude` `.geminiignore` `.codeiumignore`, 이 앱 전용 `.mlaignore` | 가능 |
+| **L3 선택 적용** | 꺼짐 | `.dockerignore` `.npmignore` `.eslintignore` `.prettierignore` `.vercelignore` `.gcloudignore` `.helmignore` `.slugignore` — 사이드바 **제외 규칙**에서 켬 ("켜면 N개 더 제외" 표시) | 가능 |
+
+- `.dockerignore`·`.npmignore`는 이미지·배포 크기를 줄이려고 테스트·문서까지 빼는 경우가 많아 기본으로 쓰지 않습니다. `.dockerignore`는 루트 기준 문법이라 그에 맞게 해석합니다.
+- 같은 단계 안에서는 git처럼 나중 규칙이 이깁니다. `.mlaignore`가 가장 나중이라 `!경로`로 `.gitignore`에 걸린 것을 다시 넣을 수 있습니다 (L1은 불가).
+- 트리의 `L1`·`L2`·`L3` 표시에 마우스를 올리면 어느 파일 몇째 줄 때문에 빠졌는지 보입니다.
+
+`.mlaignore` 예 (`.gitignore`와 같은 문법):
+
+```gitignore
+# AI에게 보내지 않을 것
+legal/
+*.sql
+# .gitignore에 걸려도 보내고 싶은 것
+!src/generated/api-types.ts
+```
+
+### 비밀 정보 검사
+
+파일을 고를 때와 보낼 때 개인 키, AWS·GitHub·GitLab·Slack·Google·Stripe 키, `sk-` API 키, JWT, `password = "…"` 같은 대입을 찾습니다. 걸린 파일은 `⚠ 비밀?`로 표시하고 확인을 받아야만 보냅니다 (오탐이 있을 수 있음).
+
+### Windows 앱과 크롬 확장의 차이
+
+| | Windows 앱 | 크롬 확장 |
+|---|---|---|
+| 폴더 접근 | 폴더 선택 창, 다음 실행 때 자동으로 다시 엶 | File System Access API. 앱 탭을 새로 열 때마다 사이드바의 **폴더 접근 허용**을 한 번 눌러야 함 (크롬 정책) |
+| git 전역 제외 파일 | 읽음 (`core.excludesFile`, `~/.config/git/ignore`) | 읽지 못함 |
+| 상태 저장 | 앱 데이터 폴더 `projects/` | 크롬 확장 저장소 |
+
 ## 단축키
 
 서비스 패널 안에 커서가 있어도 동작합니다. 앱에서 `Ctrl+/`로 전체 목록을 볼 수 있습니다.
@@ -201,6 +266,7 @@ npm start
 | `Ctrl+Shift+S` | 종합 요청 |
 | `Ctrl+Shift+C` | 모든 답변 복사 (Markdown) |
 | `Ctrl+Shift+D` / `Ctrl+H` | 답변 비교 / 기록 화면 |
+| `Ctrl+Shift+P` (확장 프로그램: `Alt+Shift+P`) | 변경 제안 화면 (프로젝트 모드) |
 | `Ctrl+1~9` (확장 프로그램: `Alt+Shift+1~4`) / `Alt+1~9` | N번째 보낼 대상 켜기·끄기 / N번째 패널로 이동 |
 | `Esc` | 비교·기록·도움말 화면에서 패널로 돌아가기 |
 
