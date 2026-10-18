@@ -1,0 +1,191 @@
+// 서비스 목록. Electron 앱(require)과 크롬 확장 프로그램(<script>, 전역 MLA.services)이 같이 쓴다.
+//
+// 로그인은 Electron 앱에서는 "Google로 계속하기"로 자동으로 하고, 확장 프로그램에서는 크롬에 이미 로그인된 계정을 그대로 쓴다.
+// hosts: 이 서비스 페이지로 보는 도메인 (확장 프로그램의 iframe 허용 규칙·페이지 연결에 쓴다).
+// loggedOut: 로그아웃 상태를 알아보는 단서 (url 정규식 / CSS 셀렉터 / 버튼 문구 정규식).
+// loginButton: Google 버튼이 바로 보이지 않을 때 먼저 눌러야 하는 "로그인" 버튼.
+// input / send: 질문 입력창과 보내기 버튼 후보 셀렉터 (앞에서부터 처음 보이는 것을 쓴다).
+// sendText: 셀렉터로 못 찾을 때 버튼 글자로 찾는 정규식.
+// submitKey: 보내기 버튼을 못 찾았을 때 누를 키 ('Enter' | 'Ctrl+Enter').
+// stop: 답변을 쓰는 중에만 보이는 "중지" 버튼 후보. response: AI 답변 덩어리 후보 (마지막 것이 최신 답변).
+// messages: 역할 표시로 답변을 고르는 사이트용 { container, role(정규식), content }.
+// newChatUrl: "새 대화"로 열 주소.
+//
+// 새로 넣은 서비스(Perplexity·Grok·Qwen·Poe·Duck.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
+// 틀린 것은 remote/selectors.json으로 앱을 다시 배포하지 않고 고칠 수 있다.
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else (root.MLA = root.MLA || {}).services = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const SERVICES = [
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      color: '#4f8df5',
+      url: 'https://gemini.google.com/app',
+      hosts: ['gemini.google.com'],
+      loggedOut: {
+        selectors: ['a[href*="accounts.google.com/ServiceLogin"]', 'a[href*="accounts.google.com/v3/signin"]'],
+        text: '^(로그인|sign in)$',
+      },
+      input: ['rich-textarea .ql-editor[contenteditable="true"]', 'div.ql-editor[contenteditable="true"]'],
+      send: [
+        'button[aria-label="메시지 보내기"]',
+        'button[aria-label*="Send message" i]',
+        'button.send-button:not(.stop)',
+      ],
+      submitKey: 'Enter',
+      stop: ['button.send-button.stop', 'button[aria-label*="Stop response" i]', 'button[aria-label*="대답 생성 중지"]'],
+      response: ['model-response message-content .markdown', 'model-response message-content', 'model-response .model-response-text'],
+      newChatUrl: 'https://gemini.google.com/app',
+    },
+    {
+      id: 'chatgpt',
+      name: 'ChatGPT',
+      color: '#10a37f',
+      url: 'https://chatgpt.com/',
+      hosts: ['chatgpt.com'],
+      loggedOut: {
+        url: '^https://auth\\.openai\\.com/',
+        selectors: ['[data-testid="login-button"]'],
+        text: '^(로그인|log in)$',
+      },
+      loginButton: '[data-testid="login-button"]',
+      input: ['#prompt-textarea', 'div.ProseMirror[contenteditable="true"]'],
+      send: [
+        'button[data-testid="send-button"]',
+        '#composer-submit-button',
+        'button[type="submit"][aria-label="보내기"]',
+        'button[aria-label*="Send prompt" i]',
+      ],
+      submitKey: 'Enter',
+      stop: ['button[data-testid="stop-button"]', 'button[aria-label*="Stop streaming" i]', 'button[aria-label*="스트리밍 중지"]'],
+      response: [
+        '[data-markdown-text-style="assistant-message"]',
+        '[data-message-author-role="assistant"] .markdown',
+        '[data-message-author-role="assistant"]',
+      ],
+      newChatUrl: 'https://chatgpt.com/',
+    },
+    {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      color: '#4d6bfe',
+      url: 'https://chat.deepseek.com/',
+      hosts: ['chat.deepseek.com'],
+      loggedOut: { url: '/sign_in' },
+      input: ['textarea[name="search"]', 'textarea#chat-input', 'textarea'],
+      send: ['div.ds-button--primary[role="button"]'],
+      submitKey: 'Enter',
+      stop: [],
+      response: ['.ds-markdown'],
+      newChatUrl: 'https://chat.deepseek.com/',
+    },
+    {
+      id: 'perplexity',
+      name: 'Perplexity',
+      color: '#20b8cd',
+      url: 'https://www.perplexity.ai/',
+      hosts: ['www.perplexity.ai', 'perplexity.ai'],
+      // 로그인하지 않아도 질문할 수 있다. 로그인 버튼이 보이면 로그아웃 상태로 본다.
+      loggedOut: { text: '^(로그인|sign in|log in)$' },
+      // 입력창은 Lexical 편집기(#ask-input)였다가 textarea였던 적도 있어 둘 다 둔다.
+      input: ['#ask-input[contenteditable="true"]', 'div[contenteditable="true"][role="textbox"]', 'textarea[placeholder]', 'textarea'],
+      send: ['button[data-testid="submit-button"]', 'button[aria-label="Submit"]', 'button[aria-label="제출"]'],
+      submitKey: 'Enter',
+      stop: ['button[data-testid="stop-generating-response-button"]', 'button[aria-label="Stop"]', 'button[aria-label*="중지"]'],
+      response: ['div[id^="markdown-content-"]', '.prose'],
+      newChatUrl: 'https://www.perplexity.ai/',
+    },
+    {
+      id: 'grok',
+      name: 'Grok',
+      color: '#b8bcc6',
+      url: 'https://grok.com/',
+      hosts: ['grok.com'],
+      // 로그인은 accounts.x.ai에서 한다 (Google · X · Apple). 로그아웃 상태에서도 질문 화면이 열리고 "Sign in" 버튼이 보인다.
+      loggedOut: { url: '^https://accounts\\.x\\.ai/', text: '^(로그인|sign in|log in)$' },
+      // 입력창은 ProseMirror(tiptap) 편집기였다가 textarea였던 적도 있어 둘 다 둔다.
+      input: ['div.ProseMirror[contenteditable="true"]', 'textarea[aria-label*="Grok"]', 'form textarea', 'textarea'],
+      send: ['button[type="submit"][aria-label="Submit"]', 'button[type="submit"][aria-label="제출"]', 'form button[type="submit"]'],
+      submitKey: 'Enter',
+      stop: ['button[aria-label*="Stop" i]', 'button[aria-label*="중지"]'],
+      response: ['.message-bubble .response-content-markdown', '.response-content-markdown'],
+      newChatUrl: 'https://grok.com/',
+    },
+    {
+      id: 'qwen',
+      name: 'Qwen',
+      color: '#615ced',
+      url: 'https://chat.qwen.ai/',
+      hosts: ['chat.qwen.ai'],
+      loggedOut: { url: '/auth', text: '^(로그인|log in|sign in|登录)$' },
+      input: ['#chat-input', 'textarea[placeholder]', 'textarea'],
+      send: ['#send-message-button', 'button.send-button', 'button[aria-label*="send" i]'],
+      submitKey: 'Enter',
+      stop: ['button.stop-button', 'button[aria-label*="stop" i]'],
+      response: ['.response-message-content .markdown-content', '#response-content-container', '.chat-response-message .markdown-content-container', '.markdown-content'],
+      newChatUrl: 'https://chat.qwen.ai/',
+    },
+    {
+      id: 'poe',
+      name: 'Poe',
+      color: '#5d5cde',
+      // 기본 봇(첫 화면의 Assistant)으로 묻는다.
+      url: 'https://poe.com/',
+      hosts: ['poe.com'],
+      loggedOut: { url: '^https://poe\\.com/login', text: '^(로그인|log ?in|sign ?in)$' },
+      // Poe는 CSS 모듈 해시 클래스를 쓴다. 클래스 이름 앞부분으로 찾는다.
+      input: ['textarea[class*="GrowingTextArea_textArea"]', 'footer textarea', 'textarea[placeholder]', 'textarea'],
+      send: [
+        'button[data-button-send="true"]',
+        'button[class*="ChatMessageSendButton_sendButton"]',
+        'button[aria-label="Send message"]',
+        'button[aria-label*="보내기"]',
+      ],
+      submitKey: 'Enter',
+      stop: ['button[class*="ChatStopMessageButton"]', 'button[aria-label*="Stop" i]'],
+      response: ['[class*="Message_botMessageBubble"] [class*="Markdown_markdownContainer"]', '[class*="Message_botMessageBubble"]'],
+      newChatUrl: 'https://poe.com/',
+    },
+    {
+      id: 'duckai',
+      name: 'Duck.ai',
+      color: '#de5833',
+      url: 'https://duck.ai/chat',
+      // duckduckgo.com/?ia=chat 주소로도 열린다.
+      hosts: ['duck.ai', 'duckduckgo.com'],
+      // 로그인이 없다. 처음 열면 이용 동의 화면이 한 번 뜬다 (직접 누른다).
+      input: ['textarea[name="user-prompt"]', 'form textarea', 'textarea[placeholder]', 'textarea'],
+      send: ['button[type="submit"][aria-label*="Send" i]', 'button[type="submit"][aria-label*="보내기"]', 'form button[type="submit"]'],
+      submitKey: 'Enter',
+      stop: ['button[aria-label*="Stop" i]', 'button[aria-label*="중지"]'],
+      response: ['[data-activeresponse]', '[class*="assistant" i] [class*="markdown" i]', '[class*="markdown" i]', '.prose'],
+      newChatUrl: 'https://duck.ai/chat',
+    },
+  ];
+
+  const MAX_SELECTED = 4; // 한 번에 열 수 있는 모델 수 (2×2 격자 / 1×4 가로)
+  const DEFAULT_SELECTED = ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
+  const RENAMED = { groq: 'grok' }; // 예전 설정에 남은 서비스 id
+
+  /** 저장된 선택을 지금 서비스 목록에 맞춘다: 바뀐 id 정리, 모르는 id 제거, 최대 개수 제한. 비면 기본값. */
+  function normalizeSelected(list) {
+    const known = new Set(SERVICES.map((s) => s.id));
+    const ids = (Array.isArray(list) ? list : [])
+      .map((id) => RENAMED[id] || id)
+      .filter((id, i, arr) => known.has(id) && arr.indexOf(id) === i);
+    const ordered = SERVICES.map((s) => s.id).filter((id) => ids.includes(id));
+    return ordered.length ? ordered.slice(0, MAX_SELECTED) : [...DEFAULT_SELECTED];
+  }
+
+  /** 주소의 호스트가 어느 서비스 것인지. 없으면 null */
+  function serviceForHost(host) {
+    return SERVICES.find((s) => s.hosts.some((h) => host === h || host.endsWith(`.${h}`))) || null;
+  }
+
+  return { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, normalizeSelected, serviceForHost };
+});

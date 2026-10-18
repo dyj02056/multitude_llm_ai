@@ -5,42 +5,11 @@
 // textarea · ProseMirror(ChatGPT) · Quill(Gemini) 어느 편집기든 똑같이 동작하게 한다.
 
 const { dev } = require('./dev');
+const { pageFocusInput, pageClickSend } = require('../shared/page');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// 아래 두 함수는 toString()으로 페이지 안에 주입되어 실행된다. 바깥 변수를 쓰면 안 된다.
-function pageFocusInput(cfg) {
-  const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
-  // 같은 셀렉터에 숨은 요소가 먼저 걸리는 사이트가 있어(Groq 플레이그라운드) 보이는 것을 고른다.
-  const input = cfg.input.flatMap((s) => [...document.querySelectorAll(s)]).find(visible);
-  if (!input) return { ok: false, error: '입력창을 찾지 못했습니다' };
-  input.focus();
-  // 이미 적혀 있던 내용은 지우고 새로 쓴다.
-  document.execCommand('selectAll');
-  document.execCommand('delete');
-  return { ok: document.activeElement === input || input.contains(document.activeElement) };
-}
-
-function pageClickSend(cfg) {
-  const usable = (el) =>
-    !!el &&
-    !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length) &&
-    !el.disabled &&
-    el.getAttribute('aria-disabled') !== 'true' &&
-    // Tailwind의 "disabled:opacity-50" 같은 클래스는 상태가 아니라서 걸러내지 않는다.
-    !/(^|\s)([\w-]*--)?disabled(\s|$)/.test(String(el.className));
-  let btn = cfg.send.flatMap((s) => [...document.querySelectorAll(s)]).find(usable);
-  if (!btn && cfg.sendText) {
-    const re = new RegExp(cfg.sendText, 'i');
-    btn = [...document.querySelectorAll('button,[role="button"]')].find(
-      (el) => usable(el) && re.test(String(el.innerText || el.getAttribute('aria-label') || '').trim()),
-    );
-  }
-  if (!btn) return false;
-  if (!cfg.dry) btn.click();
-  return true;
-}
-
+// 페이지 함수(shared/page.js)는 toString()으로 페이지 안에 주입해 실행한다.
 const run = (wc, fn, arg) => wc.executeJavaScript(`(${fn.toString()})(${JSON.stringify(arg)})`, true);
 
 function pressKey(wc, combo) {

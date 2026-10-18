@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "Multitude LLM",
+  "version": "0.2.0",
+  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Qwen · Poe · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Multitude LLM 열기",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "declarativeNetRequest",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "https://chatgpt.com/*",
+    "https://chat.deepseek.com/*",
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*",
+    "https://grok.com/*",
+    "https://chat.qwen.ai/*",
+    "https://poe.com/*",
+    "https://duck.ai/*",
+    "https://duckduckgo.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.deepseek.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
+        "https://grok.com/*",
+        "https://chat.qwen.ai/*",
+        "https://poe.com/*",
+        "https://duck.ai/*",
+        "https://duckduckgo.com/*"
+      ],
+      "js": [
+        "lib/shared/page.js",
+        "lib/shared/markdown.js",
+        "lib/shared/shortcuts.js",
+        "content.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}

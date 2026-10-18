@@ -1,0 +1,11 @@
+/* 크롬 확장 프로그램 전용 스타일. 나머지는 Electron 앱과 같은 lib/renderer/styles.css를 쓴다. */
+
+/* 서비스 페이지 iframe은 host.js가 패널 본문 자리에 겹쳐 놓는다 (Electron의 WebContentsView처럼). */
+#frames { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+.svc-frame {
+  position: fixed; left: -20000px; border: 0; background: #fff;
+  pointer-events: auto; border-radius: 0 0 6px 6px;
+}
+
+/* 크롬에 로그인된 계정을 그대로 쓰므로 로그아웃 버튼은 없다. */
+#logoutBtn { display: none !important; }

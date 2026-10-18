@@ -6,22 +6,8 @@
 const MAX_ATTEMPTS = 6; // 창 하나에서 연속으로 누르는 최대 횟수
 const WINDOW_MS = 2 * 60 * 1000; // 이 시간이 지나면 횟수를 다시 센다
 
-// 아래 두 함수는 toString()으로 페이지 안에 주입되어 실행된다. 바깥 변수를 쓰면 안 된다.
-function pageIsLoggedOut(cfg) {
-  const visible = (el) =>
-    !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length) &&
-    getComputedStyle(el).visibility !== 'hidden';
-  const label = (el) => String(el.innerText || el.value || el.getAttribute('aria-label') || '').trim();
-  const lo = cfg.loggedOut || {};
-  if (lo.url && new RegExp(lo.url).test(location.href)) return true;
-  if ((lo.selectors || []).some((s) => visible(document.querySelector(s)))) return true;
-  if (lo.text) {
-    const re = new RegExp(lo.text, 'i');
-    if ([...document.querySelectorAll('button,a,[role="button"]')].some((el) => visible(el) && re.test(label(el)))) return true;
-  }
-  return false;
-}
-
+// pageLoginStep은 toString()으로 페이지 안에 주입되어 실행된다. 바깥 변수를 쓰면 안 된다.
+// 로그아웃 상태 확인(pageIsLoggedOut)은 크롬 확장 프로그램과 같이 쓰는 shared/page.js에 있다.
 function pageLoginStep(cfg) {
   const visible = (el) =>
     !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length) &&
@@ -59,14 +45,17 @@ function pageLoginStep(cfg) {
 }
 
 const { log: devLog } = require('./dev');
+const { pageIsLoggedOut } = require('../shared/page');
 const log = (svc, ...args) => devLog('autologin', svc.id, ...args);
 
 const run = (wc, fn, arg) => wc.executeJavaScript(`(${fn.toString()})(${JSON.stringify(arg)})`, true);
 
 const isGoogleAuthPage = (url) => /^https:\/\/accounts\.google\.com\//.test(url);
 
-function serviceHost(svc) {
-  return new URL(svc.url).hostname;
+// 서비스 주소(예: duck.ai → duckduckgo.com)로 옮겨 가도 같은 서비스로 본다.
+function onServiceHost(svc, url) {
+  const host = new URL(url).hostname;
+  return svc.hosts.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
 /**
@@ -86,8 +75,7 @@ function attach(wc, svc, onState) {
 
     st.running = true;
     try {
-      const onServiceHost = new URL(url).hostname === serviceHost(svc);
-      const loggedOut = !onServiceHost || (await run(wc, pageIsLoggedOut, svc));
+      const loggedOut = !onServiceHost(svc, url) || (await run(wc, pageIsLoggedOut, svc));
       if (!loggedOut) {
         log(svc, 'ready', url.slice(0, 120));
         st.count = 0;

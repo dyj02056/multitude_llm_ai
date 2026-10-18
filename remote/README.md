@@ -1,6 +1,6 @@
 # 사이트 셀렉터 원격 갱신
 
-설치된 앱은 6시간마다(그리고 시작할 때) 이 폴더의 `selectors.json`을 GitHub에서 받아 적용합니다.
+설치된 앱과 크롬 확장 프로그램은 6시간마다(그리고 시작할 때) 이 폴더의 `selectors.json`을 GitHub에서 받아 적용합니다.
 
 ```
 https://raw.githubusercontent.com/dyj02056/multitude_llm_ai/main/remote/selectors.json
@@ -19,21 +19,21 @@ ChatGPT·Gemini 같은 서비스 화면이 바뀌어 **입력창·보내기 버�
       "input": ["#new-prompt-box"],
       "response": ["[data-new-answer]"]
     },
-    "groq": {
-      "messages": { "container": "div.message", "role": "^assistant", "content": ".content" }
+    "grok": {
+      "response": [".message-bubble .new-answer-class"]
     }
   }
 }
 ```
 
 - `version`: 정수. 바꿀 때마다 올립니다.
-- `services`의 키: `gemini`, `chatgpt`, `deepseek`, `groq`
+- `services`의 키: `gemini`, `chatgpt`, `deepseek`, `perplexity`, `grok`, `qwen`, `poe`, `duckai`
 - 고칠 수 있는 필드 (모두 문자열, 300자 이하)
 
 | 필드 | 뜻 |
 |---|---|
 | `input`, `send`, `stop`, `response` | CSS 셀렉터 목록. **앱에 들어 있는 목록 앞에 붙습니다** (원격 것이 틀려도 예전 것으로 계속 찾음). `"replace": true`면 원격 목록만 씁니다. |
-| `messages` | `{ container, role(정규식), content }` — 역할 표시로 답변을 고르는 사이트(Groq 플레이그라운드) |
+| `messages` | `{ container, role(정규식), content }` — 메시지마다 USER/ASSISTANT 같은 역할 표시가 붙는 사이트에서 답변을 고를 때 |
 | `loggedOut` | `{ url(정규식), text(정규식), selectors }` — 로그아웃 상태 단서 |
 | `loginButton`, `sendText`(정규식), `submitKey`(`Enter`·`Ctrl+Enter`), `newChatUrl`(https) | 그 밖의 설정 |
 

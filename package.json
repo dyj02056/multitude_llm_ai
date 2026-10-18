@@ -1,14 +1,16 @@
 {
   "name": "multitude-llm-ai",
   "productName": "Multitude LLM",
-  "version": "0.1.0",
-  "description": "Gemini · ChatGPT · DeepSeek · Groq 웹 채팅을 한 화면에서 동시에 쓰는 앱",
+  "version": "0.2.0",
+  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Qwen · Poe · Duck.ai 웹 채팅을 한 화면에서 최대 4개까지 동시에 쓰는 앱 (Windows 앱 · 크롬 확장 프로그램)",
   "author": "dyj02056",
   "private": true,
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis --x64 --publish never"
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "build:ext": "node scripts/build-extension.js",
+    "check:ext": "node scripts/build-extension.js --check"
   },
   "build": {
     "appId": "com.dyj02056.multitudellm",

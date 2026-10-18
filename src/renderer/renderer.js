@@ -5,10 +5,17 @@ const panelsEl = $('#panels');
 const panels = new Map(); // id -> { el, dot, url, status }
 let state = null;
 
-const HINTS = {
-  login: 'Google 계정으로 로그인해 주세요',
-  pick: '로그인됨 · 모델을 선택하세요',
-  chat: '패널마다 Google로 자동 로그인을 시도합니다',
+// 실행 환경(Electron 앱 / 크롬 확장 프로그램)마다 다른 화면 문구. host.ui로 바꿀 수 있다.
+const UI = {
+  hints: {
+    login: 'Google 계정으로 로그인해 주세요',
+    pick: '로그인됨 · 모델을 선택하세요',
+    chat: '패널마다 Google로 자동 로그인을 시도합니다',
+  },
+  pickNote: '선택한 모델만 패널로 열고, 각 서비스에는 Google 계정으로 로그인합니다.',
+  loginButton: { label: 'G 로그인', title: 'Google로 다시 로그인 시도' },
+  devtools: true, // 패널 머리줄의 개발자 도구 버튼
+  ...(host.ui || {}),
 };
 
 const LOGIN_TEXT = {
@@ -36,7 +43,10 @@ function span(className, text = '') {
 
 // ---------- 모델 선택 화면 ----------
 
+const pickedIds = () => [...document.querySelectorAll('#modelList input:checked')].map((b) => b.value);
+
 function renderPick() {
+  $('#pickNote').textContent = `${UI.pickNote} 한 번에 최대 ${state.maxSelected}개까지 고를 수 있습니다.`;
   const list = $('#modelList');
   list.replaceChildren();
   for (const svc of state.services) {
@@ -47,14 +57,29 @@ function renderPick() {
     box.type = 'checkbox';
     box.value = svc.id;
     box.checked = state.selected.includes(svc.id);
+    box.addEventListener('change', updatePickLimit);
     label.append(box, span('swatch'), span('name', svc.name), span('url', new URL(svc.url).hostname));
     list.append(label);
   }
+  updatePickLimit();
+}
+
+// 최대 개수만큼 고르면 나머지 칸은 고를 수 없게 막는다.
+function updatePickLimit() {
+  const count = pickedIds().length;
+  const full = count >= state.maxSelected;
+  for (const box of document.querySelectorAll('#modelList input')) {
+    box.disabled = full && !box.checked;
+    box.closest('.model').classList.toggle('disabled', box.disabled);
+  }
+  $('#pickCount').textContent = `${count} / ${state.maxSelected} 선택`;
+  $('#pickCount').classList.toggle('full', full);
 }
 
 $('#openBtn').addEventListener('click', () => {
-  const ids = [...document.querySelectorAll('#modelList input:checked')].map((b) => b.value);
+  const ids = pickedIds();
   if (!ids.length) return alert('모델을 하나 이상 선택해 주세요.');
+  if (ids.length > state.maxSelected) return alert(`모델은 최대 ${state.maxSelected}개까지 고를 수 있습니다.`);
   host.openModels(ids);
 });
 
@@ -90,7 +115,7 @@ function createPanel(svc) {
   const dot = span('dot');
   const url = span('url', svc.url);
   const status = span('status');
-  const loginBtn = button('G 로그인', 'Google로 다시 로그인 시도', () => host.panelAction(svc.id, 'login'));
+  const loginBtn = button(UI.loginButton.label, UI.loginButton.title, () => host.panelAction(svc.id, 'login'));
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
 
@@ -108,8 +133,8 @@ function createPanel(svc) {
     button('←', '뒤로', () => host.panelAction(svc.id, 'back')),
     button('⌂', '처음 주소로', () => host.panelAction(svc.id, 'home')),
     button('↻', '새로고침', () => host.panelAction(svc.id, 'reload')),
-    button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')),
   );
+  if (UI.devtools) head.append(button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')));
   el.append(head);
   panelsEl.append(el);
   const p = { el, dot, url, status, loginBtn };
@@ -557,7 +582,7 @@ host.on('state', (next) => {
   if (enteredHelp) renderHelp();
   else if (state.chatView === 'help') renderRemoteStatus(); // 설정 화면을 보는 중에 갱신 결과가 오면 바로 반영
   $('#helpBtn').classList.toggle('active', state.chatView === 'help');
-  $('#hint').textContent = HINTS[state.mode];
+  $('#hint').textContent = UI.hints[state.mode];
   for (const b of document.querySelectorAll('[data-layout]')) {
     b.classList.toggle('active', b.dataset.layout === state.layout);
   }
