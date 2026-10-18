@@ -4,7 +4,7 @@
 //   node scripts/build-extension.js          만들기 (npm run build:ext)
 //   node scripts/build-extension.js --check  만든 결과가 src/와 맞는지만 확인 (다르면 실패)
 //
-// 직접 고치는 파일: extension/host.js · project-fs.js · content.js · background.js · ext.css
+// 직접 고치는 파일: extension/host.js · project-fs.js · content.js · cookie-shim.js · cookie-bridge.js · background.js · ext.css
 // 이 스크립트가 만드는 파일 (직접 고치지 말 것):
 //   extension/manifest.json        서비스 목록(src/shared/services.js)과 package.json 버전으로 생성
 //   extension/app.html             src/renderer/index.html에서 생성
@@ -93,6 +93,7 @@ function buildAppHtml(html) {
 function buildManifest() {
   const hosts = [...new Set(SERVICES.flatMap((s) => s.hosts))];
   const matches = hosts.map((h) => `https://${h}/*`);
+  const jsCookieMatches = SERVICES.filter((s) => s.jsCookies).flatMap((s) => s.hosts.map((h) => `https://${h}/*`));
   return {
     manifest_version: 3,
     name: 'Multitude LLM',
@@ -118,6 +119,13 @@ function buildManifest() {
         all_frames: true,
         run_at: 'document_idle',
       },
+      // 화면 스크립트가 로그인 쿠키를 직접 읽고 쓰는 사이트(jsCookies)용. 페이지 스크립트보다 먼저 실행돼야 한다.
+      ...(jsCookieMatches.length
+        ? [
+            { matches: jsCookieMatches, js: ['cookie-shim.js'], world: 'MAIN', all_frames: true, run_at: 'document_start' },
+            { matches: jsCookieMatches, js: ['cookie-bridge.js'], all_frames: true, run_at: 'document_start' },
+          ]
+        : []),
     ],
   };
 }
