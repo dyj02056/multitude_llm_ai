@@ -51,3 +51,67 @@ test('원격 적용 후에도 버튼 셀렉터는 앱 값 그대로', () => {
   assert.equal(JSON.stringify(gpt.send), before);
   assert.equal(gpt.stop[0], '.new-stop');
 });
+
+test('패널 주소 확인: 질문은 서비스 페이지(https)에만, 자동 로그인은 그 서비스 로그인 화면까지만', () => {
+  const S = require('../src/shared/services');
+  const gpt = SERVICES.find((s) => s.id === 'chatgpt');
+  const duck = SERVICES.find((s) => s.id === 'duckai');
+  assert.equal(S.isServiceUrl(gpt, 'https://chatgpt.com/c/abc'), true);
+  assert.equal(S.isServiceUrl(duck, 'https://duckduckgo.com/?q=x&ia=chat'), true, '서비스 hosts 안의 다른 도메인');
+  for (const bad of ['http://chatgpt.com/', 'https://chatgpt.com.evil.com/', 'https://evil.com/chatgpt.com', 'https://auth.openai.com/log-in', 'about:blank', 'not a url']) {
+    assert.equal(S.isServiceUrl(gpt, bad), false, bad);
+  }
+  assert.equal(S.isLoginUrl(gpt, 'https://auth.openai.com/log-in'), true);
+  assert.equal(S.isLoginUrl(gpt, 'https://evil.com/login'), false);
+  assert.equal(S.isLoginUrl(gpt, 'https://accounts.x.ai/'), false, '다른 서비스의 로그인 화면');
+});
+
+test('원격 셀렉터로 hosts·authHosts는 바뀌지 않는다', () => {
+  const services = JSON.parse(JSON.stringify(SERVICES));
+  const clean = R.sanitize({ version: 1, services: { chatgpt: { hosts: ['evil.com'], authHosts: ['evil.com'] } } }, services);
+  R.apply(services, R.snapshotBase(services), clean.overrides);
+  const gpt = services.find((s) => s.id === 'chatgpt');
+  assert.deepEqual([gpt.hosts, gpt.authHosts], [['chatgpt.com'], ['auth.openai.com']]);
+});
+
+/** 크롬 확장 background.js를 가짜 chrome API 위에서 읽는다 */
+function loadBackground(cookies) {
+  const fs = require('fs');
+  const path = require('path');
+  const vm = require('vm');
+  const ext = path.join(__dirname, '..', 'extension');
+  const ev = () => ({ addListener() {} });
+  const calls = [];
+  const matches = (c, url, name) => c.name === name && new URL(url).hostname.endsWith(c.domain.replace(/^\./, '')) && new URL(url).pathname.startsWith(c.path);
+  const chrome = {
+    action: { onClicked: ev() },
+    runtime: { id: 'test', getURL: (p) => `chrome-extension://test/${p}`, onMessage: ev(), onConnect: ev(), getContexts: async () => [] },
+    tabs: { onRemoved: ev() },
+    declarativeNetRequest: { getSessionRules: async () => [], updateSessionRules: async () => {} },
+    cookies: {
+      onChanged: ev(),
+      getAll: async ({ url, name }) => cookies.filter((c) => matches(c, url, name)),
+      set: async (d) => calls.push(['set', d.name, d.domain || 'host-only']),
+      remove: async (d) => calls.push(['remove', d.name]),
+    },
+  };
+  const ctx = vm.createContext({ chrome, console, URL, setTimeout, clearTimeout, Date });
+  ctx.importScripts = (...files) => files.forEach((f) => vm.runInContext(fs.readFileSync(path.join(ext, f), 'utf8'), ctx));
+  ctx.globalThis = ctx;
+  vm.runInContext(fs.readFileSync(path.join(ext, 'background.js'), 'utf8'), ctx);
+  return { applyCookieWrite: ctx.applyCookieWrite, calls };
+}
+
+test('확장: 페이지 스크립트의 쿠키 쓰기로 HttpOnly 쿠키를 덮어쓰거나 지우지 않는다', async () => {
+  const page = new URL('https://chat.qwen.ai/c/1');
+  const { applyCookieWrite, calls } = loadBackground([
+    { name: 'session', domain: '.qwen.ai', path: '/', httpOnly: true },
+    { name: 'pref', domain: 'chat.qwen.ai', path: '/', httpOnly: false },
+  ]);
+  await applyCookieWrite(page, 'session=evil; Domain=qwen.ai; Path=/');
+  await applyCookieWrite(page, 'session=; Path=/; Max-Age=0');
+  assert.deepEqual(calls, [], 'HttpOnly 쿠키는 그대로');
+  await applyCookieWrite(page, 'pref=dark; Path=/');
+  await applyCookieWrite(page, 'other=1; Domain=qwen.ai; Path=/');
+  assert.deepEqual(calls, [['set', 'pref', 'host-only'], ['set', 'other', '.qwen.ai']]);
+});

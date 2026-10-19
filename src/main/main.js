@@ -326,6 +326,15 @@ function createWindow() {
     },
   });
 
+  // 메인 창은 앱 화면(index.html)만 띄운다. preload의 host(프로젝트 폴더 읽기·쓰기 등)가 다른 페이지에 붙지 않도록
+  // 화면 쪽에서 시작한 이동(링크 끌어다 놓기 등)과 새 창 열기를 모두 막는다. 앱이 직접 여는 loadFile은 영향이 없다.
+  win.webContents.on('will-navigate', (e, url) => {
+    log('nav', 'main window navigation blocked', String(url).slice(0, 160));
+    e.preventDefault();
+  });
+  win.webContents.on('will-redirect', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.webContents.once('did-finish-load', async () => {
     if (dev.start === 'chat') showChat(prefs.selected);

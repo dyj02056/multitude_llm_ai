@@ -691,6 +691,15 @@ document.addEventListener('paste', (e) => {
 // 끌어다 놓기: 앱 화면 어디에 놓아도 공통 입력창에 첨부한다 (패널 위에 놓으면 그 사이트가 받는다).
 // 파일을 창에 떨어뜨리면 그 파일로 이동해 버리는 기본 동작도 여기서 막는다.
 const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+// 링크·글자를 입력칸 밖에 놓으면 창이 그 주소로 이동하는 기본 동작을 막는다 (입력칸에는 그대로 넣을 수 있다).
+const editableTarget = (e) => !!e.target?.closest?.('textarea, input, [contenteditable="true"]');
+for (const type of ['dragover', 'drop']) {
+  document.addEventListener(type, (e) => {
+    if (hasFiles(e) || editableTarget(e)) return;
+    e.preventDefault();
+    if (type === 'dragover') e.dataTransfer.dropEffect = 'none';
+  });
+}
 let dragDepth = 0;
 document.addEventListener('dragenter', (e) => {
   if (!hasFiles(e)) return;

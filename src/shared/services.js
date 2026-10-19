@@ -2,6 +2,7 @@
 //
 // 로그인은 Electron 앱에서는 "Google로 계속하기"로 자동으로 하고, 확장 프로그램에서는 크롬에 이미 로그인된 계정을 그대로 쓴다.
 // hosts: 이 서비스 페이지로 보는 도메인 (확장 프로그램의 iframe 허용 규칙·페이지 연결에 쓴다).
+// authHosts: 이 서비스의 로그인 화면 도메인 (Electron 자동 로그인이 버튼을 눌러도 되는 곳. 보안상 원격 셀렉터로 바꾸지 않는다).
 // loggedOut: 로그아웃 상태를 알아보는 단서 (url 정규식 / CSS 셀렉터 / 버튼 문구 정규식).
 // loginButton: Google 버튼이 바로 보이지 않을 때 먼저 눌러야 하는 "로그인" 버튼.
 // input / send: 질문 입력창과 보내기 버튼 후보 셀렉터 (앞에서부터 처음 보이는 것을 쓴다).
@@ -58,6 +59,7 @@
       color: '#10a37f',
       url: 'https://chatgpt.com/',
       hosts: ['chatgpt.com'],
+      authHosts: ['auth.openai.com'],
       loggedOut: {
         url: '^https://auth\\.openai\\.com/',
         selectors: ['[data-testid="login-button"]'],
@@ -118,6 +120,7 @@
       color: '#b8bcc6',
       url: 'https://grok.com/',
       hosts: ['grok.com'],
+      authHosts: ['accounts.x.ai'],
       // 로그인은 accounts.x.ai에서 한다 (Google · X · Apple). 로그아웃 상태에서도 질문 화면이 열리고 "Sign in" 버튼이 보인다.
       loggedOut: { url: '^https://accounts\\.x\\.ai/', text: '^(로그인|sign in|log in)$' },
       // 입력창은 ProseMirror(tiptap) 편집기였다가 textarea였던 적도 있어 둘 다 둔다.
@@ -134,6 +137,7 @@
       color: '#fa500f',
       url: 'https://chat.mistral.ai/work',
       hosts: ['chat.mistral.ai'],
+      authHosts: ['auth.mistral.ai', 'v2.auth.mistral.ai'],
       // 로그인은 auth.mistral.ai에서 한다 (Google · Microsoft · Apple · 이메일).
       loggedOut: { url: '^https://(v2\\.)?auth\\.mistral\\.ai/', text: '^(로그인|log ?in|sign ?in|se connecter)$' },
       input: ['div.ProseMirror[contenteditable="true"]', 'textarea[name="message.text"]', 'textarea[placeholder]', 'textarea'],
@@ -235,6 +239,28 @@
     return ordered.length ? ordered.slice(0, MAX_SELECTED) : [...DEFAULT_SELECTED];
   }
 
+  const hostIn = (host, list) => (list || []).some((h) => host === h || host.endsWith(`.${h}`));
+  const httpsHost = (url) => {
+    try {
+      const u = new URL(url);
+      return u.protocol === 'https:' ? u.hostname : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /** 패널 주소가 그 서비스 페이지(https + hosts)인지. 질문·프로젝트 내용·첨부는 여기에만 넣는다. */
+  function isServiceUrl(svc, url) {
+    const host = httpsHost(url);
+    return !!host && hostIn(host, svc.hosts);
+  }
+
+  /** 자동 로그인이 버튼을 눌러도 되는 주소인지: 서비스 페이지 또는 그 서비스의 로그인 화면(authHosts) */
+  function isLoginUrl(svc, url) {
+    const host = httpsHost(url);
+    return !!host && (hostIn(host, svc.hosts) || hostIn(host, svc.authHosts));
+  }
+
   /** 주소의 호스트가 어느 서비스 것인지. 없으면 null */
   function serviceForHost(host) {
     return SERVICES.find((s) => s.hosts.some((h) => host === h || host.endsWith(`.${h}`))) || null;
@@ -247,6 +273,8 @@
     ATTACH_LIMITS,
     normalizeSelected,
     serviceForHost,
+    isServiceUrl,
+    isLoginUrl,
     uploadOf,
     fileKind,
   };

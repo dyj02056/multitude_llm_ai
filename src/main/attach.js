@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { pageAttachFiles } = require('../shared/page');
-const { uploadOf } = require('../shared/services');
+const { uploadOf, isServiceUrl } = require('../shared/services');
 const { log } = require('./dev');
 
 const WORLD = 1001; // 첨부용 격리 공간 번호 (사이트 스크립트와 분리)
@@ -59,6 +59,7 @@ async function transfer(wc, key, files) {
 
 /** 개발자 프로토콜로 파일 선택 칸에 넣는다. 성공하면 true */
 async function attachWithDebugger(wc, svc, files) {
+  if (!isServiceUrl(svc, wc.getURL())) return false; // 서비스 밖 사이트의 파일 선택 칸에는 넣지 않는다
   fs.mkdirSync(TEMP_ROOT, { recursive: true });
   const dir = fs.mkdtempSync(path.join(TEMP_ROOT, 'files-'));
   // 사이트가 보는 파일 이름이 원래 이름과 같도록 파일마다 하위 폴더를 만든다 (같은 이름 파일이 여럿이어도 된다).
@@ -78,6 +79,7 @@ async function attachWithDebugger(wc, svc, files) {
     for (const selector of uploadOf(svc).fileInput) {
       const { nodeIds } = await dbg.sendCommand('DOM.querySelectorAll', { nodeId: root.nodeId, selector });
       if (!nodeIds.length) continue;
+      if (!isServiceUrl(svc, wc.getURL())) return false;
       await dbg.sendCommand('DOM.setFileInputFiles', { nodeId: nodeIds[0], files: paths });
       return true;
     }
@@ -97,6 +99,7 @@ async function attachWithDebugger(wc, svc, files) {
 async function attachFiles(wc, svc, files) {
   const key = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const cfg = { input: svc.input || [], upload: uploadOf(svc) };
+  if (!isServiceUrl(svc, wc.getURL())) return { ok: false, error: '패널이 서비스 주소가 아닙니다' };
   let res;
   try {
     await transfer(wc, key, files);

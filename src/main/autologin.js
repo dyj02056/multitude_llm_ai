@@ -46,17 +46,15 @@ function pageLoginStep(cfg) {
 
 const { log: devLog } = require('./dev');
 const { pageIsLoggedOut } = require('../shared/page');
+const { isServiceUrl, isLoginUrl } = require('../shared/services');
 const log = (svc, ...args) => devLog('autologin', svc.id, ...args);
 
 const run = (wc, fn, arg) => wc.executeJavaScript(`(${fn.toString()})(${JSON.stringify(arg)})`, true);
 
 const isGoogleAuthPage = (url) => /^https:\/\/accounts\.google\.com\//.test(url);
 
-// 서비스 주소(예: duck.ai → duckduckgo.com)로 옮겨 가도 같은 서비스로 본다.
-function onServiceHost(svc, url) {
-  const host = new URL(url).hostname;
-  return svc.hosts.some((h) => host === h || host.endsWith(`.${h}`));
-}
+// 서비스 주소(예: duck.ai → duckduckgo.com)로 옮겨 가도 같은 서비스로 본다 (https만).
+const onServiceHost = isServiceUrl;
 
 /**
  * 서비스 패널 하나를 감시한다.
@@ -90,6 +88,11 @@ function attach(wc, svc, onState) {
         return onState('needs-login');
       }
 
+      // 버튼은 서비스 페이지와 그 서비스의 로그인 화면(authHosts)에서만 누른다. 다른 사이트에 가 있으면 사용자에게 맡긴다.
+      if (!isLoginUrl(svc, url)) {
+        log(svc, 'not a login page, not clicking', url.slice(0, 120));
+        return onState('needs-login');
+      }
       const res = await run(wc, pageLoginStep, { loginButton: svc.loginButton || null });
       log(svc, 'logged out at', url.slice(0, 120), '→', JSON.stringify(res));
       if (res.step === 'idle') return onState('needs-login');

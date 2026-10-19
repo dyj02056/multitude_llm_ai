@@ -211,22 +211,34 @@
       if (typeof msg.action === 'string') runShortcut(msg.action);
       return;
     }
-    const svc = serviceForHost(String(msg.host || ''));
+    // 보낸 프레임의 주소는 메시지 내용이 아니라 크롬이 알려 주는 sender.url로 본다.
+    let from;
+    try {
+      from = new URL(sender.url);
+    } catch {
+      return;
+    }
+    const svc = from.protocol === 'https:' ? serviceForHost(from.hostname) : null;
     const p = svc && panels.get(svc.id);
     // 이 탭의 패널 iframe에서 온 것만 받는다.
     if (!p || !sender.frameId) return;
+    // 화면에 보여 줄 지금 주소(사이트 안 이동 반영)는 메시지의 url을 쓰되, 보낸 프레임과 같은 origin일 때만 믿는다.
+    let url = sender.url;
+    try {
+      if (typeof msg.url === 'string' && new URL(msg.url).origin === from.origin) url = msg.url;
+    } catch {}
     if (msg.type === 'mla:hello') {
-      log('hello', svc.id, sender.frameId, msg.url);
+      log('hello', svc.id, sender.frameId, sender.url);
       p.frameId = sender.frameId;
-      p.origin = new URL(msg.url).origin; // 첨부 파일은 이 주소의 페이지에만 넘긴다
-      p.url = msg.url;
+      p.origin = from.origin; // 첨부 파일은 이 주소의 페이지에만 넘긴다
+      p.url = url;
       p.retried = false;
       clearTimeout(p.helloTimer);
-      sendPanel(svc.id, { url: msg.url, loading: false });
+      sendPanel(svc.id, { url, loading: false });
       scheduleLoginCheck(svc.id);
     } else if (msg.type === 'mla:nav' && p.frameId === sender.frameId) {
-      p.url = msg.url;
-      sendPanel(svc.id, { url: msg.url });
+      p.url = url;
+      sendPanel(svc.id, { url });
       scheduleLoginCheck(svc.id);
     }
   });

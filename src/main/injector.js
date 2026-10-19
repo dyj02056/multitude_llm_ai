@@ -7,6 +7,7 @@
 const { dev } = require('./dev');
 const { pageFocusInput, pageRefocusInput, pageClickSend } = require('../shared/page');
 const { attachFiles, cleanupTemp } = require('./attach');
+const { isServiceUrl } = require('../shared/services');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -30,6 +31,11 @@ function pressKey(wc, combo) {
 async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
   const dry = dev.drySend; // 개발용: 입력과 버튼 찾기까지만 하고 실제로 보내지 않는다
   const cfg = { input: svc.input || [], send: svc.send || [], sendText: svc.sendText || null, dry };
+  // 패널이 링크·리다이렉트로 서비스 밖 사이트에 가 있으면 질문·프로젝트 내용·첨부를 넣지 않는다.
+  // 첨부·입력 사이에 페이지가 바뀔 수 있어서 넣기 직전마다 다시 본다.
+  const offHost = () => !isServiceUrl(svc, wc.getURL());
+  const OFF_HOST = { ok: false, error: `패널이 ${svc.name} 주소가 아닙니다 (⌂로 처음 주소로 돌아간 뒤 다시 보내세요)` };
+  if (offHost()) return OFF_HOST;
 
   const focus = await run(wc, pageFocusInput, cfg);
   if (!focus.ok) return { ok: false, error: focus.error || '입력창에 포커스를 줄 수 없습니다' };
@@ -45,6 +51,7 @@ async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
     if (!text && !attach.ok) return { ok: false, error: `첨부하지 못해 보낼 내용이 없습니다 (${attach.error})` };
   }
 
+  if (offHost()) return OFF_HOST;
   if (text) await wc.insertText(text);
   const done = (via) => ({ ok: true, via, attach });
 
@@ -52,6 +59,7 @@ async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
   // 첨부가 있으면 버튼이 보이는데 꺼져 있는 동안(업로드 중)은 최대 60초까지 더 기다린다.
   for (let i = 0; i < 240; i++) {
     await sleep(250);
+    if (offHost()) return OFF_HOST;
     const clicked = await run(wc, pageClickSend, cfg);
     if (clicked === true) return done(dry ? 'button (dry)' : 'button');
     if (i >= 11 && !(attach?.ok && clicked === null)) break;
@@ -60,6 +68,7 @@ async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
 
   // 버튼을 못 찾으면 키보드로 보낸다. 입력창에 포커스를 다시 준 뒤 누른다.
   await run(wc, pageRefocusInput, cfg);
+  if (offHost()) return OFF_HOST;
   pressKey(wc, svc.submitKey || 'Enter');
   return done('key');
 }

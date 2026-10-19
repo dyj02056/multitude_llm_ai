@@ -165,7 +165,16 @@ async function applyCookieWrite(pageUrl, raw) {
   const url = `https://${host}${path}`;
   const now = Date.now() / 1000;
   const expirationDate = c.maxAge !== undefined ? now + c.maxAge : c.expires;
-  if (expirationDate !== undefined && expirationDate <= now) return chrome.cookies.remove({ url, name: c.name });
+  // 일반 탭의 document.cookie처럼, 이름·도메인·경로가 같은 HttpOnly 쿠키는 덮어쓰거나 지우지 않는다
+  // (확장 API는 HttpOnly도 바꿀 수 있어서, 막지 않으면 페이지 스크립트가 로그인 세션 쿠키를 바꿀 수 있다).
+  const existing = (await chrome.cookies.getAll({ url, name: c.name }).catch(() => [])).filter((x) => !x.partitionKey);
+  if (expirationDate !== undefined && expirationDate <= now) {
+    // 지우기는 주소에 맞는 쿠키 중 하나를 고르므로, 그 이름의 HttpOnly 쿠키가 하나라도 있으면 지우지 않는다
+    if (existing.some((x) => x.httpOnly)) return;
+    return chrome.cookies.remove({ url, name: c.name });
+  }
+  const wantDomain = domain ? `.${domain}` : host;
+  if (existing.some((x) => x.httpOnly && x.path === path && x.domain === wantDomain)) return;
   await chrome.cookies.set({
     url,
     name: c.name,
