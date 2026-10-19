@@ -27,7 +27,7 @@ ChatGPT·Gemini 같은 서비스 화면이 바뀌어 **입력창·보내기 버�
 ```
 
 - `version`: 정수. 바꿀 때마다 올립니다.
-- `services`의 키: `gemini`, `chatgpt`, `deepseek`, `perplexity`, `grok`, `mistral`, `qwen`, `genspark`, `duckai`
+- `services`의 키: `gemini`, `chatgpt`, `deepseek`, `perplexity`, `grok`, `mistral`, `qwen`, `genspark`, `duckai`, `claude`, `zai`
 - 고칠 수 있는 필드 (모두 문자열, 300자 이하)
 
 | 필드 | 뜻 |

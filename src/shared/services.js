@@ -18,11 +18,12 @@
 // jsCookies: 페이지 스크립트가 로그인 쿠키를 직접 읽고 쓰는 사이트 (확장 프로그램 전용, extension/cookie-*.js 참고).
 //   확장 탭 안 iframe에서는 크롬이 SameSite=Lax 쿠키를 document.cookie로 보여 주지 않아 로그아웃 상태로 보인다.
 // tokenBridge: 로그인 토큰을 localStorage에 두는 사이트 (확장 프로그램 전용, extension/cookie-bridge.js 참고).
-//   { cookies: 토큰이 들어 있는 쿠키 이름 후보(앞에서부터 처음 있는 것), storage: 화면이 읽는 localStorage 키 }
+//   { cookies: 토큰이 들어 있는 쿠키 이름 후보(앞에서부터 처음 있는 것), storage: 화면이 읽는 localStorage 키,
+//     preferCookie: iframe에 아직 쓸 수 있는 토큰이 있어도 쿠키 값과 다르면 바꾼다 (손님 토큰을 스스로 만드는 사이트) }
 //   확장 탭 안 iframe의 저장소는 일반 탭과 분리될 수 있어서, 크롬의 그 쿠키 값을 iframe의 localStorage에 넣어 준다.
 //   서비스 주소(url)의 도메인 화면에만 넣는다 (로그인 화면 등 다른 hosts에는 넣지 않는다).
 //
-// 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Genspark·Duck.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
+// 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Genspark·Duck.ai·Claude·Z.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
 // 틀린 것은 remote/selectors.json으로 앱을 다시 배포하지 않고 고칠 수 있다.
 (function (root, factory) {
   const api = factory();
@@ -81,6 +82,22 @@
         '[data-message-author-role="assistant"]',
       ],
       newChatUrl: 'https://chatgpt.com/',
+    },
+    {
+      id: 'claude',
+      name: 'Claude',
+      color: '#d97757',
+      url: 'https://claude.ai/new',
+      hosts: ['claude.ai'],
+      // 로그인 화면도 claude.ai/login이다 (Google · Apple · 이메일 · SSO). 이메일 로그인은 메일의 링크로 하므로 일반 탭에서 한다.
+      loggedOut: { url: '^https://claude\.ai/login', text: '^(로그인|log ?in|sign ?in)$' },
+      input: ['div.ProseMirror[contenteditable="true"]', '[data-testid="chat-input"] [contenteditable="true"]', 'div[contenteditable="true"][role="textbox"]'],
+      send: ['button[aria-label="Send message"]', 'button[aria-label="메시지 보내기"]', 'button[aria-label*="Send" i]'],
+      submitKey: 'Enter',
+      stop: ['button[aria-label="Stop response"]', 'button[aria-label="응답 중지"]', 'button[aria-label*="Stop" i]'],
+      response: ['[data-is-streaming] .font-claude-response', '.font-claude-response', '.font-claude-message', '.standard-markdown'],
+      upload: { methods: ['input', 'paste', 'drop'], fileInput: ['input[data-testid="file-upload"]', 'input[type="file"]'] },
+      newChatUrl: 'https://claude.ai/new',
     },
     {
       id: 'deepseek',
@@ -166,6 +183,25 @@
       // Qwen 화면은 localStorage.token을 Authorization 헤더로 보내 로그인을 확인한다.
       // 로그인하면 서버가 refresh_token 쿠키(30일)를 두는데, 이 값도 Authorization 토큰으로 받아 준다 (화면이 새 토큰으로 갈아 끼운다).
       tokenBridge: { cookies: ['token', 'refresh_token'], storage: 'token' },
+    },
+    {
+      id: 'zai',
+      name: 'Z.ai',
+      color: '#2d6cdf',
+      url: 'https://chat.z.ai/',
+      hosts: ['chat.z.ai'],
+      // 로그인하지 않아도(손님) 질문할 수 있다. "Sign in" 버튼이 보이면 로그아웃 상태로 본다.
+      loggedOut: { url: '/auth', text: '^(로그인|log ?in|sign ?in)$' },
+      input: ['#chat-input', 'textarea[placeholder]', 'textarea'],
+      send: ['#send-message-button', 'button.sendMessageButton', 'button[aria-label*="send" i]'],
+      submitKey: 'Enter',
+      stop: ['#stop-response-button', 'button.stop-button', 'button[aria-label*="stop" i]'],
+      response: ['.chat-assistant .markdown-prose', '#response-content-container', '.markdown-prose'],
+      upload: { methods: ['input', 'paste', 'drop'] },
+      newChatUrl: 'https://chat.z.ai/',
+      // Qwen과 같은 Open WebUI 계열: 화면이 localStorage.token으로 로그인을 확인한다.
+      // 로그인하지 않으면 화면이 손님 토큰을 스스로 만들어 두므로, 크롬에 로그인 토큰 쿠키가 있으면 그것으로 바꾼다(preferCookie).
+      tokenBridge: { cookies: ['token'], storage: 'token', preferCookie: true },
     },
     {
       id: 'genspark',

@@ -36,6 +36,8 @@
     need: new Map(), // 패널 id -> 요청한 파일 목록
     sent: new Map(), // 패널 id -> Map(경로 -> 그 AI가 마지막으로 받은 내용, 지워진 파일은 null)
     stale: [], // ⟳ 뒤 AI가 아는 내용과 달라진 파일 [{ id, name, files: [{ path, text }], deleted: [경로] }]
+    blocked: new Set(), // 이 프로젝트의 파일을 보내지 않을 서비스 id (질문 글만 보냄)
+    uploadOk: new Set(), // 이 프로젝트의 파일을 올려도 된다고 확인한 서비스 id
   };
 
   // 편집기에서 연 파일: path, base(열 때·저장할 때 디스크 내용 그대로), crlf(원래 줄바꿈), indent(Tab 키로 넣을 들여쓰기)
@@ -55,6 +57,8 @@
         allowSecret: [...project.allowSecret],
         include: project.include,
         uploadMode: project.uploadMode,
+        blocked: [...project.blocked],
+        uploadOk: [...project.uploadOk],
         log: project.log.slice(0, MAX_LOG),
       })
       .catch((err) => console.warn('[project] 상태를 저장하지 못했습니다:', err.message));
@@ -67,6 +71,8 @@
     project.allowSecret = new Set(Array.isArray(s.allowSecret) ? s.allowSecret : []);
     project.include = s.include !== false;
     project.uploadMode = PU.normalizeMode(s.uploadMode);
+    project.blocked = new Set(Array.isArray(s.blocked) ? s.blocked : []);
+    project.uploadOk = new Set(Array.isArray(s.uploadOk) ? s.uploadOk : []);
     project.log = Array.isArray(s.log) ? s.log : [];
     return !!s.checked;
   }
@@ -187,12 +193,71 @@
       return;
     }
     renderRules();
+    renderServices();
     renderTree();
     const chars = [...project.checked].reduce((n, p) => n + (entryOf(p)?.size || 0), 0);
     const amount = chars < 10000 ? `${chars.toLocaleString()}자` : `${(chars / 10000).toFixed(1)}만 자`;
     const summary = `내용 보낼 파일 ${project.checked.size}개 · 약 ${amount} / 보낼 수 있는 파일 ${sendablePaths().length}개`;
     $('#psSummary').textContent = project.scan.truncated ? `${summary} (항목이 많아 일부만 읽음)` : summary;
     $('#projectChipText').textContent = `📁 ${project.info.name} · 파일 ${project.checked.size}개 · ${MODE_TEXT[project.uploadMode]}로 업로드`;
+  }
+
+  /** 서비스마다 이 프로젝트의 파일을 보낼지 (끄면 그 서비스에는 질문 글만 보낸다) */
+  function renderServices() {
+    const rows = state.services.map((s) => {
+      const row = span('rule-row', '');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = !project.blocked.has(s.id);
+      box.addEventListener('change', () => {
+        if (box.checked) project.blocked.delete(s.id);
+        else project.blocked.add(s.id);
+        saveState();
+        render();
+      });
+      const label = document.createElement('label');
+      label.append(box, ` ${s.name}`);
+      row.append(label, span('muted-label', box.checked ? '구조·파일 업로드' : '질문 글만'));
+      return row;
+    });
+    $('#psServicesBody').replaceChildren(...rows);
+    $('#psServices').querySelector('summary').textContent = project.blocked.size
+      ? `프로젝트 파일을 보낼 서비스 (${project.blocked.size}곳 제외)`
+      : '프로젝트 파일을 보낼 서비스';
+  }
+
+  const nameOf = (id) => state.services.find((s) => s.id === id)?.name || id;
+
+  /**
+   * 프로젝트 파일을 처음 올리는 서비스가 있으면 어디로 가는지 확인한다. 취소하면 false.
+   * 한 번 확인한 서비스는 이 프로젝트에서 다시 묻지 않는다 (사이드바 "보낼 서비스"에서 끌 수 있음).
+   */
+  function confirmUpload(ids, fileCount) {
+    const fresh = ids.filter((id) => !project.uploadOk.has(id));
+    if (!fresh.length) return true;
+    const ok = confirm(
+      [
+        `프로젝트 ${project.info.name}의 구조와 파일 ${fileCount}개 내용을 다음 서비스에 처음 올립니다:`,
+        ...fresh.map((id) => `- ${nameOf(id)}`),
+        '',
+        '올린 내용은 각 회사 서버에 저장되고, 서비스 설정에 따라 학습에 쓰일 수 있습니다.',
+        '보내지 않을 서비스는 사이드바의 "프로젝트 파일을 보낼 서비스"에서 끌 수 있습니다.',
+        '',
+        '확인: 올리기 (이 프로젝트에서 다시 묻지 않음)',
+        '취소: 보내지 않기',
+      ].join('\n'),
+    );
+    if (!ok) return false;
+    for (const id of fresh) project.uploadOk.add(id);
+    saveState();
+    return true;
+  }
+
+  /** 이 서비스에 프로젝트 파일을 보내도 되는지. 안 되면 알리고 false */
+  function allowedFor(id) {
+    if (!project.blocked.has(id)) return true;
+    alert(`${nameOf(id)}은(는) 이 프로젝트의 파일을 보내지 않도록 설정되어 있습니다. (사이드바 "프로젝트 파일을 보낼 서비스")`);
+    return false;
   }
 
   function renderRules() {
@@ -369,6 +434,10 @@
 
   window.projectPrepareSend = async (payload, targetIds) => {
     if (!has() || !project.include) return payload;
+    const withProject = targetIds.filter((id) => !project.blocked.has(id));
+    const plainIds = targetIds.filter((id) => project.blocked.has(id));
+    if (!withProject.length) return payload; // 모두 보내지 않기로 한 서비스 — 질문만 보낸다
+    if (!confirmUpload(withProject, project.checked.size)) return null;
     const { files } = await readChosen([...project.checked]);
     const budget = budgetAfter(payload.files);
     const pack = PU.packContext({ project: { name: project.info.name, paths: sendablePaths() }, files, request: payload.text, mode: project.uploadMode, budget });
@@ -378,7 +447,9 @@
     if (!room) notice('첨부 한도가 모자라 프로젝트 내용은 본문으로 보냅니다');
     const textById = {};
     // 문서 첨부를 받지 않는 서비스(예: Duck.ai)에는 내용을 본문으로 넣는다 (넘치는 만큼 잘라서).
-    for (const id of targetIds) if (!room || !acceptsDocs(id)) textById[id] = pack.inlineText;
+    for (const id of withProject) if (!room || !acceptsDocs(id)) textById[id] = pack.inlineText;
+    // 보내지 않기로 한 서비스에는 원래 질문과 사용자가 직접 올린 파일만 (plainIds · userFileCount)
+    for (const id of plainIds) textById[id] = payload.text;
     if (pack.note) notice(pack.note);
     pendingSent = files; // 보내기에 성공한 패널만 renderer.js가 onProjectSent로 알려 준다
     return {
@@ -389,12 +460,15 @@
         question: `${payload.text || '(첨부 파일만)'}\n\n[프로젝트 ${project.info.name} · 파일 ${files.length}개 내용 포함]`,
         textById,
         fallbackText: pack.inlineText,
+        plainIds,
+        userFileCount: payload.files.length,
       },
     };
   };
 
   /** 패널 하나에 프로젝트 파일을 이어서 보낸다 (요청 파일 보내기 · 다시 보내기). pack: PU.pack* 결과 */
   async function sendProjectFollowUp(id, pack) {
+    if (project.blocked.has(id)) return { ok: false, error: '이 프로젝트의 파일을 보내지 않도록 설정된 서비스' };
     if (pack.note) notice(pack.note);
     if (!acceptsDocs(id)) return host.sendFollowUp(id, pack.inlineText);
     return host.sendFollowUp(id, pack.text, pack.attachments.map(toAttachment), { fallbackText: pack.inlineText });
@@ -420,7 +494,7 @@
     const files = pendingSent;
     pendingSent = null;
     if (!files || !has()) return;
-    for (const id of okIds) remember(id, files);
+    for (const id of okIds) if (!project.blocked.has(id)) remember(id, files);
   };
 
   // 새 대화를 열면 그 AI는 이전 내용을 모른다.
@@ -552,6 +626,7 @@
    */
   window.onNeedFilesClick = async (id) => {
     if (!has()) return alert('프로젝트가 열려 있지 않습니다');
+    if (!allowedFor(id)) return;
     const name = state.services.find((s) => s.id === id)?.name || id;
     const wanted = project.need.get(id) || [];
     const skipped = [];
@@ -702,6 +777,7 @@
    * 앱 내장 제외(L1)는 보내지 않고, 다른 제외 규칙(L2·L3)이나 비밀 정보로 보이는 문자열이 있으면 확인을 받는다.
    */
   async function refetch(ai, path) {
+    if (!allowedFor(ai.id)) return;
     try {
       const rule = project.scan.matcher.classify(path, false);
       if (rule?.layer === 'L1') return alert(`${path}은(는) 앱 내장 제외 규칙에 걸린 파일이라 보낼 수 없습니다.\n(${PI.describe(rule)})`);

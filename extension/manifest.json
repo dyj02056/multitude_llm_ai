@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Multitude LLM",
-  "version": "0.6.3",
-  "description": "Gemini · ChatGPT · DeepSeek · Perplexity · Grok · Mistral · Qwen · Genspark · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
+  "version": "0.7.0",
+  "description": "Gemini · ChatGPT · Claude · DeepSeek · Perplexity · Grok · Mistral · Qwen · Z.ai · Genspark · Duck.ai 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon-16.png",
@@ -31,6 +31,7 @@
   "host_permissions": [
     "https://gemini.google.com/*",
     "https://chatgpt.com/*",
+    "https://claude.ai/*",
     "https://chat.deepseek.com/*",
     "https://www.perplexity.ai/*",
     "https://perplexity.ai/*",
@@ -38,12 +39,14 @@
     "https://chat.mistral.ai/*",
     "https://chat.qwen.ai/*",
     "https://auth.qwen.ai/*",
+    "https://chat.z.ai/*",
     "https://www.genspark.ai/*",
     "https://genspark.ai/*",
     "https://duck.ai/*",
     "https://duckduckgo.com/*",
     "wss://gemini.google.com/*",
     "wss://chatgpt.com/*",
+    "wss://claude.ai/*",
     "wss://chat.deepseek.com/*",
     "wss://www.perplexity.ai/*",
     "wss://perplexity.ai/*",
@@ -51,6 +54,7 @@
     "wss://chat.mistral.ai/*",
     "wss://chat.qwen.ai/*",
     "wss://auth.qwen.ai/*",
+    "wss://chat.z.ai/*",
     "wss://www.genspark.ai/*",
     "wss://genspark.ai/*",
     "wss://duck.ai/*",
@@ -61,6 +65,7 @@
       "matches": [
         "https://gemini.google.com/*",
         "https://chatgpt.com/*",
+        "https://claude.ai/*",
         "https://chat.deepseek.com/*",
         "https://www.perplexity.ai/*",
         "https://perplexity.ai/*",
@@ -68,6 +73,7 @@
         "https://chat.mistral.ai/*",
         "https://chat.qwen.ai/*",
         "https://auth.qwen.ai/*",
+        "https://chat.z.ai/*",
         "https://www.genspark.ai/*",
         "https://genspark.ai/*",
         "https://duck.ai/*",
@@ -97,7 +103,8 @@
     {
       "matches": [
         "https://chat.qwen.ai/*",
-        "https://auth.qwen.ai/*"
+        "https://auth.qwen.ai/*",
+        "https://chat.z.ai/*"
       ],
       "js": [
         "cookie-bridge.js"

@@ -9,6 +9,7 @@
 //    저장소가 일반 탭과 분리되면 토큰이 없어 로그아웃 화면을 띄운다. 크롬이 가진 그 사이트의 토큰 쿠키 값을 받아
 //    이 iframe의 localStorage에 넣고, 화면이 이미 토큰 없이 떴으므로 한 번 새로고침한다.
 //    iframe에 아직 쓸 수 있는 토큰이 있으면(화면이 스스로 갱신한 토큰) 건드리지 않는다.
+//    preferCookie 사이트(Z.ai)는 화면이 손님 토큰을 스스로 만들어 두므로, 쿠키 값과 다르면 바꾼다.
 (() => {
   const EXT_ORIGIN = `chrome-extension://${chrome.runtime.id}`;
   if (window === window.top || window.parent !== window.top || location.ancestorOrigins?.[0] !== EXT_ORIGIN) return;
@@ -35,7 +36,7 @@
     .then((token) => {
       if (!token?.value || typeof token.storage !== 'string') return;
       const have = localStorage.getItem(token.storage);
-      if (have === token.value || (have && !expired(have))) return;
+      if (have === token.value || (have && !expired(have) && !token.preferCookie)) return;
       localStorage.setItem(token.storage, token.value);
       // 같은 토큰으로는 한 번만, 그리고 30초 안에 다시는 새로고침하지 않는다 (무한 새로고침 방지)
       const last = JSON.parse(sessionStorage.getItem(RELOAD_MARK) || 'null');

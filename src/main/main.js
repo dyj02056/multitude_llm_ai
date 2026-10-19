@@ -429,7 +429,7 @@ ipcMain.handle('synth:run', (_e, judgeId, kind) =>
   rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', kind === 'code' ? 'code' : 'text'),
 );
 
-/** 화면이 넘긴 보내기 옵션 검사: { question, textById, fallbackText } */
+/** 화면이 넘긴 보내기 옵션 검사: { question, textById, fallbackText, plainIds, userFileCount } */
 function sendOpts(opts) {
   if (!opts || typeof opts !== 'object') return {};
   const out = {};
@@ -439,6 +439,8 @@ function sendOpts(opts) {
     out.textById = {};
     for (const s of SERVICES) if (typeof opts.textById[s.id] === 'string') out.textById[s.id] = opts.textById[s.id];
   }
+  if (Array.isArray(opts.plainIds)) out.plainIds = SERVICES.map((s) => s.id).filter((id) => opts.plainIds.includes(id));
+  if (Number.isInteger(opts.userFileCount) && opts.userFileCount >= 0) out.userFileCount = opts.userFileCount;
   return out;
 }
 

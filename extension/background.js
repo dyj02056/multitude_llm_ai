@@ -19,7 +19,7 @@
 // 쿠키를 이 확장 탭 안 iframe에서만 보이는 partitioned 쿠키로 복사해 둔다. 일반 탭의 그 사이트에는 영향이 없다.
 // 화면 스크립트가 쓴 쿠키는 cookie-shim.js → cookie-bridge.js → 여기(mla:setCookie)로 와서 원래 쿠키에 반영한다.
 //
-// 토큰 다리(tokenBridge, 지금은 Qwen): Qwen 화면은 쿠키가 아니라 localStorage.token으로 로그인을 확인하는데, 확장 탭 안
+// 토큰 다리(tokenBridge, 지금은 Qwen·Z.ai): Qwen 화면은 쿠키가 아니라 localStorage.token으로 로그인을 확인하는데, 확장 탭 안
 // iframe의 저장소는 일반 탭과 분리될 수 있다. 서버가 같은 토큰을 넣어 두는 token 쿠키 값을 그 iframe에만 알려 주고,
 // cookie-bridge.js가 iframe의 localStorage에 넣은 뒤 한 번 새로고침한다.
 
@@ -211,7 +211,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   (async () => {
     for (const name of bridge.cookies) {
       const c = await chrome.cookies.get({ url: `https://${url.hostname}/`, name });
-      if (c?.value) return { storage: bridge.storage, value: c.value };
+      if (c?.value) return { storage: bridge.storage, value: c.value, preferCookie: !!bridge.preferCookie };
     }
     return null;
   })().then(reply, () => reply(null));

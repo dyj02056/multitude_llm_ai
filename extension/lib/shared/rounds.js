@@ -123,6 +123,7 @@
      * opts.question: 기록·종합에 쓸 질문 (프로젝트 맥락을 붙여 보낼 때는 사용자가 쓴 요청만 남긴다)
      * opts.textById: 서비스별로 다른 글을 보낼 때 { id: 글 } (예: 문서 첨부를 받지 않는 서비스에는 맥락을 본문으로)
      * opts.fallbackText: 첨부에 실패한 패널에 대신 보낼 글 (프로젝트 파일 업로드의 내부 예비 경로)
+     * opts.plainIds · opts.userFileCount: 프로젝트 파일을 보내지 않을 서비스와, files 중 앞쪽의 사용자가 직접 올린 파일 수
      */
     function sendAll(text, targets, files = [], opts = {}) {
       const ids = targets.filter((id) => a.hasPanel(id));
@@ -131,7 +132,16 @@
       const historyId = a.history.add({ question, targets: ids, files: meta });
       const r = (round = { question, targets: ids, finished: new Map(), synthDone: false, historyId });
       const textFor = (id) => (typeof opts.textById?.[id] === 'string' ? opts.textById[id] : text);
-      return Promise.all(ids.map((id) => sendToPanel(id, textFor(id), (state) => onRoundAnswer(r, id, state), files, opts.fallbackText)));
+      // plainIds: 프로젝트 파일을 보내지 않을 서비스 — 앞의 userFileCount개(사용자가 직접 올린 파일)만 보내고 예비 글도 쓰지 않는다
+      const plain = new Set(Array.isArray(opts.plainIds) ? opts.plainIds : []);
+      const own = Number.isInteger(opts.userFileCount) && opts.userFileCount >= 0 ? Math.min(opts.userFileCount, files.length) : files.length;
+      return Promise.all(
+        ids.map((id) =>
+          plain.has(id)
+            ? sendToPanel(id, textFor(id), (state) => onRoundAnswer(r, id, state), files.slice(0, own))
+            : sendToPanel(id, textFor(id), (state) => onRoundAnswer(r, id, state), files, opts.fallbackText),
+        ),
+      );
     }
 
     /**
