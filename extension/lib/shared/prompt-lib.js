@@ -187,10 +187,26 @@
     ].join('\n');
   }
 
-  /** 압축 요청 답변에서 압축본 꺼내기: 첫 코드 블록 안, 없으면 답변 전체 */
+  /**
+   * 압축 요청 답변에서 압축본 꺼내기: 코드 블록 중 가장 긴 것의 안쪽, 코드 블록이 없으면 답변 전체.
+   * 닫는 울타리가 없으면(답변이 잘림) 여는 울타리 뒤 끝까지를 쓴다. 울타리 앞의 들여쓰기는 무시한다.
+   */
   function extractCompressed(md) {
-    const m = String(md || '').match(/^\s*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)\n\s*\1\s*$/m);
-    return (m ? m[2] : String(md || '')).trim();
+    const lines = String(md || '').replace(/\r\n/g, '\n').split('\n');
+    const blocks = [];
+    let open = null; // { fence, start }
+    lines.forEach((line, i) => {
+      const f = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
+      if (!f) return;
+      if (!open) open = { fence: f[1], start: i + 1 };
+      else if (f[1][0] === open.fence[0] && f[1].length >= open.fence.length && !f[2].trim()) {
+        blocks.push(lines.slice(open.start, i).join('\n'));
+        open = null;
+      }
+    });
+    if (open) blocks.push(lines.slice(open.start).join('\n'));
+    const best = blocks.reduce((a, b) => (b.trim().length > a.trim().length ? b : a), '');
+    return (best.trim() ? best : String(md || '')).trim();
   }
 
   // ---------- 질문 앞에 붙일 지침 ----------

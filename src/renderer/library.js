@@ -607,8 +607,11 @@
   // ---------- AI로 압축 ----------
   // 열린 패널 하나에 압축 요청을 보내고, 답변이 끝나면 패널 화면의 답변 글을 읽어 압축본 칸에 넣는다.
   // 파일로 내려받지 않는다. 미리보기에서 확인·수정한 뒤 "저장"하면 그 스킬 항목의 압축본으로 들어간다 (원문은 그대로).
+  // 답변을 기다리는 동안 다른 화면(패널 등)으로 가도 기다리기는 계속된다. 끝나면 압축본 칸에 넣어 두고 알린다.
+  // 자동으로 못 읽었거나 답변이 끝난 뒤 패널에서 고쳤으면 "패널에서 다시 읽기"로 지금 답변을 다시 가져온다.
 
-  const cmp = { skillId: null, waiting: null }; // waiting: { id, sent } 답변을 기다리는 패널
+  // skillId: 압축 중인 스킬, panelId: 요청을 보낸 패널, waiting: { id, sent } 답변을 기다리는 중, out: 압축본 칸의 글(화면을 떠나도 유지)
+  const cmp = { skillId: null, panelId: null, waiting: null, out: null };
 
   const cmpSkill = () => skillById(cmp.skillId);
   const nameOfSvc = (id) => state.services.find((x) => x.id === id)?.name || id;
@@ -623,6 +626,8 @@
     const pct = base ? (out.length / base) * 100 : 0;
     $('#cmpOutCount').textContent = out ? `${out.length.toLocaleString()}자 · 원문의 ${pct > 0 && pct < 1 ? '1% 미만' : `${Math.round(pct)}%`}` : '';
     $('#cmpSave').disabled = !out || !!cmp.waiting;
+    $('#cmpRun').disabled = !!cmp.waiting || !$('#cmpTarget').value;
+    $('#cmpRead').disabled = !!cmp.waiting || !(cmp.panelId || $('#cmpTarget').value);
   }
 
   $('#libCompress').addEventListener('click', () => {
@@ -635,19 +640,27 @@
   function openCompress(skillId) {
     const s = skillById(skillId);
     if (!s) return;
+    // 다른 스킬의 압축 답변을 기다리는 중이면 먼저 끝내야 한다
+    if (cmp.waiting && cmp.skillId !== skillId) {
+      return alert(`${skillById(cmp.skillId)?.name || '다른 스킬'}의 압축 답변을 기다리는 중입니다. 끝난 뒤에 다시 하세요.`);
+    }
+    const resume = cmp.skillId === skillId && cmp.out !== null; // 같은 스킬로 돌아왔으면 칸의 글·상태를 그대로
     cmp.skillId = skillId;
-    cmp.waiting = null;
     const open = state.services.filter((x) => panels.has(x.id));
     $('#cmpTarget').replaceChildren(...open.map((x) => option(x.id, x.name)));
-    if (open.some((x) => x.id === state.synthTarget)) $('#cmpTarget').value = state.synthTarget;
+    const pick = [cmp.panelId, state.synthTarget].find((id) => id && open.some((x) => x.id === id));
+    if (pick) $('#cmpTarget').value = pick;
     const base = PL.cleanSkill(s.body);
     $('#cmpTitle').textContent = s.name;
     $('#cmpSrc').textContent = base;
     $('#cmpSrcCount').textContent = `${base.length.toLocaleString()}자 (정리 후)`;
-    $('#cmpLen').value = Math.max(500, Math.min(8000, Math.round((base.length * 0.3) / 100) * 100));
-    $('#cmpOut').value = s.compact || '';
-    $('#cmpRun').disabled = !open.length;
-    setCmpStatus(open.length ? '압축을 맡길 AI와 목표 길이를 고르고 "압축 요청"을 누르세요' : '열린 패널이 없습니다 — 압축본을 직접 붙여 넣을 수도 있습니다');
+    if (!resume) {
+      cmp.panelId = null;
+      cmp.out = null;
+      $('#cmpLen').value = Math.max(500, Math.min(8000, Math.round((base.length * 0.3) / 100) * 100));
+      $('#cmpOut').value = s.compact || '';
+      setCmpStatus(open.length ? '압축을 맡길 AI와 목표 길이를 고르고 "압축 요청"을 누르세요' : '열린 패널이 없습니다 — 압축본을 직접 붙여 넣을 수도 있습니다');
+    } else $('#cmpOut').value = cmp.out;
     cmpCount();
     host.setView('compress');
   }
@@ -663,6 +676,24 @@
     return false;
   }
 
+  /** 압축본 칸에 넣는다. 압축 화면을 보고 있지 않으면 입력창 아래에 알린다 */
+  function putCompressed(text, status, kind) {
+    cmp.out = text;
+    $('#cmpOut').value = text;
+    setCmpStatus(status, kind);
+    cmpCount();
+    if (state?.chatView !== 'compress' && kind === 'ok') {
+      $('#sendHint').textContent = `${cmpSkill()?.name || '스킬'} 압축본을 읽어 왔습니다 — 📚 라이브러리 → 스킬 → AI로 압축에서 확인하고 저장하세요`;
+    }
+  }
+
+  /** 패널의 지금 최신 답변에서 압축본을 꺼낸다 → 글 | '' */
+  async function readCompressed(id) {
+    const got = await host.getAnswers().catch(() => null);
+    const a = got?.answers?.find((x) => x.id === id);
+    return PL.extractCompressed(a?.md || a?.text || '');
+  }
+
   $('#cmpRun').addEventListener('click', async () => {
     const s = cmpSkill();
     const id = $('#cmpTarget').value;
@@ -671,7 +702,8 @@
     const hits = scanSecrets(s.body);
     if (hits.length && !confirm(`지침에 비밀 정보로 보이는 문자열이 있습니다: ${describeSecrets(hits)}\n그래도 ${nameOfSvc(id)}에 보낼까요?`)) return;
     cmp.waiting = { id, sent: false };
-    $('#cmpRun').disabled = true;
+    cmp.panelId = id;
+    cmp.out = $('#cmpOut').value;
     cmpCount();
     try {
       if ($('#cmpNew').checked) {
@@ -684,38 +716,46 @@
       const res = await host.sendFollowUp(id, PL.compressRequest(s, target), [], { noHistory: true });
       if (!res?.ok) throw new Error(res?.error || '보내지 못했습니다');
       if (cmp.waiting) cmp.waiting.sent = true;
-      setCmpStatus(`${nameOfSvc(id)}의 답변을 기다리는 중… (끝나면 아래에 자동으로 넣습니다)`);
+      setCmpStatus(`${nameOfSvc(id)}의 답변을 기다리는 중… 패널로 가서 봐도 됩니다 (끝나면 아래에 자동으로 넣습니다)`);
     } catch (err) {
       cmp.waiting = null;
-      $('#cmpRun').disabled = false;
       setCmpStatus(`압축을 요청하지 못했습니다: ${err.message}`, 'error');
-      cmpCount();
     }
+    cmpCount();
   });
 
-  // renderer.js가 패널 상태가 바뀔 때마다 알려 준다
+  // renderer.js가 패널 상태가 바뀔 때마다 알려 준다 (압축 화면을 보고 있지 않아도)
   window.onLibPanelStatus = async (id, { answer }) => {
     const w = cmp.waiting;
     if (!w || w.id !== id || !w.sent || !['done', 'timeout', 'no-answer'].includes(answer)) return;
     cmp.waiting = null;
-    $('#cmpRun').disabled = false;
     if (answer !== 'done') {
-      setCmpStatus(`압축 결과를 읽지 못했습니다 (${answer === 'timeout' ? '시간 초과' : '답변이 시작되지 않음'}) — 패널에서 직접 복사해 아래에 붙여 넣을 수 있습니다`, 'error');
+      setCmpStatus(`답변이 끝나지 않았습니다 (${answer === 'timeout' ? '시간 초과' : '답변이 시작되지 않음'}) — 답변이 끝난 뒤 "패널에서 다시 읽기"를 누르세요`, 'error');
       return cmpCount();
     }
-    const got = await host.getAnswers().catch(() => null);
-    const a = got?.answers?.find((x) => x.id === id);
-    const text = PL.extractCompressed(a?.md || a?.text || '');
+    const text = await readCompressed(id);
     if (!text) {
-      setCmpStatus('답변이 비어 있습니다 — 패널에서 직접 복사해 붙여 넣을 수 있습니다', 'error');
+      setCmpStatus('답변을 읽지 못했습니다 — "패널에서 다시 읽기"를 누르거나 패널에서 직접 복사해 붙여 넣으세요', 'error');
       return cmpCount();
     }
-    $('#cmpOut').value = text;
-    setCmpStatus('압축본을 읽어 왔습니다 — 빠진 규칙이 없는지 확인하고 저장하세요', 'ok');
-    cmpCount();
+    putCompressed(text, '압축본을 읽어 왔습니다 — 빠진 규칙이 없는지 확인하고 저장하세요', 'ok');
   };
 
-  $('#cmpOut').addEventListener('input', cmpCount);
+  // 자동으로 못 가져왔을 때 · 답변이 끝난 뒤 다시 가져올 때
+  $('#cmpRead').addEventListener('click', async () => {
+    const id = cmp.panelId || $('#cmpTarget').value;
+    if (!id || cmp.waiting) return;
+    const text = await readCompressed(id);
+    if (!text) return setCmpStatus(`${nameOfSvc(id)} 패널에서 읽을 답변이 없습니다`, 'error');
+    if ($('#cmpOut').value.trim() && $('#cmpOut').value.trim() !== text && !confirm('압축본 칸의 지금 글을 패널의 최신 답변으로 바꿀까요?')) return;
+    putCompressed(text, `${nameOfSvc(id)} 패널의 최신 답변을 읽어 왔습니다 — 확인하고 저장하세요`, 'ok');
+  });
+
+  $('#cmpOut').addEventListener('input', () => {
+    cmp.out = $('#cmpOut').value;
+    cmpCount();
+  });
+  $('#cmpTarget').addEventListener('change', cmpCount);
 
   $('#cmpSave').addEventListener('click', async () => {
     const s = cmpSkill();
@@ -727,17 +767,14 @@
     Object.assign(s, { compact: text, compactOf: PL.textHash(s.body), useCompact: true });
     await save();
     const sid = s.id;
-    cmp.skillId = null;
+    Object.assign(cmp, { skillId: null, panelId: null, waiting: null, out: null });
     refreshAll(); // 🧩 합계도 압축본 길이로
     openLibrary('skills', sid);
     flash($('#libInfo'), '압축본을 저장했습니다 (보낼 때 압축본을 씁니다)');
   });
 
-  $('#cmpClose').addEventListener('click', () => {
-    if (cmp.waiting && !confirm('압축 답변을 기다리는 중입니다. 그만두고 돌아갈까요?')) return;
-    cmp.waiting = null;
-    openLibrary('skills', cmp.skillId);
-  });
+  // 돌아가도 기다리기는 계속된다 (다시 "AI로 압축"을 누르면 이어서 봄)
+  $('#cmpClose').addEventListener('click', () => openLibrary('skills', cmp.skillId));
 
   // ---------- 파일 가져오기 · 내보내기 ----------
 
@@ -828,8 +865,6 @@
     // 변수 입력 화면을 떠나면(Esc · 다른 화면) 보내기를 취소한다
     if (varsWait && state.chatView !== 'vars') finishVars(false);
     if (state.chatView !== 'library') draft = null;
-    // 압축 화면을 떠나면(Esc 등) 기다리기를 그만둔다
-    if (state.chatView !== 'compress') cmp.waiting = null;
     $('#libraryBtn').classList.toggle('active', state.chatView === 'library');
   });
 

@@ -161,3 +161,11 @@ test('압축 요청 글과 답변에서 압축본 꺼내기', () => {
   assert.equal(P.extractCompressed('설명\n```markdown\n- 규칙 1\n- 규칙 2\n```\n끝'), '- 규칙 1\n- 규칙 2');
   assert.equal(P.extractCompressed('- 코드 블록 없이 준 답'), '- 코드 블록 없이 준 답');
 });
+
+test('압축본 꺼내기: 가장 긴 코드 블록 · 들여쓴 울타리 · 닫히지 않은 블록 · 안쪽의 다른 울타리', () => {
+  assert.equal(P.extractCompressed('```\n짧은 것\n```\n설명\n```markdown\n- 규칙 1\n- 규칙 2\n- 규칙 3\n```'), '- 규칙 1\n- 규칙 2\n- 규칙 3');
+  assert.equal(P.extractCompressed('  ```text\n  - 들여쓴 규칙\n  ```'), '- 들여쓴 규칙');
+  assert.equal(P.extractCompressed('결과:\n```\n- 끝나지 않은\n- 블록'), '- 끝나지 않은\n- 블록');
+  assert.equal(P.extractCompressed('````md\n- 규칙\n```js\nx()\n```\n````'), '- 규칙\n```js\nx()\n```');
+  assert.equal(P.extractCompressed('```\n\n```\n그냥 글'), '```\n\n```\n그냥 글');
+});
