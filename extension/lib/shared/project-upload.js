@@ -104,7 +104,7 @@
   }
 
   const FILES_RULE =
-    '올린 파일 이름의 "__"는 폴더 구분이고 끝의 ".txt"는 업로드용으로 붙인 것이야. 답변·diff·NEED_FILES에는 실제 경로(목록의 오른쪽)를 써 줘.';
+    '올린 파일 이름의 "__"는 폴더 구분이고 끝의 ".txt"는 업로드용으로 붙인 것이야. 답변의 "파일: 경로"·NEED_FILES·DELETE_FILES에는 실제 경로(목록의 오른쪽)를 써 줘.';
   const skippedLines = (skipped) => (skipped.length ? ['[보내지 않은 파일]', ...skipped.map((s) => `- ${s.path}: ${s.reason}`), ''] : []);
   const cutInline = (text) =>
     text.length <= PC.INLINE_LIMIT ? text : `${text.slice(0, PC.INLINE_LIMIT - 100)}\n… (분량이 많아 여기까지만 넣었습니다)`;
@@ -166,6 +166,30 @@
     return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined };
   }
 
+  /**
+   * 사용자가 로컬에서 고친 파일을 AI에게 다시 알리기 (사이드바 ⟳ 뒤 "바뀐 파일 보내기").
+   * files: [{ path, text }] 바뀐 파일의 지금 내용, deleted: [경로] 지워진 파일
+   */
+  function packUpdate({ files, deleted = [], mode = DEFAULT_MODE, budget }) {
+    const intro = `내가 로컬에서 프로젝트 파일을 고쳤어. 이전에 보낸 내용 대신 아래 내용을 기준으로 해 줘.`;
+    const gone = deleted.length ? ['[지워진 파일]', ...deleted.map((p) => `- ${p}`), ''] : [];
+    const ack = '지금은 수정하지 말고 무엇이 바뀌었는지 3줄 이내로 확인만 해 줘. 다음 요청부터 같은 답변 규칙을 지켜 줘.';
+    const blocks = files.map((f) => `${PC.fileBlock(f.path, f.text)}\n`);
+    const inlineText = cutInline([intro, '', ...gone, ...blocks, ack].join('\n'));
+    if (!files.length) return { mode, text: [intro, '', ...gone, ack].join('\n'), attachments: [], inlineText };
+    if (mode === 'files') {
+      const { attachments, map } = eachFile(files);
+      if (fits(attachments, budget)) {
+        const text = [intro, '', `[올린 파일 ${files.length}개 → 실제 경로]\n${map}`, FILES_RULE, '', ...gone, ack].join('\n');
+        return { mode: 'files', text, attachments, inlineText };
+      }
+    }
+    const attachments = bundle('updated-files.md', '', blocks);
+    const names = attachments.map((a) => a.name).join(', ');
+    const text = [intro, `바뀐 파일 ${files.length}개의 지금 내용을 첨부한 ${names}에 넣었습니다.`, '', ...gone, ack].join('\n');
+    return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined };
+  }
+
   /** diff가 맞지 않은 파일의 현재 내용을 주고 전체 파일로 다시 받기 */
   function packRefetch({ path, text: content, mode = DEFAULT_MODE }) {
     const inlineText = cutInline(PC.buildRefetch(path, content));
@@ -184,5 +208,5 @@
 
   const normalizeMode = (m) => (MODES.includes(m) ? m : DEFAULT_MODE);
 
-  return { MODES, DEFAULT_MODE, BUNDLE_CHUNK, uploadName, restorePaths, uniqueNames, packContext, packFollowUp, packRefetch, normalizeMode };
+  return { MODES, DEFAULT_MODE, BUNDLE_CHUNK, uploadName, restorePaths, uniqueNames, packContext, packFollowUp, packUpdate, packRefetch, normalizeMode };
 });

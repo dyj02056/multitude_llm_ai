@@ -197,6 +197,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
   if (answer === 'clear') {
     p.attachBadge.hidden = true;
     p.needBtn.hidden = true;
+    window.onPanelCleared?.(id); // 새 대화: 프로젝트 모드에서 이 AI가 아는 파일 내용을 잊는다
   }
   if (answer === 'done') window.onPanelAnswerDone?.(id); // 프로젝트 모드: NEED_FILES 확인
   if (answer) {
@@ -741,6 +742,7 @@ async function send() {
     if (!payload) return;
     const results = await host.sendPrompt(payload.text, ids, payload.files, payload.opts);
     const failed = results.filter((r) => !r.ok);
+    window.onProjectSent?.(results.filter((r) => r.ok).map((r) => r.id)); // 프로젝트 모드: AI마다 받은 파일 내용을 기억
     const noAttach = results.filter((r) => r.ok && r.attach && r.attach.state !== 'ok');
     const name = (id) => state.services.find((s) => s.id === id)?.name || id;
     if (!failed.length) {

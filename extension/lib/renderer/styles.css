@@ -320,6 +320,8 @@ body.project-open[data-mode="chat"][data-view="panels"] .project-side { display:
 .ps-foot { font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
 .ps-upload { display: flex; align-items: center; gap: 6px; }
 .ps-upload .seg button { padding: 2px 8px; font-size: 12px; }
+.ps-foot #psSync { padding: 4px 8px; font-size: 12px; text-align: left; }
+.ps-foot #psSync[hidden] { display: none; }
 .project-chip { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin-left: auto; flex: none; cursor: pointer; }
 .project-chip[hidden] { display: none; }
 .project-chip:has(input:checked) { color: #9ec0fa; }
@@ -348,6 +350,28 @@ body[data-view="changes"] #panels { display: none !important; }
 .change-row .err { color: #e0a23b; font-size: 11.5px; }
 .change-foot { display: flex; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--border); }
 .change-empty { color: var(--muted); padding: 12px; }
+
+/* ---------- 프로젝트 파일 편집 ---------- */
+.only-editor { display: none; }
+body[data-mode="chat"][data-view="editor"] .only-editor { display: flex; }
+body[data-view="editor"] #panels { display: none !important; }
+body.project-open[data-mode="chat"][data-view="editor"] .project-side { display: flex; }
+#editor {
+  position: absolute; left: 300px; right: 0; top: 44px; bottom: 132px;
+  flex-direction: column; gap: 8px; padding: 8px;
+}
+#edPath { font-family: "Cascadia Mono", Consolas, monospace; }
+#edStatus[data-dirty="1"] { color: #e0a23b; }
+#edSaveSend { border-color: var(--accent); color: #9ec0fa; }
+.ed-text {
+  flex: 1; min-height: 0; resize: none; tab-size: 4;
+  background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; white-space: pre; overflow: auto;
+}
+.ed-text:focus { outline: 1px solid var(--accent); }
+.ps-row.file .nm { cursor: pointer; }
+.ps-row.file .nm:hover { text-decoration: underline; }
+.ps-row.editing .nm { color: #9ec0fa; font-weight: 600; }
 
 /* ---------- 미리보기·적용 창 ---------- */
 .modal { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; }

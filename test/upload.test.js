@@ -82,3 +82,19 @@ test('요청 파일 보내기 · 다시 보내기', () => {
   const rf = U.packRefetch({ path: 'src/a.js', text: 'cur', mode: 'files' });
   assert.deepEqual(rf.attachments.map((a) => [a.name, a.text]), [['src__a.js', 'cur']]);
 });
+
+test('바뀐 파일 다시 보내기: 묶음·개별 파일·지운 파일', () => {
+  const files = [{ path: 'src/a.js', text: 'const a = 2;\n' }];
+  const b = U.packUpdate({ files, deleted: ['old.js'], mode: 'bundle', budget: BUDGET });
+  assert.equal(b.mode, 'bundle');
+  assert.equal(b.attachments[0].name, 'updated-files.md');
+  assert.match(b.attachments[0].text, /\[파일: src\/a\.js\]/);
+  assert.match(b.text, /- old\.js/);
+  assert.match(b.inlineText, /const a = 2;/);
+  const f = U.packUpdate({ files, mode: 'files', budget: BUDGET });
+  assert.deepEqual(f.attachments.map((a) => a.name), ['src__a.js']);
+  assert.match(f.text, /src__a\.js → src\/a\.js/);
+  const onlyDeleted = U.packUpdate({ files: [], deleted: ['x.js'], mode: 'files', budget: BUDGET });
+  assert.deepEqual(onlyDeleted.attachments, []);
+  assert.match(onlyDeleted.text, /- x\.js/);
+});

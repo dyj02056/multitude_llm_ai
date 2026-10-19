@@ -10,7 +10,7 @@
   'use strict';
 
   const MAX_ANSWER_CHARS = 6000; // 답변 하나가 너무 길면 잘라서 입력 한도를 넘지 않게 한다
-  const MAX_CODE_ANSWER_CHARS = 20000; // 코드 수정안 합치기는 diff가 잘리면 안 돼서 더 길게 둔다
+  const MAX_CODE_ANSWER_CHARS = 40000; // 코드 수정안 합치기는 파일 전체 내용이 잘리면 안 돼서 더 길게 둔다
 
   function clip(text, max = MAX_ANSWER_CHARS) {
     if (text.length <= max) return text;
@@ -21,7 +21,7 @@
    * question: 원래 질문
    * answers: [{ name, text }] — 종합을 맡은 AI를 뺀 다른 AI들의 답변
    * judgeAnswered: 종합을 맡은 AI도 같은 질문에 이미 답했는지
-   * mode: 'code'면 여러 코드 수정안을 하나로 합쳐 diff로 달라고 한다 (프로젝트 모드의 "종합으로 합치기")
+   * mode: 'code'면 여러 코드 수정안을 하나로 합쳐 파일별 전체 내용으로 달라고 한다 (프로젝트 모드의 "종합으로 합치기")
    */
   function buildSynthPrompt({ question, answers, judgeAnswered, mode }) {
     const max = mode === 'code' ? MAX_CODE_ANSWER_CHARS : MAX_ANSWER_CHARS;
@@ -38,8 +38,8 @@
         '',
         `${compare} 다음을 해 주세요.`,
         '1) 각 수정안의 문제점(버그·빠진 처리)을 짧게 정리',
-        '2) 가장 좋은 부분을 합친 최종 수정안을 파일별 unified diff 코드 블록(```diff, --- a/경로 / +++ b/경로)으로 제시',
-        '3) 새 파일은 "파일: 경로" 줄 다음에 전체 내용을 코드 블록으로',
+        '2) 가장 좋은 부분을 합친 최종 수정안을 diff가 아니라, 바꾸거나 새로 만든 파일마다 "파일: 경로" 줄 다음에 그 파일의 "전체" 내용을 코드 블록 하나로 제시 (줄임 없이 처음부터 끝까지)',
+        '3) 지워야 하는 파일은 한 줄로: DELETE_FILES: 경로1, 경로2',
       ].join('\n');
     }
     return [

@@ -35,7 +35,12 @@
     expanded: new Set(['']), // 펼친 폴더
     log: [], // 적용 기록 [{ id, at, ai, files: [{ path, before, after }], reverted }]
     need: new Map(), // 패널 id -> 요청한 파일 목록
+    sent: new Map(), // 패널 id -> Map(경로 -> 그 AI가 마지막으로 받은 내용, 지워진 파일은 null)
+    stale: [], // ⟳ 뒤 AI가 아는 내용과 달라진 파일 [{ id, name, files: [{ path, text }], deleted: [경로] }]
   };
+
+  // 편집기에서 연 파일: path, base(열 때·저장할 때 디스크 내용 그대로), crlf(원래 줄바꿈), indent(Tab 키로 넣을 들여쓰기)
+  const ed = { path: null, base: null, crlf: false, indent: '  ' };
 
   const fsx = () => host.project;
   const has = () => !!project.info && !project.info.needsPermission && !!project.scan;
@@ -73,7 +78,10 @@
     project.info = info;
     project.scan = null;
     project.need.clear();
+    project.sent.clear();
+    project.stale = [];
     project.expanded = new Set(['']);
+    closeEditor();
     if (!info) return render();
     if (info.needsPermission) {
       project.open = true;
@@ -98,6 +106,7 @@
     const files = new Set(project.scan.entries.filter((e) => e.kind === 'file').map((e) => e.path));
     for (const p of [...project.checked]) if (!files.has(p)) project.checked.delete(p);
     render();
+    await checkStale();
   }
 
   async function pickProject() {
@@ -110,7 +119,8 @@
   }
 
   async function closeProject() {
-    if (!confirm('프로젝트를 닫을까요? (폴더의 파일은 그대로이고, 적용 기록은 다음에 같은 폴더를 열면 다시 보입니다)')) return;
+    const draft = edDirty() ? `\n\n편집기에서 저장하지 않은 ${ed.path}의 수정 내용은 사라집니다.` : '';
+    if (!confirm(`프로젝트를 닫을까요? (폴더의 파일은 그대로이고, 적용 기록은 다음에 같은 폴더를 열면 다시 보입니다)${draft}`)) return;
     await host.project.close().catch(() => {});
     project.open = false;
     await openProject(null);
@@ -262,6 +272,11 @@
       }
       if (e.kind === 'file') row.append(span('sz', fmtSize(e.size)));
       if (e.kind === 'dir') name.addEventListener('click', () => toggleDir(e));
+      else if (e.kind === 'file' && e.excluded?.layer !== 'L1') {
+        name.title = `${e.path}\n누르면 편집기에서 엽니다`;
+        name.addEventListener('click', () => openEditor(e.path));
+      }
+      if (e.path === ed.path) row.classList.add('editing');
       return row;
     });
     $('#psTree').replaceChildren(...rows);
@@ -366,6 +381,7 @@
     // 문서 첨부를 받지 않는 서비스(예: Duck.ai)에는 내용을 본문으로 넣는다 (넘치는 만큼 잘라서).
     for (const id of targetIds) if (!room || !acceptsDocs(id)) textById[id] = pack.inlineText;
     if (pack.note) notice(pack.note);
+    pendingSent = files; // 보내기에 성공한 패널만 renderer.js가 onProjectSent로 알려 준다
     return {
       text: pack.text,
       files: room ? [...payload.files, ...ups] : [...payload.files],
@@ -383,6 +399,116 @@
     if (pack.note) notice(pack.note);
     if (!acceptsDocs(id)) return host.sendFollowUp(id, pack.inlineText);
     return host.sendFollowUp(id, pack.text, pack.attachments.map(toAttachment), { fallbackText: pack.inlineText });
+  }
+
+  // ---------- AI가 아는 내용 · 바뀐 파일 다시 보내기 ----------
+  // 패널마다 그 AI에게 마지막으로 보낸 파일 내용을 기억해 두고, ⟳(다시 읽기) 때 로컬 파일과 비교한다.
+  // 달라진 파일이 있으면 사이드바에 "바뀐 파일 보내기"를 띄워 그 탭들에 지금 내용을 바로 보낸다.
+
+  let pendingSent = null; // projectPrepareSend가 붙인 파일 (보내기 결과를 기다리는 중)
+
+  const sameText = (a, b) => (a === null || b === null ? a === b : a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n'));
+
+  /** id 패널의 AI가 files 내용을 받았다고 기록한다. files: [{ path, text(지워졌으면 null) }] */
+  function remember(id, files) {
+    if (!files.length) return;
+    if (!project.sent.has(id)) project.sent.set(id, new Map());
+    const known = project.sent.get(id);
+    for (const f of files) known.set(f.path, f.text);
+  }
+
+  window.onProjectSent = (okIds) => {
+    const files = pendingSent;
+    pendingSent = null;
+    if (!files || !has()) return;
+    for (const id of okIds) remember(id, files);
+  };
+
+  // 새 대화를 열면 그 AI는 이전 내용을 모른다.
+  window.onPanelCleared = (id) => {
+    project.sent.delete(id);
+    project.stale = project.stale.filter((s) => s.id !== id);
+    renderSync();
+  };
+
+  /** AI마다 아는 내용과 지금 파일을 비교한다 */
+  async function checkStale() {
+    const stale = [];
+    const now = new Map(); // 같은 파일을 여러 번 읽지 않는다
+    const read = async (path) => {
+      if (!now.has(path)) now.set(path, await currentText(path).catch(() => undefined));
+      return now.get(path);
+    };
+    for (const [id, known] of project.sent) {
+      if (!panels.has(id)) continue;
+      const files = [];
+      const deleted = [];
+      for (const [path, text] of known) {
+        const cur = await read(path);
+        if (cur === undefined || sameText(cur, text)) continue; // 읽지 못한 파일(바이너리·너무 큼)은 건너뛴다
+        if (cur === null) deleted.push(path);
+        else files.push({ path, text: cur });
+      }
+      if (files.length || deleted.length) stale.push({ id, name: state.services.find((s) => s.id === id)?.name || id, files, deleted });
+    }
+    project.stale = stale;
+    renderSync();
+  }
+
+  function renderSync() {
+    const btn = $('#psSync');
+    const paths = new Set(project.stale.flatMap((s) => [...s.files.map((f) => f.path), ...s.deleted]));
+    btn.hidden = !has() || !paths.size;
+    btn.textContent = `⇪ 바뀐 파일 ${paths.size}개 → AI ${project.stale.length}곳에 보내기`;
+    btn.title = project.stale.map((s) => `${s.name}: ${[...s.files.map((f) => f.path), ...s.deleted.map((p) => `${p} (지움)`)].join(', ')}`).join('\n');
+  }
+
+  $('#psSync').addEventListener('click', () => syncStale());
+
+  /** 바뀐 파일을 AI 탭들에 보낸다. onlyPath를 주면 그 파일만. 결과: 보낸 AI 수 */
+  async function syncStale(onlyPath) {
+    if (!has()) return 0;
+    const stale = project.stale
+      .map((s) => (onlyPath ? { ...s, files: s.files.filter((f) => f.path === onlyPath), deleted: s.deleted.filter((p) => p === onlyPath) } : s))
+      .filter((s) => s.files.length || s.deleted.length);
+    if (!stale.length) return 0;
+    const summary = ['로컬에서 바뀐 파일의 지금 내용을 각 AI 탭에 보냅니다.', ''];
+    for (const s of stale) {
+      summary.push(`[${s.name}]`, listLines([...s.files.map((f) => f.path), ...s.deleted.map((p) => `${p} (지움)`)], (p) => `- ${p}`), '');
+    }
+    summary.push('보낼까요? (AI에게는 바뀐 점만 확인하고 아직 수정하지 말라고 부탁합니다)');
+    if (!confirm(summary.join('\n'))) return 0;
+    // 바뀐 내용에 비밀 정보가 새로 생겼을 수 있다.
+    const risky = new Map();
+    for (const s of stale) {
+      for (const f of s.files) {
+        if (risky.has(f.path) || project.allowSecret.has(f.path)) continue;
+        const hits = scanSecrets(f.text);
+        project.secretHits.set(f.path, hits);
+        if (hits.length) risky.set(f.path, hits);
+      }
+    }
+    let withRisky = true;
+    if (risky.size) {
+      const list = listLines([...risky], ([p, hits]) => `- ${p}: ${describeSecrets(hits)}`);
+      withRisky = confirm(`비밀 정보로 보이는 문자열이 있는 파일입니다:\n${list}\n\n이 파일들도 함께 보낼까요? (취소하면 빼고 보냅니다)`);
+      if (withRisky) for (const p of risky.keys()) project.allowSecret.add(p);
+    }
+    const failed = [];
+    let sent = 0;
+    for (const s of stale) {
+      const files = s.files.filter((f) => withRisky || !risky.has(f.path));
+      if (!files.length && !s.deleted.length) continue;
+      const res = await sendProjectFollowUp(s.id, PU.packUpdate({ files, deleted: s.deleted, mode: project.uploadMode, budget: budgetAfter() }));
+      if (res?.ok) {
+        remember(s.id, [...files, ...s.deleted.map((path) => ({ path, text: null }))]);
+        sent++;
+      } else failed.push(`${s.name}: ${res?.error || '알 수 없는 오류'}`);
+    }
+    await checkStale();
+    if (failed.length) alert(`보내지 못했습니다:\n${failed.join('\n')}`);
+    else notice('바뀐 파일을 보냈습니다');
+    return sent;
   }
 
   // ---------- NEED_FILES ----------
@@ -472,6 +598,7 @@
     p.needBtn.hidden = true;
     const res = await sendProjectFollowUp(id, PU.packFollowUp({ files, skipped, mode: project.uploadMode, budget: budgetAfter() }));
     if (!res?.ok) alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
+    else remember(id, files);
   };
 
   // ---------- 변경 제안 ----------
@@ -540,7 +667,7 @@
     head.append(span('dot ready'), span('name', ai.name), span('muted-label', ai.plans.length ? `파일 ${ai.plans.length}개 · +${add} −${del}` : '수정안 없음'));
     const list = document.createElement('div');
     list.className = 'change-list';
-    if (!ai.plans.length) list.append(span('change-empty', '이 답변에는 적용할 수정안(diff 또는 "파일: 경로" 코드 블록)이 없습니다.'));
+    if (!ai.plans.length) list.append(span('change-empty', '이 답변에는 적용할 수정안("파일: 경로" 전체 내용 코드 블록, diff, DELETE_FILES)이 없습니다.'));
     for (const { change, plan } of ai.plans) {
       const row = document.createElement('div');
       row.className = 'change-row';
@@ -556,7 +683,7 @@
         const err = span('err', plan.error);
         row.title = plan.error;
         row.append(err);
-        if (change.type === 'diff' && !change.isNew && !writeBlocked(change.path)) {
+        if (change.type === 'diff' && !change.isNew && !change.isDelete && !writeBlocked(change.path)) {
           row.append(button('전체 파일 다시 요청', '현재 내용을 주고 수정한 전체 파일로 다시 달라고 합니다', () => refetch(ai, change.path)));
         }
       }
@@ -586,6 +713,7 @@
       if (hits.length && !confirm(`${path}에 비밀 정보로 보이는 문자열이 있습니다:\n${describeSecrets(hits)}\n\n그래도 현재 내용을 ${ai.name}에게 보낼까요?`)) return;
       const res = await sendProjectFollowUp(ai.id, PU.packRefetch({ path, text, mode: project.uploadMode }));
       if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error}`);
+      remember(ai.id, [{ path, text }]);
       host.setView('panels');
     } catch (err) {
       alert(err.message);
@@ -693,6 +821,8 @@
       }
     }
     if (done.length) {
+      // 수정안을 낸 AI는 적용한 결과를 이미 안다. 다른 AI에게는 ⟳ 뒤 "바뀐 파일"로 보인다.
+      remember(ai.id, done.map((f) => ({ path: f.path, text: f.after })));
       project.log.unshift({ id: `${Date.now().toString(36)}`, at: Date.now(), ai: ai.name, files: done, reverted: false });
       project.log.length = Math.min(project.log.length, MAX_LOG);
       saveState();
@@ -744,6 +874,131 @@
     await rescan();
     if (failed.length) alert(`되돌리지 못한 파일:\n${failed.join('\n')}`);
   }
+
+  // ---------- 파일 편집 ----------
+  // 사이드바 트리에서 파일 이름을 누르면 연다. 저장하면 로컬 파일에 쓰고 적용 기록("직접 편집")에 남긴 뒤 다시 읽는다.
+  // 그러면 이 파일을 받은 적 있는 AI는 "바뀐 파일"로 잡혀, "저장하고 AI에 보내기"나 사이드바 버튼으로 바로 보낼 수 있다.
+
+  const lfOf = (text) => (text ?? '').replace(/\r\n/g, '\n');
+  const edDirty = () => !!ed.path && $('#edText').value !== lfOf(ed.base);
+
+  function guessIndent(text) {
+    if (/^\t/m.test(text)) return '\t';
+    return /^ {4}\S/m.test(text) && !/^ {2}\S/m.test(text) ? '    ' : '  ';
+  }
+
+  function edStatus(text) {
+    const dirty = edDirty();
+    $('#edStatus').dataset.dirty = dirty ? '1' : '';
+    $('#edStatus').textContent = text || (ed.path ? `${dirty ? '● 저장 안 됨' : '저장됨'} · ${ed.crlf ? 'CRLF' : 'LF'}` : '');
+  }
+
+  function closeEditor() {
+    Object.assign(ed, { path: null, base: null });
+    $('#edText').value = '';
+    $('#edPath').textContent = '';
+    edStatus();
+    if (state?.chatView === 'editor') host.setView('panels');
+  }
+
+  async function openEditor(path) {
+    if (!has()) return;
+    if (path !== ed.path && edDirty() && !confirm(`${ed.path}에 저장하지 않은 수정 내용이 있습니다. 버리고 ${path}을(를) 열까요?`)) return;
+    if (path === ed.path && ed.base !== null) return host.setView('editor');
+    let text;
+    try {
+      text = await currentText(path);
+    } catch (err) {
+      return alert(`편집기에서 열 수 없습니다: ${err.message}`);
+    }
+    if (text === null) return alert('파일이 없습니다');
+    Object.assign(ed, { path, base: text, crlf: text.includes('\r\n'), indent: guessIndent(text) });
+    $('#edText').value = lfOf(text);
+    $('#edPath').textContent = path;
+    $('#edPath').title = path;
+    edStatus();
+    host.setView('editor');
+    renderTree();
+    setTimeout(() => $('#edText').focus(), 0);
+  }
+
+  /** 저장. 결과: 저장했거나 바뀐 내용이 없으면 true, 취소·실패면 false */
+  async function saveEditor() {
+    if (!has() || !ed.path) return false;
+    const path = ed.path;
+    const block = writeBlocked(path);
+    if (block) {
+      alert(block);
+      return false;
+    }
+    let now;
+    try {
+      now = await currentText(path);
+    } catch (err) {
+      alert(`저장하지 못했습니다: ${err.message}`);
+      return false;
+    }
+    const value = $('#edText').value;
+    if (now !== ed.base) {
+      const why = now === null ? '그사이 파일이 지워졌습니다' : '편집기에서 연 뒤 다른 곳에서 파일이 바뀌었습니다';
+      if (!confirm(`${path}: ${why}.\n\n편집기 내용으로 덮어쓸까요? (취소하면 저장하지 않습니다. "다시 읽기"로 지금 내용을 볼 수 있습니다)`)) return false;
+    } else if (value === lfOf(now)) {
+      edStatus('바뀐 내용이 없습니다');
+      setTimeout(() => edStatus(), 1500);
+      return true;
+    }
+    const after = ed.crlf ? value.replace(/\n/g, '\r\n') : value; // 원래 줄바꿈(CRLF)을 지킨다
+    try {
+      await host.project.writeFile(path, after);
+    } catch (err) {
+      alert(`저장하지 못했습니다: ${err.message}`);
+      return false;
+    }
+    ed.base = after;
+    project.log.unshift({ id: `${Date.now().toString(36)}`, at: Date.now(), ai: '직접 편집', files: [{ path, before: now, after }], reverted: false });
+    project.log.length = Math.min(project.log.length, MAX_LOG);
+    saveState();
+    edStatus('저장했습니다');
+    setTimeout(() => edStatus(), 1500);
+    await rescan(); // 바뀐 파일 검사(checkStale)도 여기서 한다
+    return true;
+  }
+
+  $('#edSave').addEventListener('click', () => saveEditor());
+  $('#edSaveSend').addEventListener('click', async () => {
+    if (!(await saveEditor())) return;
+    const path = ed.path;
+    const knows = project.stale.some((s) => s.files.some((f) => f.path === path) || s.deleted.includes(path));
+    if (!knows) {
+      const known = [...project.sent.values()].some((m) => m.has(path));
+      return alert(
+        known
+          ? `${path}: AI들이 이미 지금 내용을 알고 있어 보낼 것이 없습니다.`
+          : `${path}을(를) 받은 적 있는 AI가 없습니다.\n사이드바에서 이 파일을 체크해 두면 다음 질문에 함께 보냅니다.`,
+      );
+    }
+    await syncStale(path);
+  });
+  $('#edReload').addEventListener('click', async () => {
+    if (!ed.path) return;
+    if (edDirty() && !confirm('저장하지 않은 수정 내용을 버리고 디스크에서 다시 읽을까요?')) return;
+    const path = ed.path;
+    ed.base = null;
+    ed.path = null;
+    $('#edText').value = '';
+    await openEditor(path);
+  });
+  $('#edClose').addEventListener('click', () => host.setView('panels'));
+  $('#edText').addEventListener('input', () => edStatus());
+  $('#edText').addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      saveEditor();
+    } else if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      document.execCommand('insertText', false, ed.indent); // 되돌리기(Ctrl+Z)가 되도록 execCommand로 넣는다
+    }
+  });
 
   // ---------- 화면 상태 ----------
 

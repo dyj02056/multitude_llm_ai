@@ -39,7 +39,7 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 let win = null;
 let mode = 'login'; // 'login' | 'pick' | 'chat'
-let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'history' (기록) | 'help' (단축키)
+let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'history' (기록) | 'help' (단축키)
 let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
@@ -513,7 +513,7 @@ ipcMain.handle('answer:copy', async (_e, id) => {
 });
 
 ipcMain.on('view:set', (_e, value) => {
-  if (mode === 'chat' && ['panels', 'compare', 'changes', 'history', 'help'].includes(value)) {
+  if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'history', 'help'].includes(value)) {
     chatView = value;
     pushState();
   }

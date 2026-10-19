@@ -144,3 +144,36 @@ test('훑지 않은 경로도 상위 폴더 제외를 물려받는다 (NEED_FILE
   assert.equal(m.classify('node_modules/x/y.js', false).layer, 'L1');
   assert.equal(m.classify('src/gen/t.ts', false), null);
 });
+
+test('답변 규칙은 파일별 전체 내용을 달라고 하고, 그 형식과 DELETE_FILES를 읽는다', () => {
+  assert.match(C.RULES, /전체/);
+  assert.doesNotMatch(C.RULES, /unified diff/);
+  const md = [
+    '설명입니다.',
+    '',
+    '파일: src/a.js',
+    '```js',
+    'const a = 1;',
+    '```',
+    '',
+    '**src/b.js**',
+    '```js',
+    'const b = 2;',
+    '```',
+    '',
+    '```text',
+    'DELETE_FILES: 코드블록/안은.무시',
+    '```',
+    'DELETE_FILES: `old/x.js`, ../밖.js',
+  ].join('\n');
+  const changes = X.extractChanges(md);
+  assert.deepEqual(changes.map((c) => [c.path, c.type, !!c.isDelete]), [
+    ['src/a.js', 'full', false],
+    ['src/b.js', 'full', false],
+    ['old/x.js', 'diff', true],
+  ]);
+  const dp = X.planChange(changes[2], 'x\n');
+  assert.deepEqual([dp.op, dp.ok], ['delete', true]);
+  assert.equal(X.planChange(changes[2], null).ok, false, '없는 파일은 지울 수 없다');
+  assert.equal(X.planChange(changes[0], 'const a = 0;\n').after, 'const a = 1;\n');
+});

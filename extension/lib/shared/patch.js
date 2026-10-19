@@ -1,7 +1,8 @@
 // 자동 생성 파일 — 직접 고치지 말고 원본을 고친 뒤 npm run build:ext (원본: src/shared/patch.js)
 // AI 답변(Markdown)에서 파일 수정안을 꺼내고, 현재 파일 내용에 적용한 결과를 계산한다.
-//   - ```diff 블록(unified diff, 여러 파일 가능)
-//   - "파일: 경로" 다음의 코드 블록(새 파일 또는 전체 내용)
+//   - "파일: 경로" 다음의 코드 블록(새 파일 또는 수정한 전체 내용 — 지금 답변 규칙이 요구하는 형식)
+//   - ```diff 블록(unified diff, 여러 파일 가능 — AI가 규칙과 달리 diff로 줄 때)
+//   - 코드 블록 밖의 "DELETE_FILES: 경로" 줄(파일 삭제)
 // AI가 준 diff는 줄 번호·줄 수가 틀리는 일이 많아서 줄 수를 다시 세고, jsdiff로 안 되면 문맥 찾아 바꾸기로 한 번 더 해 본다.
 // 실제 파일 쓰기는 하지 않는다 (쓰는 쪽이 계산 결과를 보고 쓴다).
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.patch)이 같이 쓴다.
@@ -133,6 +134,28 @@
     return out.join('\n');
   }
 
+  /** 코드 블록 밖의 "DELETE_FILES: 경로1, 경로2" 줄에서 지울 파일 경로들을 읽는다 */
+  function deleteRequests(md) {
+    const out = [];
+    let fence = null;
+    for (const line of String(md || '').split(/\r?\n/)) {
+      const f = line.match(/^\s*(`{3,}|~{3,})/);
+      if (f) {
+        if (!fence) fence = f[1];
+        else if (f[1][0] === fence[0] && f[1].length >= fence.length && /^\s*(`{3,}|~{3,})\s*$/.test(line)) fence = null;
+        continue;
+      }
+      if (fence) continue;
+      const m = line.match(/^\s*[*_`>-]*\s*DELETE_FILES\s*[*_`]*\s*[:：]\s*(.*)$/i);
+      if (!m) continue;
+      for (const item of m[1].split(/[,\s]+/)) {
+        const p = safeRelPath(item.replace(/^[`'"*(\[]+|[`'"*)\].,;]+$/g, ''));
+        if (p && !out.includes(p)) out.push(p);
+      }
+    }
+    return out;
+  }
+
   /**
    * 답변에서 수정안을 꺼낸다.
    * 결과: [{ path, type: 'diff', hunks, isNew, isDelete } | { path, type: 'full', content }]  (같은 파일은 뒤의 것이 이긴다)
@@ -159,6 +182,7 @@
         changes.push({ path: label, type: 'full', content: b.body });
       }
     }
+    for (const path of deleteRequests(md)) changes.push({ path, type: 'diff', hunks: [], isNew: false, isDelete: true });
     const byPath = new Map();
     for (const c of changes) byPath.set(c.path, c);
     return [...byPath.values()];

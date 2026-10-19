@@ -81,7 +81,7 @@
   // ---------- 상태 ----------
 
   let mode = 'pick'; // 'pick' | 'chat'  (확장 프로그램은 크롬에 로그인된 계정을 그대로 써서 로그인 화면이 없다)
-  let chatView = 'panels'; // 'panels' | 'compare' | 'changes' | 'history' | 'help'
+  let chatView = 'panels'; // 'panels' | 'compare' | 'changes' | 'editor' | 'history' | 'help'
   let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
   let tabId = null;
   const panels = new Map(); // id -> { iframe, frameId, origin, url, retried, helloTimer, loginTimer }
@@ -527,7 +527,7 @@
       return { copied, total };
     },
     setView: (value) => {
-      if (mode === 'chat' && ['panels', 'compare', 'changes', 'history', 'help'].includes(value)) {
+      if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'history', 'help'].includes(value)) {
         chatView = value;
         pushState();
       }
