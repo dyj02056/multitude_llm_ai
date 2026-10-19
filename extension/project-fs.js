@@ -6,7 +6,7 @@
 
 (() => {
   const { looksBinary, MAX_FILE_BYTES } = MLA.projectIgnore;
-  const { safeRelPath } = MLA.patch;
+  const { safeRelPath, isGitInternal } = MLA.patch;
 
   const DB = 'mla-project';
   const STORE = 'handles';
@@ -129,8 +129,14 @@
     return { text: await file.text(), size: file.size };
   }
 
+  // git 내부(.git 안쪽)에는 쓰거나 지우지 않는다 (훅·설정으로 코드가 실행될 수 있음)
+  function refuseGitInternal(rel) {
+    if (isGitInternal(rel)) throw new Error(`git 내부 파일은 바꿀 수 없습니다: ${rel}`);
+  }
+
   async function writeFile(rel, text) {
     if (typeof text !== 'string') throw new Error('쓸 내용이 없습니다');
+    refuseGitInternal(rel);
     const segs = parts(rel);
     const dir = await dirHandle(segs.slice(0, -1), true);
     const fh = await dir.getFileHandle(segs[segs.length - 1], { create: true });
@@ -141,6 +147,7 @@
   }
 
   async function deleteFile(rel) {
+    refuseGitInternal(rel);
     const segs = parts(rel);
     const dir = await dirHandle(segs.slice(0, -1));
     await dir.removeEntry(segs[segs.length - 1]);

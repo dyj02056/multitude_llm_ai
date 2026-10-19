@@ -28,6 +28,16 @@
     return parts.join('/');
   }
 
+  /**
+   * git 내부 경로인지 (.git 폴더·파일 안쪽). 이런 곳에 쓰면 훅(.git/hooks)·설정(.git/config)으로 git을 쓸 때 코드가 실행된다.
+   * Windows 짧은 이름(GIT~1)도 같은 폴더를 가리키므로 막는다. 읽기(.git/info/exclude 등)는 막지 않고 쓰기·지우기에만 쓴다.
+   */
+  function isGitInternal(p) {
+    const clean = safeRelPath(p);
+    if (clean === null) return false;
+    return clean.split('/').some((x) => /^\.git$/i.test(x) || /^git~\d+$/i.test(x));
+  }
+
   // ---------- 코드 블록 찾기 ----------
 
   /** Markdown의 울타리 코드 블록: [{ lang, body, before: 블록 바로 앞 두 줄 }] */
@@ -184,7 +194,7 @@
     }
     for (const path of deleteRequests(md)) changes.push({ path, type: 'diff', hunks: [], isNew: false, isDelete: true });
     const byPath = new Map();
-    for (const c of changes) byPath.set(c.path, c);
+    for (const c of changes) if (!isGitInternal(c.path)) byPath.set(c.path, c);
     return [...byPath.values()];
   }
 
@@ -276,6 +286,7 @@
     [/^\.idea\//, 'JetBrains 실행 설정'],
     [/(^|\/)\.envrc$/, 'direnv (폴더에 들어가면 실행)'],
     [/(^|\/)\.gitattributes$/, 'git 필터 설정'],
+    [/(^|\/)\.gitmodules$/, 'git 하위 모듈 설정 (받아 올 주소)'],
     [/(^|\/)(GNU)?[Mm]akefile$|\.mk$/, 'Makefile'],
     [/(^|\/)Dockerfile[^/]*$|(^|\/)[^/]*\.dockerfile$/i, 'Dockerfile'],
     [/(^|\/)(docker-)?compose[^/]*\.ya?ml$/, 'Docker Compose 설정'],
@@ -318,5 +329,5 @@
       .join('\n');
   }
 
-  return { safeRelPath, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch, executionRisk };
+  return { safeRelPath, isGitInternal, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch, executionRisk };
 });

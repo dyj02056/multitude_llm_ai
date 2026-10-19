@@ -12,7 +12,7 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { dialog, app } = require('electron');
 const { looksBinary, MAX_FILE_BYTES } = require('../shared/project-ignore');
-const { safeRelPath } = require('../shared/patch');
+const { safeRelPath, isGitInternal } = require('../shared/patch');
 
 let root = null; // 고른 폴더 (절대 경로)
 let realRoot = null; // 바로가기 링크를 푼 실제 경로
@@ -97,8 +97,14 @@ async function readFile(rel, { maxBytes = MAX_FILE_BYTES } = {}) {
   return { text: buf.toString('utf8'), size: st.size };
 }
 
+/** git 내부(.git 안쪽)에는 쓰거나 지우지 않는다 (훅·설정으로 코드가 실행될 수 있음) */
+function refuseGitInternal(rel) {
+  if (isGitInternal(rel)) throw new Error(`git 내부 파일은 바꿀 수 없습니다: ${rel}`);
+}
+
 async function writeFile(rel, text) {
   if (typeof text !== 'string') throw new Error('쓸 내용이 없습니다');
+  refuseGitInternal(rel);
   const abs = await resolveSafe(rel);
   await fsp.mkdir(path.dirname(abs), { recursive: true });
   await resolveSafe(rel); // 폴더를 만든 뒤에도 안쪽인지 다시 본다
@@ -107,6 +113,7 @@ async function writeFile(rel, text) {
 }
 
 async function deleteFile(rel) {
+  refuseGitInternal(rel);
   const abs = await resolveSafe(rel);
   await fsp.unlink(abs);
   return true;
