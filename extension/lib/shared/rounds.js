@@ -159,7 +159,8 @@
         id,
         text,
         async (state) => {
-          if (!r || state !== 'done') return;
+          // noHistory: 기록에 남기지 않는 요청 (스킬 압축 등 — 질문의 답변을 덮어쓰지 않게)
+          if (!r || state !== 'done' || opts.noHistory) return;
           const { text: answer, md } = await readAnswer(id);
           a.history.setAnswer(r.historyId, id, { name: nameOf(id), state, text: answer, md });
         },

@@ -108,6 +108,10 @@
         <button data-libtab="templates">템플릿</button>
         <button data-libtab="skills">스킬</button>
       </div>
+      <label id="libWarn" class="check" title="보내는 글이 이 길이 이상이면 압축 권장 표시를 띄웁니다 (강력 권장은 2배, 합계 확인 창은 약 1.9배, &quot;매 질문마다&quot;면 기준의 0.6배)">압축 권장: 스킬 하나
+        <input id="libWarnOne" type="number" min="1000" max="20000" step="500" />자 · 합계
+        <input id="libWarnTotal" type="number" min="2000" max="30000" step="500" />자
+      </label>
       <label id="libMode" class="check" title="스킬 지침을 언제 붙일지">붙이는 때
         <select id="libSkillMode">
           <option value="first">새 대화 첫 질문에만</option>
@@ -129,6 +133,19 @@
           <label class="lib-field"><span class="muted-label">이름</span><input id="libName" maxlength="60" spellcheck="false" /></label>
           <label class="lib-field"><span id="libHintLabel" class="muted-label"></span><input id="libHint" maxlength="200" spellcheck="false" /></label>
           <label class="lib-field grow"><span id="libTextLabel" class="muted-label"></span><textarea id="libText" spellcheck="false"></textarea></label>
+          <div id="libSkillOpts" class="lib-skill-opts" hidden>
+            <label class="check" title="압축본이 있으면 고를 수 있습니다">보낼 때
+              <select id="libUseCompact">
+                <option value="compact">압축본</option>
+                <option value="body">원문 (정리해서)</option>
+              </select>
+            </label>
+            <label class="check" title="원문을 보낼 때 '예시' · 'Example' 제목 아래 절을 뺍니다"><input type="checkbox" id="libDropEx" /> 예시 절 빼기</label>
+            <label class="check"><input type="checkbox" id="libNoWarn" /> 이 스킬은 압축 권장 알림 끄기</label>
+            <span class="spacer"></span>
+            <button id="libCompactDel" class="danger" title="압축본만 지웁니다 (원문은 그대로)">압축본 지우기</button>
+            <button id="libCompress" class="accent" title="열린 패널의 AI에게 압축을 부탁해 압축본을 만듭니다"></button>
+          </div>
           <div class="lib-actions">
             <span id="libInfo" class="muted-label"></span>
             <span class="spacer"></span>
@@ -140,6 +157,35 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section id="compressView" class="only-compress">
+    <div class="compare-head">
+      <span class="muted-label">스킬 압축</span>
+      <span id="cmpTitle" class="compare-question"></span>
+      <label class="check">맡길 AI <select id="cmpTarget"></select></label>
+      <label class="check">목표 <input id="cmpLen" type="number" min="200" max="20000" step="100" />자 이내</label>
+      <label class="check" title="일반 질문과 섞이지 않게 그 패널에서 새 대화를 연 뒤 요청합니다"><input type="checkbox" id="cmpNew" checked /> 새 대화에서</label>
+      <button id="cmpRun" class="primary">압축 요청</button>
+      <span class="spacer"></span>
+      <button id="cmpClose">라이브러리로 돌아가기</button>
+    </div>
+    <div id="cmpStatus" class="cmp-status"></div>
+    <div class="cmp-body">
+      <div class="cmp-col">
+        <span class="muted-label">원문 <span id="cmpSrcCount"></span></span>
+        <pre id="cmpSrc" class="vars-preview"></pre>
+      </div>
+      <div class="cmp-col">
+        <span class="muted-label">압축본 (고칠 수 있음) <span id="cmpOutCount"></span></span>
+        <textarea id="cmpOut" spellcheck="false"></textarea>
+      </div>
+    </div>
+    <div class="lib-actions">
+      <span class="muted-label">저장하면 이 스킬 항목에 압축본으로 들어갑니다 (원문은 그대로 · 파일로 내려받지 않음)</span>
+      <span class="spacer"></span>
+      <button id="cmpSave" class="primary" disabled>저장</button>
     </div>
   </section>
 
@@ -254,12 +300,19 @@
         <label class="check"><input type="checkbox" id="autoSynth" /> 완료 후 자동</label>
       </div>
     </div>
-    <div class="attach-row">
+    <div class="attach-row" id="attachRow">
       <button id="attachBtn" title="파일 첨부 — 끌어다 놓기나 Ctrl+V로도 올릴 수 있습니다">📎 파일</button>
       <input type="file" id="fileInput" multiple hidden />
       <div id="attachList" class="attach-list"></div>
       <span id="attachHint" class="attach-hint"></span>
-      <label class="skill-chip" title="고른 스킬의 지침을 질문 앞에 붙여 보냅니다">🧩 <select id="skillSelect" aria-label="스킬"></select></label>
+      <button id="skillBtn" class="skill-btn" title="고른 스킬(최대 3개)의 지침을 질문 앞에 붙여 보냅니다">🧩 스킬 없음</button>
+      <div class="skill-bar">
+        <span class="muted-label">스킬 (켠 순서 = 우선순위)</span>
+        <div id="skillChips" class="skill-chips"></div>
+        <span id="skillTotal" class="muted-label skill-total"></span>
+        <button id="skillBarManage" title="라이브러리에서 스킬을 만들고 고칩니다">📚 관리</button>
+        <button id="skillBarClose" title="닫기">✕</button>
+      </div>
       <label id="projectChip" class="project-chip" hidden title="켜 두면 질문에 프로젝트 구조와 고른 파일 내용을 함께 보냅니다">
         <input type="checkbox" id="projectInclude" /> <span id="projectChipText"></span>
       </label>

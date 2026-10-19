@@ -542,7 +542,7 @@
       return { copied, total };
     },
     setView: (value) => {
-      if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'library', 'vars', 'history', 'help'].includes(value)) {
+      if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'library', 'vars', 'compress', 'history', 'help'].includes(value)) {
         chatView = value;
         pushState();
       }

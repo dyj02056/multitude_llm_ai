@@ -460,6 +460,7 @@ function sendOpts(opts) {
   }
   if (Array.isArray(opts.plainIds)) out.plainIds = SERVICES.map((s) => s.id).filter((id) => opts.plainIds.includes(id));
   if (Number.isInteger(opts.userFileCount) && opts.userFileCount >= 0) out.userFileCount = opts.userFileCount;
+  if (opts.noHistory === true) out.noHistory = true;
   return out;
 }
 
@@ -548,7 +549,7 @@ ipcMain.handle('answer:copy', async (_e, id) => {
 });
 
 ipcMain.on('view:set', (_e, value) => {
-  if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'git', 'library', 'vars', 'history', 'help'].includes(value)) {
+  if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'git', 'library', 'vars', 'compress', 'history', 'help'].includes(value)) {
     chatView = value;
     pushState();
   }

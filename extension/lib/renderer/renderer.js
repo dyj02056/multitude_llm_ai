@@ -203,6 +203,7 @@ setInterval(tickAnswerTimers, 1000);
 host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching }) => {
   const p = panels.get(id);
   if (!p) return;
+  window.onLibPanelStatus?.(id, { send, answer, error }); // 스킬 압축 요청의 답변을 기다리는 중이면 library.js가 본다
   if (answer === 'clear') {
     p.attachBadge.hidden = true;
     p.needBtn.hidden = true;
@@ -730,6 +731,7 @@ async function send() {
     if (!payload) return;
     // 스킬: 이 대화에 아직 받지 않은 패널(또는 "매 질문마다"면 모두)의 글 앞에 지침을 붙인다 (library.js)
     const skill = window.libSkillPrefix?.(ids);
+    if (skill?.cancel) return; // 지침이 너무 길어 사용자가 보내기를 멈췄다 (입력 내용은 남김)
     if (skill) payload = { ...payload, opts: { ...payload.opts, prefixById: skill.prefixById } };
     const results = await host.sendPrompt(payload.text, ids, payload.files, payload.opts);
     window.onSkillSent?.(skill, results.filter((r) => r.ok).map((r) => r.id));

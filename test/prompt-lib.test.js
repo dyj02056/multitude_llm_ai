@@ -46,7 +46,7 @@ test('라이브러리 정리: 모양 틀린 항목 버림 · 길이 자름 · �
   assert.notEqual(lib.templates[1].id, '../x');
   assert.equal(lib.templates[1].text.length, P.LIMITS.templateText);
   assert.equal(lib.skills.length, 1);
-  assert.equal(lib.activeSkill, null);
+  assert.deepEqual(lib.activeSkills, []);
   assert.equal(lib.skillMode, 'first');
   assert.deepEqual(lib.lastVars, { 'u-1': { 언어: 'TS' } });
 });
@@ -59,4 +59,105 @@ test('내보내기 → 가져오기: 새 id, 다른 파일은 거절', () => {
   assert.equal(back.skills[0].name, 'S');
   assert.throws(() => P.importLibrary('not json'), /JSON/);
   assert.throws(() => P.importLibrary('{"a":1}'), /라이브러리 파일이 아닙니다/);
+});
+
+// ---------- v0.9.1: 여러 스킬 · 정리 · 압축 ----------
+
+const sk = (id, name, body, extra = {}) => ({ id, name, description: '', body, compact: '', compactOf: '', useCompact: true, dropExamples: false, noWarn: false, ...extra });
+
+test('켠 스킬: 예전 activeSkill 옮기기 · 없는 id·중복 제거 · 최대 3개 · 권장 기준 범위', () => {
+  const skills = ['s-1', 's-2', 's-3', 's-4'].map((id) => ({ id, name: id, body: 'b' }));
+  assert.deepEqual(P.normalizeLibrary({ skills, activeSkill: 's-2' }).activeSkills, ['s-2']);
+  assert.deepEqual(P.normalizeLibrary({ skills, activeSkills: ['s-4', 's-9', 's-4', 's-1', 's-2', 's-3'] }).activeSkills, ['s-4', 's-1', 's-2']);
+  assert.deepEqual(P.normalizeLibrary({}).compressWarn, { one: 5000, total: 8000 });
+  assert.deepEqual(P.normalizeLibrary({ compressWarn: { one: 10, total: 99999 } }).compressWarn, { one: 1000, total: 30000 });
+});
+
+test('규칙 기반 정리: 주석·구분선·굵게·빈 줄·같은 문장 반복 · 코드 블록은 그대로 · 예시 절 빼기', () => {
+  const body = [
+    '<!-- 메모 -->',
+    '# 규칙',
+    '**반드시** 한국어로 답한다.   ',
+    '',
+    '',
+    '',
+    '---',
+    '모든 답변 끝에 출처를 붙인다. 이것은 중요하다.',
+    '모든 답변 끝에 출처를 붙인다. 이것은 중요하다.',
+    '```',
+    '**코드는 그대로**',
+    '```',
+    '## 예시',
+    '질문: 안녕 → 답: 안녕하세요',
+    '## 출력 형식',
+    '표로 쓴다.',
+  ].join('\n');
+  const clean = P.cleanSkill(body);
+  assert.ok(!clean.includes('메모') && !clean.includes('---'));
+  assert.ok(clean.includes('반드시 한국어로') && clean.includes('**코드는 그대로**'));
+  assert.equal(clean.split('모든 답변 끝에 출처').length, 2, '같은 문장은 한 번');
+  assert.ok(!/\n{3,}/.test(clean));
+  assert.ok(clean.includes('## 예시'));
+  const noEx = P.cleanSkill(body, { dropExamples: true });
+  assert.ok(!noEx.includes('안녕하세요') && noEx.includes('## 출력 형식') && noEx.includes('표로 쓴다.'));
+});
+
+test('보내는 글: 압축본 우선 · 원문을 바꾸면 압축본이 오래됨', () => {
+  const s = sk('s-1', 'A', '원문 지침입니다', { compact: '압축본', compactOf: P.textHash('원문 지침입니다') });
+  assert.equal(P.sendBody(s), '압축본');
+  assert.equal(P.sendBody({ ...s, useCompact: false }), '원문 지침입니다');
+  assert.equal(P.compactStale(s), false);
+  assert.equal(P.compactStale({ ...s, body: '고친 원문' }), true);
+});
+
+test('압축 권장 단계: 기본 5,000 / 10,000자, 매 질문마다는 0.6배', () => {
+  const w = { one: 5000, total: 8000 };
+  assert.equal(P.compressLevel(1500, w, 'first'), 'none');
+  assert.equal(P.compressLevel(3000, w, 'first'), 'info');
+  assert.equal(P.compressLevel(5000, w, 'first'), 'warn');
+  assert.equal(P.compressLevel(10000, w, 'first'), 'strong');
+  assert.equal(P.compressLevel(3000, w, 'every'), 'warn');
+  assert.deepEqual(P.warnLimits(w, 'first'), { info: 2000, one: 5000, strong: 10000, total: 8000, totalAlert: 15000 });
+  assert.deepEqual(P.warnLimits(w, 'every'), { info: 2000, one: 3000, strong: 6000, total: 5000, totalAlert: 9375 });
+});
+
+test('묶음 지침: 1개는 예전 모양, 여러 개는 번호와 우선순위 · 합계 한도', () => {
+  const a = sk('s-1', '리뷰어', '리뷰 규칙');
+  const b = sk('s-2', '보안', '보안 규칙');
+  assert.match(P.skillPrefix([a]), /^### 지침 \(스킬: 리뷰어\)/);
+  const two = P.skillPrefix([a, b]);
+  assert.match(two, /스킬 2개 — 위에 있는 것이 우선/);
+  assert.ok(two.indexOf('#### 1. 리뷰어') < two.indexOf('#### 2. 보안'));
+  assert.match(two, /### 질문\n\n$/);
+  assert.equal(P.prefixSize([a, b]).over, false);
+  const big = sk('s-3', '긴 것', 'x'.repeat(20000));
+  assert.equal(P.prefixSize([big, { ...big, id: 's-4' }]).over, true);
+});
+
+test('패널별 붙일 글: 처음이면 전부 · 같으면 없음 · 바뀌면 바뀐 점만 · 매 질문마다는 항상 · 모두 끄면 그만 따르라고', () => {
+  const a = sk('s-1', '리뷰어', '리뷰 규칙');
+  const b = sk('s-2', '보안', '보안 규칙');
+  const names = { 's-1': '리뷰어', 's-2': '보안' };
+  const nameOf = (id) => names[id];
+  assert.deepEqual(P.prefixFor([a, b], null, 'first', nameOf).ids, ['s-1', 's-2']);
+  assert.equal(P.prefixFor([a, b], ['s-1', 's-2'], 'first', nameOf), null);
+  const changed = P.prefixFor([b], ['s-1'], 'first', nameOf);
+  assert.match(changed.text, /따르지 마: "리뷰어"/);
+  assert.match(changed.text, /#### 보안\n보안 규칙/);
+  assert.deepEqual(changed.ids, ['s-2']);
+  assert.match(P.prefixFor([b, a], ['s-1', 's-2'], 'first', nameOf).text, /스킬 2개/, '순서만 바뀌면 다시 전부');
+  assert.ok(P.prefixFor([a], ['s-1'], 'every', nameOf));
+  const off = P.prefixFor([], ['s-1'], 'first', nameOf);
+  assert.match(off.text, /따르지 마: "리뷰어"/);
+  assert.deepEqual(off.ids, []);
+  assert.equal(P.prefixFor([], [], 'first', nameOf), null);
+  assert.equal(P.prefixFor([], null, 'first', nameOf), null);
+});
+
+test('압축 요청 글과 답변에서 압축본 꺼내기', () => {
+  const req = P.compressRequest(sk('s-1', '리뷰어', '**규칙** 하나'), 1200);
+  assert.match(req, /1,200자 이내/);
+  assert.match(req, /규칙 하나/);
+  assert.equal(P.extractCompressed('설명\n```markdown\n- 규칙 1\n- 규칙 2\n```\n끝'), '- 규칙 1\n- 규칙 2');
+  assert.equal(P.extractCompressed('- 코드 블록 없이 준 답'), '- 코드 블록 없이 준 답');
 });

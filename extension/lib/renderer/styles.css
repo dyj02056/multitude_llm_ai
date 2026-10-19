@@ -473,9 +473,6 @@ body[data-view="library"] #panels, body[data-view="vars"] #panels { display: non
 .lib-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .lib-actions button[hidden] { display: none; }
 #libUse { border-color: var(--accent); color: #9ec0fa; }
-.skill-chip { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); flex: none; }
-#skillSelect { max-width: 170px; font-size: 12px; }
-#skillSelect.on { border-color: #c47ae0; color: #e0b0f5; }
 .vars-form { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; max-width: 900px; }
 .vars-fields { display: flex; flex-direction: column; gap: 6px; }
 .var-row { display: flex; align-items: center; gap: 8px; }
@@ -485,7 +482,7 @@ body[data-view="library"] #panels, body[data-view="vars"] #panels { display: non
   flex: 1; min-height: 60px; margin: 0; overflow: auto; white-space: pre-wrap; word-break: break-word;
   background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font: 12.5px/1.45 "Cascadia Mono", Consolas, monospace; user-select: text;
 }
-#skillSelect, #libSkillMode {
+#libSkillMode, #libUseCompact, #cmpTarget {
   background: #20242f; color: var(--text); border: 1px solid var(--border);
   border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12px;
 }
@@ -496,3 +493,55 @@ body[data-view="library"] #panels, body[data-view="vars"] #panels { display: non
 #toolbar > .hint { min-width: 0; flex: 0 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #toolbar > .spacer { flex: 1 1 0; min-width: 0; }
 @media (max-width: 1500px) { #toolbar > .hint { display: none; } }
+
+/* ---------- 스킬 여러 개 (🧩 칩 줄) · 압축 ---------- */
+.skill-btn { flex: none; font-size: 12px; padding: 2px 8px; max-width: 220px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.skill-btn.on { border-color: #c47ae0; color: #e0b0f5; }
+.skill-btn.warn::after { content: ' 🟡'; }
+/* 칩 줄은 첨부 줄 자리에 펼친다 (공통 입력창 안이라 웹 패널에 가려지지 않음) */
+.skill-bar { display: none; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+#attachRow.skill-open > :not(.skill-bar):not(#skillBtn) { display: none !important; }
+#attachRow.skill-open .skill-bar { display: flex; }
+.skill-chips { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.skill-chip-btn { flex: none; font-size: 12px; padding: 1px 8px; border-radius: 12px; white-space: nowrap; }
+.skill-chip-btn.on { border-color: #c47ae0; color: #e0b0f5; background: #2a1f33; }
+.skill-chip-btn.lv-warn { box-shadow: inset 0 -2px 0 #e0a23b; }
+.skill-chip-btn.lv-strong, .skill-chip-btn.lv-stale { box-shadow: inset 0 -2px 0 #e0703b; }
+.skill-chip-btn:disabled { opacity: 0.45; }
+.skill-total { flex: none; white-space: nowrap; }
+.skill-total.warn { color: #e0a23b; }
+.skill-bar > button { flex: none; font-size: 12px; padding: 1px 8px; }
+.lib-row.lv-warn .lib-row-sub { color: #e0a23b; }
+.lib-row.lv-strong .lib-row-sub, .lib-row.lv-stale .lib-row-sub { color: #e0703b; }
+.lib-row.lv-compact .lib-row-sub { color: #6bd67a; }
+.lib-mini { flex: none; font-size: 11px; padding: 0 5px; }
+#libInfo[data-level="warn"] { color: #e0a23b; }
+#libInfo[data-level="strong"] { color: #e0703b; }
+#libWarn[hidden] { display: none; }
+#libWarn input { width: 72px; background: #20242f; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px; font: inherit; font-size: 12px; }
+.lib-skill-opts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+.lib-skill-opts[hidden] { display: none; }
+.lib-skill-opts .spacer { flex: 1; }
+.lib-skill-opts button[hidden] { display: none; }
+#libCompress { border-color: var(--accent); color: #9ec0fa; }
+.only-compress { display: none; }
+body[data-mode="chat"][data-view="compress"] .only-compress { display: flex; }
+body[data-view="compress"] #panels { display: none !important; }
+#compressView {
+  position: absolute; left: 0; right: 0; top: 44px; bottom: 132px;
+  flex-direction: column; gap: 8px; padding: 8px;
+}
+#compressView .spacer { flex: 1; }
+#cmpLen { width: 80px; background: #20242f; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px; font: inherit; font-size: 12px; }
+.cmp-status { font-size: 12px; color: var(--muted); }
+.cmp-status[data-kind="error"] { color: #f0a0a0; }
+.cmp-status[data-kind="ok"] { color: #6bd67a; }
+.cmp-body { flex: 1; min-height: 0; display: flex; gap: 8px; }
+.cmp-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cmp-col .vars-preview { flex: 1; min-height: 0; }
+#cmpOut {
+  flex: 1; min-height: 0; resize: none; user-select: text;
+  background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font: 12.5px/1.45 "Cascadia Mono", Consolas, monospace;
+}
+#cmpOut:focus { outline: none; border-color: var(--accent); }
