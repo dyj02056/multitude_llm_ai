@@ -261,7 +261,7 @@
   /** 파일 종류: 'image' | 'document' */
   const fileKind = (type) => (/^image\//.test(type || '') ? 'image' : 'document');
 
-  const MAX_SELECTED = 4; // 한 번에 열 수 있는 모델 수 (2×2 격자 / 1×4 가로)
+  const MAX_SELECTED = 6; // 한 번에 열 수 있는 모델 수 (배치는 shared/layout.js). 처음 값은 4개
   const DEFAULT_SELECTED = ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
   const RENAMED = { groq: 'grok' }; // 예전 설정에 남은 서비스 id (없어진 poe 등은 normalizeSelected가 뺀다)
 

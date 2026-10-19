@@ -16,7 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { SERVICES } = require('../src/shared/services');
+const { SERVICES, MAX_SELECTED } = require('../src/shared/services');
 const { renderPng } = require('./make-icon');
 const pkg = require('../package.json');
 
@@ -28,7 +28,7 @@ const GENERATED = '자동 생성 파일 — 직접 고치지 말고 원본을 �
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 
 // 앱 탭(app.html)이 읽는 공통 모듈. 순서가 중요하다 (rounds.js는 synth.js를 쓴다).
-const APP_SHARED = ['services', 'synth', 'shortcuts', 'watch', 'history-core', 'remote-core', 'rounds'];
+const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'remote-core', 'rounds'];
 // 서비스 페이지(content script)가 읽는 공통 모듈
 const CONTENT_SHARED = ['page', 'markdown', 'shortcuts'];
 const ICON_SIZES = [16, 32, 48, 128];
@@ -101,7 +101,8 @@ function buildManifest() {
     name: 'Multitude LLM',
     // 크롬은 숫자 버전만 받는다 (예: 0.2.0)
     version: pkg.version.replace(/[^0-9.].*$/, ''),
-    description: `${SERVICES.map((s) => s.name).join(' · ')} 웹 채팅을 한 탭에서 최대 4개까지 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.`,
+    // 스토어 설명은 132자까지라 앞의 세 서비스만 이름을 쓴다
+    description: `${SERVICES.slice(0, 3).map((s) => s.name).join(' · ')} 등 ${SERVICES.length}개 AI 웹 채팅을 한 탭에 최대 ${MAX_SELECTED}개 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.`,
     minimum_chrome_version: '116',
     icons: Object.fromEntries(ICON_SIZES.map((s) => [s, `icons/icon-${s}.png`])),
     action: {

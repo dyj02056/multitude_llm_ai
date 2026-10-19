@@ -262,26 +262,24 @@
     pushState();
   }
 
-  // Electron 앱(main.js computeRects)과 같은 배치: 격자는 4개일 때 2×2, 가로는 한 줄에 모두.
+  // Electron 앱(main.js computeRects)과 같은 배치 (shared/layout.js)
+  let focusId = null; // 크게 보는 패널 (⤢). 나머지 iframe은 크기를 그대로 둔 채 화면 밖으로 옮긴다
   function computeRects() {
     if (mode !== 'chat') return [];
     const side = sidebarOpen ? SIDEBAR_W : 0;
-    const w = window.innerWidth - side;
-    const h = window.innerHeight;
+    const box = { x: side, y: TOOLBAR_H, width: window.innerWidth - side, height: window.innerHeight - TOOLBAR_H - COMPOSER_H };
     const ids = SERVICES.map((s) => s.id).filter((id) => panels.has(id));
-    const n = ids.length;
-    const cols = prefs.layout === 'row' || n <= 3 ? n : 2;
-    const rows = Math.ceil(n / cols);
-    const cellW = Math.floor((w - GAP * (cols + 1)) / cols);
-    const panelsH = h - TOOLBAR_H - COMPOSER_H;
-    const cellH = Math.floor((panelsH - GAP * (rows + 1)) / rows);
+    if (focusId && !ids.includes(focusId)) focusId = null;
+    const cells = MLA.layout.placeCells(prefs.layout, ids.length, box, GAP);
+    const [big] = MLA.layout.placeCells('grid', 1, box, GAP);
     return ids.map((id, i) => {
-      const x = side + GAP + (i % cols) * (cellW + GAP);
-      const y = TOOLBAR_H + GAP + Math.floor(i / cols) * (cellH + GAP);
+      const frame = focusId === id ? big : cells[i];
       return {
         id,
-        frame: { x, y, width: cellW, height: cellH },
-        content: { x, y: y + HEADER_H, width: cellW, height: Math.max(0, cellH - HEADER_H) },
+        frame,
+        hidden: !!focusId && focusId !== id,
+        focused: focusId === id,
+        content: { x: frame.x, y: frame.y + HEADER_H, width: frame.width, height: Math.max(0, frame.height - HEADER_H) },
       };
     });
   }
@@ -295,12 +293,12 @@
       const p = panels.get(r.id);
       if (!p) continue;
       Object.assign(p.iframe.style, {
-        left: `${showPanels ? r.content.x : -20000}px`,
+        left: `${showPanels && !r.hidden ? r.content.x : -20000}px`,
         top: `${r.content.y}px`,
         width: `${r.content.width}px`,
         height: `${r.content.height}px`,
       });
-      p.iframe.tabIndex = showPanels ? 0 : -1;
+      p.iframe.tabIndex = showPanels && !r.hidden ? 0 : -1;
     }
     if (!rects.length) for (const p of panels.values()) p.iframe.style.left = '-20000px';
     if (!showPanels && framesEl.contains(document.activeElement)) document.activeElement.blur();
@@ -579,11 +577,16 @@
     // 프로젝트 모드: 고른 폴더 읽기·쓰기 (project-fs.js, File System Access API)
     project: window.MLA_PROJECT_FS,
     setLayout: (value) => {
-      if (value === 'grid' || value === 'row') {
+      if (MLA.layout.LAYOUTS.includes(value)) {
         prefs.layout = value;
+        focusId = null;
         savePrefs();
         pushState();
       }
+    },
+    setFocus: (id) => {
+      focusId = typeof id === 'string' && panels.has(id) && focusId !== id ? id : null;
+      pushState();
     },
     panelAction,
     on: (channel, fn) => listeners[channel]?.push(fn),
@@ -594,6 +597,7 @@
   async function init() {
     fixButtonTitles();
     prefs = { ...prefs, ...(await load('prefs', {})) };
+    prefs.layout = MLA.layout.normalizeLayout(prefs.layout);
     // 예전 설정(없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
     prefs.selected = normalizeSelected(prefs.selected);
     if (!SERVICES.some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];

@@ -73,7 +73,7 @@ function updatePickLimit() {
     box.disabled = full && !box.checked;
     box.closest('.model').classList.toggle('disabled', box.disabled);
   }
-  $('#pickCount').textContent = `${count} / ${state.maxSelected} 선택`;
+  $('#pickCount').textContent = `${count} / ${state.maxSelected} 선택${count > 4 ? ' · 패널마다 메모리를 수백 MB 씁니다' : ''}`;
   $('#pickCount').classList.toggle('full', full);
 }
 
@@ -97,6 +97,10 @@ function syncPanels() {
   for (const r of state.rects) {
     let p = panels.get(r.id);
     if (!p) p = createPanel(state.services.find((s) => s.id === r.id));
+    p.el.hidden = !!r.hidden;
+    p.el.classList.toggle('focused', !!r.focused);
+    p.focusBtn.textContent = r.focused ? '⤡' : '⤢';
+    p.focusBtn.title = r.focused ? '원래 배치로 돌아가기' : '이 패널만 크게 보기';
     Object.assign(p.el.style, {
       left: `${r.frame.x}px`,
       top: `${r.frame.y}px`,
@@ -125,6 +129,7 @@ function createPanel(svc) {
   const loginBtn = button(UI.loginButton.label, UI.loginButton.title, () => host.panelAction(svc.id, 'login'));
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
+  const focusBtn = button('⤢', '이 패널만 크게 보기', () => host.setFocus(svc.id));
 
   head.append(
     dot,
@@ -138,6 +143,7 @@ function createPanel(svc) {
       const r = await host.copyAnswer(svc.id);
       flash(status, r.copied ? '답변을 복사했습니다' : '복사할 답변이 없습니다');
     }),
+    focusBtn,
     button('＋', '새 대화', () => host.panelAction(svc.id, 'newchat')),
     button('←', '뒤로', () => host.panelAction(svc.id, 'back')),
     button('⌂', '처음 주소로', () => host.panelAction(svc.id, 'home')),
@@ -146,7 +152,10 @@ function createPanel(svc) {
   if (UI.devtools) head.append(button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')));
   el.append(head);
   panelsEl.append(el);
-  const p = { el, dot, url, status, loginBtn, attachBadge, needBtn };
+  head.addEventListener('dblclick', (e) => {
+    if (!e.target.closest('button')) host.setFocus(svc.id); // 머리줄 빈 곳을 두 번 누르면 크게 보기 / 돌아오기
+  });
+  const p = { el, dot, url, status, loginBtn, attachBadge, needBtn, focusBtn };
   panels.set(svc.id, p);
   return p;
 }

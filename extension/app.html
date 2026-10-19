@@ -15,8 +15,10 @@
     <span class="hint" id="hint"></span>
     <div class="spacer"></div>
     <div class="seg only-chat" role="group" aria-label="레이아웃">
-      <button data-layout="grid">격자</button>
-      <button data-layout="row">가로</button>
+      <button data-layout="grid" title="1~3개 한 줄 · 4개 2×2 · 5개 위 3·아래 2 · 6개 3×2">격자</button>
+      <button data-layout="row" title="한 줄에 모두">가로</button>
+      <button data-layout="main" title="첫 패널을 왼쪽에 크게, 나머지는 오른쪽에 위아래로">큰 칸</button>
+      <button data-layout="tall" title="두 열로 쌓기 (2개는 위아래, 6개는 2×3)">2열</button>
     </div>
     <button class="only-chat" id="projectBtn" title="로컬 프로젝트 폴더를 열어 AI에게 코드 맥락을 함께 보냅니다">📁 프로젝트</button>
     <button class="only-chat" id="changesBtn" title="AI 답변의 코드 수정안을 비교하고 적용합니다 (Ctrl+Shift+P)">변경 제안</button>
@@ -193,6 +195,7 @@
   <script src="lib/shared/project-upload.js"></script>
   <script src="lib/shared/patch.js"></script>
   <script src="lib/shared/services.js"></script>
+  <script src="lib/shared/layout.js"></script>
   <script src="lib/shared/synth.js"></script>
   <script src="lib/shared/shortcuts.js"></script>
   <script src="lib/shared/watch.js"></script>

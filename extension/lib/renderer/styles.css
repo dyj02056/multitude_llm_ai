@@ -395,3 +395,4 @@ body.project-open[data-mode="chat"][data-view="editor"] .project-side { display:
 .log-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12.5px; }
 .log-row .files { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .log-row.reverted { opacity: .55; }
+.panel.focused { border-color: var(--svc); }

@@ -23,8 +23,8 @@
     { keys: 'Ctrl+Shift+P', browserKeys: 'Alt+Shift+P', action: 'view:changes', label: '변경 제안(프로젝트 수정안) 화면 열기/닫기' },
     { keys: 'Ctrl+H', action: 'view:history', label: '기록 화면 열기/닫기' },
     { keys: 'Ctrl+Shift+R', action: 'reload-all', label: '모두 새로고침' },
-    { keys: 'Ctrl+1~9', browserKeys: 'Alt+Shift+1~4', action: 'target:N', label: 'N번째 보낼 대상 켜기/끄기' },
-    { keys: 'Alt+1~9', browserKeys: 'Alt+1~4', action: 'panel:N', label: 'N번째 패널로 포커스 이동' },
+    { keys: 'Ctrl+1~9', browserKeys: 'Alt+Shift+1~6', action: 'target:N', label: 'N번째 보낼 대상 켜기/끄기' },
+    { keys: 'Alt+1~9', browserKeys: 'Alt+1~6', action: 'panel:N', label: 'N번째 패널로 포커스 이동' },
     { keys: 'Ctrl+/', action: 'view:help', label: '단축키 도움말' },
     { keys: 'Esc', action: 'view:panels', label: '비교·변경 제안·파일 편집·기록·도움말 화면에서 패널로 돌아가기' },
   ];

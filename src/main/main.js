@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf } = require('../shared/services');
+const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
 const autologin = require('./autologin');
 const { sendPrompt, cleanupTemp } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
@@ -41,6 +42,7 @@ let win = null;
 let mode = 'login'; // 'login' | 'pick' | 'chat'
 let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'history' (기록) | 'help' (단축키)
 let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
+let focusId = null; // 크게 보는 패널 (⤢). 나머지 패널은 크기를 그대로 둔 채 화면 밖으로 옮긴다
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
 
@@ -64,6 +66,7 @@ function loadPrefs() {
   } catch {}
   // 예전 설정(Groq 등 없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
   prefs.selected = normalizeSelected(prefs.selected);
+  prefs.layout = normalizeLayout(prefs.layout);
   if (!SERVICES.some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
 }
 
@@ -254,21 +257,22 @@ function computeRects() {
   if (mode !== 'chat') return { panels: [] };
 
   const ids = SERVICES.map((s) => s.id).filter((id) => panels.has(id));
-  const n = ids.length;
-  const cols = prefs.layout === 'row' || n <= 3 ? n : 2;
-  const rows = Math.ceil(n / cols);
-  const cellW = Math.floor((area.width - GAP * (cols + 1)) / cols);
-  const panelsH = area.height - COMPOSER_H;
-  const cellH = Math.floor((panelsH - GAP * (rows + 1)) / rows);
+  if (focusId && !ids.includes(focusId)) focusId = null;
+  const box = { ...area, height: area.height - COMPOSER_H };
+  const cells = placeCells(prefs.layout, ids.length, box, GAP);
+  const [big] = placeCells('grid', 1, box, GAP);
 
   return {
     panels: ids.map((id, i) => {
-      const x = area.x + GAP + (i % cols) * (cellW + GAP);
-      const y = area.y + GAP + Math.floor(i / cols) * (cellH + GAP);
+      // 크게 보기: 고른 패널은 영역 전체, 나머지는 원래 크기로 숨겨 둔다 (답변 감시는 계속)
+      const frame = focusId === id ? big : cells[i];
+      const hidden = !!focusId && focusId !== id;
       return {
         id,
-        frame: { x, y, width: cellW, height: cellH },
-        content: { x, y: y + HEADER_H, width: cellW, height: Math.max(0, cellH - HEADER_H) },
+        frame,
+        hidden,
+        focused: focusId === id,
+        content: { x: frame.x, y: frame.y + HEADER_H, width: frame.width, height: Math.max(0, frame.height - HEADER_H) },
       };
     }),
   };
@@ -285,7 +289,7 @@ function pushState() {
   // 크기는 그대로라서 페이지 배치가 바뀌지 않고 답변 감시도 계속된다.
   const showPanels = mode === 'chat' && chatView === 'panels';
   for (const r of rects.panels) {
-    panels.get(r.id)?.view.setBounds(showPanels ? r.content : { ...r.content, x: -20000 });
+    panels.get(r.id)?.view.setBounds(showPanels && !r.hidden ? r.content : { ...r.content, x: -20000 });
   }
   if (!showPanels && [...panels.values()].some((p) => p.view.webContents.isFocused())) win.webContents.focus();
   win.webContents.send('state', {
@@ -360,11 +364,18 @@ ipcMain.on('models:pick', () => mode === 'chat' && showPick());
 ipcMain.on('logout', () => logout());
 
 ipcMain.on('layout:set', (_e, value) => {
-  if (value === 'grid' || value === 'row') {
+  if (LAYOUTS.includes(value)) {
     prefs.layout = value;
+    focusId = null;
     savePrefs();
     pushState();
   }
+});
+
+// 패널 하나 크게 보기 / 돌아오기 (id가 null이거나 이미 크게 보는 패널이면 돌아온다)
+ipcMain.on('layout:focus', (_e, id) => {
+  focusId = typeof id === 'string' && panels.has(id) && focusId !== id ? id : null;
+  pushState();
 });
 
 // ---------- 질문 보내기 · 교차검토(종합) ----------

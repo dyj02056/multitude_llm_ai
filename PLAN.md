@@ -7,6 +7,7 @@
 > **v0.5.0 (2026-10-18) 변경:** 프로젝트 모드의 파일을 본문 대신 업로드로 보냄 — 묶음 파일(기본, 경로가 붙은 .md, 100만 자마다 나눔) / 개별 파일(이름에 경로, 한도 넘으면 그번만 묶음) 선택. 첫 질문·NEED_FILES 응답·전체 파일 다시 요청 모두. 문서를 받지 않는 서비스·업로드 실패 패널에는 본문으로 보냄(fallbackText, 내부 예비 경로).
 > **v0.6.0 (2026-10-19) 변경:** 답변 규칙을 diff에서 파일별 전체 내용("파일: 경로" + 코드 블록 하나, 삭제는 DELETE_FILES)으로 바꿈 (프로젝트 모드·종합으로 합치기·코드 리뷰 템플릿). 패널마다 AI가 받은 파일 내용을 기억하고 ⟳ 때 비교해, 바뀐 파일을 그 탭들에 바로 보내는 버튼을 넣음.
 > **v0.6.1 (2026-10-19) 변경:** 프로젝트 파일 인앱 편집기(chatView 'editor') — 트리에서 파일 이름 클릭 → textarea 편집, 저장은 writeFile + 적용 기록(직접 편집), 저장 뒤 rescan으로 바뀐 파일 검사, "저장하고 AI에 보내기"는 그 파일만 syncStale.
+> **v0.7.1 (2026-10-19) 변경:** MAX_SELECTED 6(처음 값 4개 그대로). 배치를 shared/layout.js(C×R 격자 위의 칸, grid·row·main·tall)로 옮겨 main.js·host.js가 같이 씀. 패널 크게 보기(focusId — 나머지는 크기를 유지한 채 화면 밖, rects.hidden).
 > **v0.7.0 (2026-10-19) 변경:** Claude(claude.ai/new)·Z.ai(chat.z.ai) 추가 — 11개 서비스. Z.ai는 Open WebUI 계열이라 tokenBridge(preferCookie: 손님 토큰을 쿠키 토큰으로 바꿈). 프로젝트 모드에 서비스별 보내지 않기(project.blocked → opts.plainIds · userFileCount, rounds.sendAll이 그 서비스에는 직접 올린 파일만)와 처음 올리는 서비스 확인(project.uploadOk)을 넣음.
 > **v0.6.3 (2026-10-19) 변경:** `.git` 안쪽 쓰기·지우기 차단(patch.isGitInternal — extractChanges에서 빼고 project.writeFile/deleteFile이 거절, `GIT~1` 포함), `.gitmodules`를 실행 영향 파일에 추가.
 > **v0.6.2 (2026-10-19) 변경:** 보안 보강 — 메인 창 will-navigate·새 창 차단과 링크 drop 차단, 보내기·첨부·자동 로그인 전 패널 주소 확인(isServiceUrl / authHosts), 확장 쿠키 쓰기 전달에서 HttpOnly 쿠키 보호, 확장 패널 연결에 sender.url 사용.
