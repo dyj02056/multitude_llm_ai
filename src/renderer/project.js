@@ -433,6 +433,9 @@
     return { files: L.maxFiles - files.length, bytes: L.maxTotalBytes - used, fileBytes: L.maxFileBytes };
   }
 
+  // 템플릿 변수 {{프로젝트}} · {{선택 파일}} 값 (library.js)
+  window.projectBuiltins = () => (has() ? { 프로젝트: project.info.name, '선택 파일': [...project.checked].join(', ') } : {});
+
   window.projectPrepareSend = async (payload, targetIds) => {
     if (!has() || !project.include) return payload;
     const withProject = targetIds.filter((id) => !project.blocked.has(id));

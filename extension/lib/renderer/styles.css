@@ -429,3 +429,70 @@ body.project-open[data-mode="chat"][data-view="git"] .project-side { display: fl
 #gitInput { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; user-select: text; }
 #gitInput:focus { outline: none; border-color: var(--accent); }
 .git-out { user-select: text; }
+
+/* ---------- 라이브러리 (내 템플릿 · 스킬) · 변수 입력 ---------- */
+.only-library, .only-vars { display: none; }
+body[data-mode="chat"][data-view="library"] .only-library { display: flex; }
+body[data-mode="chat"][data-view="vars"] .only-vars { display: flex; }
+body[data-view="library"] #panels, body[data-view="vars"] #panels { display: none !important; }
+#libraryBtn.active { background: var(--accent); border-color: var(--accent); }
+#library, #varsView {
+  position: absolute; left: 0; right: 0; top: 44px; bottom: 132px;
+  flex-direction: column; gap: 8px; padding: 8px;
+}
+#library .compare-head .seg button { padding: 2px 10px; }
+#library .spacer, .lib-actions .spacer { flex: 1; }
+#libMode[hidden] { display: none; }
+#libMode select { margin-left: 4px; }
+.lib-body { flex: 1; min-height: 0; display: flex; gap: 8px; }
+.lib-list {
+  width: 280px; flex: none; overflow: auto; display: flex; flex-direction: column; gap: 3px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px;
+}
+.lib-list > button { text-align: left; font-size: 12px; padding: 4px 8px; }
+.lib-group { font-size: 11px; color: var(--muted); margin: 8px 2px 2px; }
+.lib-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+.lib-row:hover { background: #1b1f29; }
+.lib-row.active { background: #1d2a44; }
+.lib-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lib-row-name { font-size: 12.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lib-row-sub { font-size: 11px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lib-star { border: none; background: transparent; color: #e0a23b; padding: 0 4px; font-size: 14px; }
+.lib-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lib-empty { color: var(--muted); padding: 20px; }
+.lib-empty[hidden], .lib-editor[hidden] { display: none; }
+.lib-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.lib-field { display: flex; flex-direction: column; gap: 3px; }
+.lib-field.grow { flex: 1; min-height: 0; }
+.lib-field input, .lib-field textarea, .var-row input, .var-row select {
+  background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font: inherit; user-select: text;
+}
+.lib-field textarea { flex: 1; min-height: 0; resize: none; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; }
+.lib-field input:focus, .lib-field textarea:focus, .var-row input:focus { outline: none; border-color: var(--accent); }
+.lib-field [readonly] { color: var(--muted); }
+.lib-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lib-actions button[hidden] { display: none; }
+#libUse { border-color: var(--accent); color: #9ec0fa; }
+.skill-chip { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); flex: none; }
+#skillSelect { max-width: 170px; font-size: 12px; }
+#skillSelect.on { border-color: #c47ae0; color: #e0b0f5; }
+.vars-form { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; max-width: 900px; }
+.vars-fields { display: flex; flex-direction: column; gap: 6px; }
+.var-row { display: flex; align-items: center; gap: 8px; }
+.var-name { width: 140px; flex: none; text-align: right; color: #9ec0fa; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.var-row input, .var-row select { flex: 1; }
+.vars-preview {
+  flex: 1; min-height: 60px; margin: 0; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font: 12.5px/1.45 "Cascadia Mono", Consolas, monospace; user-select: text;
+}
+#skillSelect, #libSkillMode {
+  background: #20242f; color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12px;
+}
+
+/* 툴바가 좁아져도 버튼 글자는 한 줄로: 안내 문구가 먼저 줄어들고, 버튼 간격을 줄인다 */
+#toolbar { gap: 6px; }
+#toolbar > button, #toolbar .seg button, .brand { white-space: nowrap; flex: none; }
+#toolbar > .hint { min-width: 0; flex: 0 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#toolbar > .spacer { flex: 1 1 0; min-width: 0; }
+@media (max-width: 1500px) { #toolbar > .hint { display: none; } }

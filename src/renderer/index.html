@@ -17,6 +17,7 @@
       <button data-layout="main" title="첫 패널을 왼쪽에 크게, 나머지는 오른쪽에 위아래로">큰 칸</button>
       <button data-layout="tall" title="두 열로 쌓기 (2개는 위아래, 6개는 2×3)">2열</button>
     </div>
+    <button class="only-chat" id="libraryBtn" title="내 템플릿(변수)과 스킬을 만들고 고칩니다">📚 라이브러리</button>
     <button class="only-chat" id="projectBtn" title="로컬 프로젝트 폴더를 열어 AI에게 코드 맥락을 함께 보냅니다">📁 프로젝트</button>
     <button class="only-chat" id="changesBtn" title="AI 답변의 코드 수정안을 비교하고 적용합니다 (Ctrl+Shift+P)">변경 제안</button>
     <button class="only-chat" id="historyBtn" title="지금까지 보낸 질문과 답변 (Ctrl+H)">기록</button>
@@ -95,6 +96,67 @@
       <button id="changesClose">패널로 돌아가기</button>
     </div>
     <div id="changesCols" class="compare-cols"></div>
+  </section>
+
+  <section id="library" class="only-library">
+    <div class="compare-head">
+      <span class="muted-label">라이브러리</span>
+      <div class="seg">
+        <button data-libtab="templates">템플릿</button>
+        <button data-libtab="skills">스킬</button>
+      </div>
+      <label id="libMode" class="check" title="스킬 지침을 언제 붙일지">붙이는 때
+        <select id="libSkillMode">
+          <option value="first">새 대화 첫 질문에만</option>
+          <option value="every">매 질문마다</option>
+        </select>
+      </label>
+      <span class="spacer"></span>
+      <button id="libImport" title="내보낸 라이브러리 파일(.json)에서 템플릿·스킬을 가져와 지금 것에 더합니다">가져오기</button>
+      <button id="libExport" title="내 템플릿·스킬을 .json 파일로 내보냅니다">내보내기</button>
+      <button id="libClose">패널로 돌아가기</button>
+      <input type="file" id="libImportFile" accept=".json,application/json" hidden />
+      <input type="file" id="libSkillFile" accept=".md,.markdown,.txt,text/markdown,text/plain" multiple hidden />
+    </div>
+    <div class="lib-body">
+      <div id="libList" class="lib-list"></div>
+      <div class="lib-main">
+        <div id="libEmpty" class="lib-empty"></div>
+        <div id="libEditor" class="lib-editor" hidden>
+          <label class="lib-field"><span class="muted-label">이름</span><input id="libName" maxlength="60" spellcheck="false" /></label>
+          <label class="lib-field"><span id="libHintLabel" class="muted-label"></span><input id="libHint" maxlength="200" spellcheck="false" /></label>
+          <label class="lib-field grow"><span id="libTextLabel" class="muted-label"></span><textarea id="libText" spellcheck="false"></textarea></label>
+          <div class="lib-actions">
+            <span id="libInfo" class="muted-label"></span>
+            <span class="spacer"></span>
+            <button id="libUse" class="accent"></button>
+            <button id="libExportMd" title="이 스킬을 SKILL.md 파일로 내보냅니다">SKILL.md 내보내기</button>
+            <button id="libCopy"></button>
+            <button id="libDelete" class="danger">삭제</button>
+            <button id="libSave" class="primary">저장</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="varsView" class="only-vars">
+    <div class="compare-head">
+      <span class="muted-label">템플릿 변수 입력</span>
+      <span id="varsTitle" class="compare-question"></span>
+    </div>
+    <form id="varsForm" class="vars-form">
+      <div id="varsFields" class="vars-fields"></div>
+      <span id="varsQ" class="muted-label"></span>
+      <span class="muted-label">보낼 글 미리보기</span>
+      <pre id="varsPreview" class="vars-preview"></pre>
+      <div class="lib-actions">
+        <span class="muted-label">Enter: 보내기 · Esc: 취소</span>
+        <span class="spacer"></span>
+        <button id="varsCancel" type="button">취소</button>
+        <button type="submit" class="primary">보내기</button>
+      </div>
+    </form>
   </section>
 
   <section id="gitView" class="only-git">
@@ -194,6 +256,7 @@
       <input type="file" id="fileInput" multiple hidden />
       <div id="attachList" class="attach-list"></div>
       <span id="attachHint" class="attach-hint"></span>
+      <label class="skill-chip" title="고른 스킬의 지침을 질문 앞에 붙여 보냅니다">🧩 <select id="skillSelect" aria-label="스킬"></select></label>
       <label id="projectChip" class="project-chip" hidden title="켜 두면 질문에 프로젝트 구조와 고른 파일 내용을 함께 보냅니다">
         <input type="checkbox" id="projectInclude" /> <span id="projectChipText"></span>
       </label>
@@ -214,8 +277,10 @@
   <script src="../shared/project-context.js"></script>
   <script src="../shared/project-upload.js"></script>
   <script src="../shared/patch.js"></script>
+  <script src="../shared/prompt-lib.js"></script>
   <script src="templates.js"></script>
   <script src="renderer.js"></script>
   <script src="project.js"></script>
+  <script src="library.js"></script>
 </body>
 </html>

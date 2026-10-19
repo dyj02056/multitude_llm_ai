@@ -1,7 +1,7 @@
 {
   "name": "multitude-llm-ai",
   "productName": "Multitude LLM",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Gemini · ChatGPT · Claude · DeepSeek · Perplexity · Grok · Mistral · Qwen · Z.ai · Genspark · Duck.ai 웹 채팅을 한 화면에서 최대 6개까지 동시에 쓰는 앱 — 파일 첨부, 로컬 프로젝트 코드 작업 (Windows 앱 · 크롬 확장 프로그램)",
   "author": "dyj02056",
   "private": true,

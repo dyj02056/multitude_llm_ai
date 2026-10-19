@@ -45,7 +45,7 @@ function buildFiles() {
     const body = read(`src/shared/vendor/${name}`);
     files[`lib/shared/vendor/${name}`] = name.endsWith('.js') ? `// ${GENERATED} (원본: src/shared/vendor/${name})\n${body}` : body;
   }
-  for (const name of ['renderer.js', 'templates.js', 'project.js']) {
+  for (const name of ['renderer.js', 'templates.js', 'project.js', 'library.js']) {
     files[`lib/renderer/${name}`] = `// ${GENERATED} (원본: src/renderer/${name})\n${read(`src/renderer/${name}`)}`;
   }
   files['lib/renderer/styles.css'] = `/* ${GENERATED} (원본: src/renderer/styles.css) */\n${read('src/renderer/styles.css')}`;
@@ -82,9 +82,10 @@ function buildAppHtml(html) {
     '  <script src="host.js"></script>',
     '  <script src="lib/renderer/templates.js"></script>',
   ].join('\n'));
-  replace('  <script src="renderer.js"></script>\n  <script src="project.js"></script>', [
+  replace('  <script src="renderer.js"></script>\n  <script src="project.js"></script>\n  <script src="library.js"></script>', [
     '  <script src="lib/renderer/renderer.js"></script>',
     '  <script src="lib/renderer/project.js"></script>',
+    '  <script src="lib/renderer/library.js"></script>',
   ].join('\n'));
   replace('<!doctype html>\n', `<!doctype html>\n<!-- ${GENERATED} (원본: src/renderer/index.html) -->\n`);
   return html;

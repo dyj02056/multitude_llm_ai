@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld('host', {
       ],
     ),
   ),
+  library: {
+    load: () => ipcRenderer.invoke('library:load'),
+    save: (data) => ipcRenderer.invoke('library:save', data),
+  },
   // git 콘솔 (Windows 앱 전용): 명령 줄 글자만 넘기고, 검사·확인·실행은 메인 프로세스(gitconsole.js)가 한다
   git: {
     info: () => ipcRenderer.invoke('git:info'),

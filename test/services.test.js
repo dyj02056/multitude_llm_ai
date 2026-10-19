@@ -42,3 +42,26 @@ test('보내기: 프로젝트 파일을 보내지 않을 서비스(plainIds)에�
   assert.deepEqual(sent.gemini, { text: '맥락+질문', files: ['mine.png', 'project.md'], fallback: '본문 맥락' });
   assert.deepEqual(sent.zai, { text: '질문', files: ['mine.png'], fallback: undefined });
 });
+
+test('보내기: 스킬 지침(prefixById)은 그 패널의 글과 예비 글 앞에만 붙는다', async () => {
+  const sent = {};
+  const r = createRounds({
+    services: S.SERVICES,
+    hasPanel: () => true,
+    sendPrompt: async (id, text, files, extra) => {
+      sent[id] = { text, fallback: extra.fallbackText };
+      return { ok: true, attach: { ok: true } };
+    },
+    snapshot: async () => null,
+    watch: () => {},
+    sendPanel: () => {},
+    sendSynthStatus: () => {},
+    history: { add: () => 1, setAnswer: () => {}, addSynth: () => {} },
+    prefs: () => ({}),
+    log: () => {},
+  });
+  const file = { name: 'p.md', type: 'text/markdown', size: 1, data: new ArrayBuffer(1) };
+  await r.sendAll('질문', ['gemini', 'chatgpt'], [file], { prefixById: { gemini: '[지침]\n' }, fallbackText: '본문' });
+  assert.deepEqual(sent.gemini, { text: '[지침]\n질문', fallback: '[지침]\n본문' });
+  assert.deepEqual(sent.chatgpt, { text: '질문', fallback: '본문' });
+});

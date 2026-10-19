@@ -5,6 +5,7 @@ const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf } = require('../shared/services');
 const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
+const { normalizeLibrary } = require('../shared/prompt-lib');
 const autologin = require('./autologin');
 const { sendPrompt, cleanupTemp } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
@@ -51,6 +52,7 @@ const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비
 // ---------- 설정 저장 ----------
 
 const prefsFile = () => path.join(app.getPath('userData'), 'prefs.json');
+const libraryFile = () => path.join(app.getPath('userData'), 'library.json'); // 프롬프트 라이브러리·스킬
 const TIMEOUT_CHOICES = [5, 10, 20, 30, 60]; // 답변 최대 대기 시간(분) 선택지
 let prefs = {
   selected: [...DEFAULT_SELECTED],
@@ -442,7 +444,7 @@ ipcMain.handle('synth:run', (_e, judgeId, kind) =>
   rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', kind === 'code' ? 'code' : 'text'),
 );
 
-/** 화면이 넘긴 보내기 옵션 검사: { question, textById, fallbackText, plainIds, userFileCount } */
+/** 화면이 넘긴 보내기 옵션 검사: { question, textById, prefixById, fallbackText, plainIds, userFileCount } */
 function sendOpts(opts) {
   if (!opts || typeof opts !== 'object') return {};
   const out = {};
@@ -451,6 +453,10 @@ function sendOpts(opts) {
   if (opts.textById && typeof opts.textById === 'object') {
     out.textById = {};
     for (const s of SERVICES) if (typeof opts.textById[s.id] === 'string') out.textById[s.id] = opts.textById[s.id];
+  }
+  if (opts.prefixById && typeof opts.prefixById === 'object') {
+    out.prefixById = {};
+    for (const s of SERVICES) if (typeof opts.prefixById[s.id] === 'string') out.prefixById[s.id] = opts.prefixById[s.id].slice(0, 25000);
   }
   if (Array.isArray(opts.plainIds)) out.plainIds = SERVICES.map((s) => s.id).filter((id) => opts.plainIds.includes(id));
   if (Number.isInteger(opts.userFileCount) && opts.userFileCount >= 0) out.userFileCount = opts.userFileCount;
@@ -542,7 +548,7 @@ ipcMain.handle('answer:copy', async (_e, id) => {
 });
 
 ipcMain.on('view:set', (_e, value) => {
-  if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'git', 'history', 'help'].includes(value)) {
+  if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'git', 'library', 'vars', 'history', 'help'].includes(value)) {
     chatView = value;
     pushState();
   }
@@ -565,7 +571,12 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
   for (const [pid, p] of targets) {
     const wc = p.view.webContents;
     if (action === 'reload') wc.reload();
-    else if (action === 'home') wc.loadURL(SERVICES.find((s) => s.id === pid).url);
+    else if (action === 'home') {
+      // 처음 주소는 새 대화로 열린다: 답변 감시를 멈추고, 화면에도 새 대화라고 알린다 (스킬·프로젝트 파일을 다시 보내게)
+      rounds.cancelWatch(pid);
+      sendPanel(pid, { answer: 'clear' });
+      wc.loadURL(SERVICES.find((s) => s.id === pid).url);
+    }
     else if (action === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
     else if (action === 'devtools') wc.toggleDevTools();
     else if (action === 'login') p.login.retry();
@@ -594,6 +605,24 @@ ipcMain.handle('remote:refresh', () => refreshRemote());
 // ---------- 단축키 ----------
 
 ipcMain.handle('shortcuts:list', () => shortcutList());
+
+// 프롬프트 라이브러리·스킬: 모양을 검사하고 길이를 잘라서 이 PC에만 저장한다 (shared/prompt-lib.js)
+ipcMain.handle('library:load', () => {
+  try {
+    return normalizeLibrary(JSON.parse(fs.readFileSync(libraryFile(), 'utf8')));
+  } catch {
+    return normalizeLibrary({});
+  }
+});
+ipcMain.handle('library:save', (_e, data) => {
+  try {
+    fs.writeFileSync(libraryFile(), JSON.stringify(normalizeLibrary(data), null, 2));
+    return true;
+  } catch (err) {
+    console.error('[library] 저장하지 못했습니다:', err.message);
+    return false;
+  }
+});
 
 /** 단축키 동작을 실행한다. 처리했으면 true (그 키는 페이지로 넘기지 않는다). */
 function runShortcut(action) {

@@ -402,7 +402,12 @@
         // 지금 주소로 다시 연다. 페이지 안에서 새로고침하면 서비스 워커가 다시 받아 와 막힐 수 있어 navigate를 쓴다.
         p.retried = false;
         navigate(pid, p.url || svc.url);
-      } else if (action === 'home') navigate(pid, svc.url);
+      } else if (action === 'home') {
+        // 처음 주소는 새 대화로 열린다 (스킬·프로젝트 파일을 다시 보내게 화면에 알린다)
+        rounds.cancelWatch(pid);
+        sendPanel(pid, { answer: 'clear' });
+        navigate(pid, svc.url);
+      }
       else if (action === 'back') callFrame(pid, { type: 'mla:back' }).catch(() => {});
       else if (action === 'login') chrome.tabs.create({ url: svc.url }); // 일반 탭에서 로그인 → 돌아와서 ↻
       else if (action === 'newchat') {
@@ -537,7 +542,7 @@
       return { copied, total };
     },
     setView: (value) => {
-      if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'history', 'help'].includes(value)) {
+      if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'library', 'vars', 'history', 'help'].includes(value)) {
         chatView = value;
         pushState();
       }
@@ -576,6 +581,14 @@
     },
     // 프로젝트 모드: 고른 폴더 읽기·쓰기 (project-fs.js, File System Access API)
     project: window.MLA_PROJECT_FS,
+    // 프롬프트 라이브러리·스킬 (shared/prompt-lib.js로 검사해서 저장)
+    library: {
+      load: async () => MLA.promptLib.normalizeLibrary(await load('library', {})),
+      save: async (data) => {
+        store('library', MLA.promptLib.normalizeLibrary(data));
+        return true;
+      },
+    },
     setLayout: (value) => {
       if (MLA.layout.LAYOUTS.includes(value)) {
         prefs.layout = value;

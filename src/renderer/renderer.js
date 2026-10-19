@@ -206,6 +206,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     p.attachBadge.hidden = true;
     p.needBtn.hidden = true;
     window.onPanelCleared?.(id); // 새 대화: 프로젝트 모드에서 이 AI가 아는 파일 내용을 잊는다
+    window.onSkillCleared?.(id); // 새 대화: 다음 질문에 스킬 지침을 다시 붙인다
   }
   if (answer === 'done') window.onPanelAnswerDone?.(id); // 프로젝트 모드: NEED_FILES 확인
   if (answer) {
@@ -553,40 +554,7 @@ host.on('synth:status', ({ state: st, judge, count, error, cause }) => {
 });
 
 // ---------- 질문 템플릿 ----------
-
-const TPL_KEY = 'mla.template'; // 마지막에 고른 템플릿 (이 PC에만 저장)
-let template = TEMPLATES[0];
-
-function setTemplate(id) {
-  template = TEMPLATES.find((t) => t.id === id) || TEMPLATES[0];
-  $('#tplSelect').value = template.id;
-  $('#tplSelect').classList.toggle('on', template.id !== 'none');
-  $('#prompt').placeholder = template.hint;
-  // 템플릿이 질문을 어떻게 감싸는지 한 줄로 보여 준다.
-  $('#tplPreview').textContent = template.id === 'none' ? '' : template.text.replace(/\n+/g, ' ').replace('{q}', '〈입력〉');
-  $('#tplPreview').title = template.text;
-  try {
-    localStorage.setItem(TPL_KEY, template.id);
-  } catch {}
-}
-
-$('#tplSelect').replaceChildren(
-  ...TEMPLATES.map((t) => {
-    const opt = document.createElement('option');
-    opt.value = t.id;
-    opt.textContent = t.name;
-    return opt;
-  }),
-);
-$('#tplSelect').addEventListener('change', (e) => {
-  setTemplate(e.target.value);
-  $('#prompt').focus();
-});
-try {
-  setTemplate(localStorage.getItem(TPL_KEY));
-} catch {
-  setTemplate('none');
-}
+// 템플릿 고르기·변수 입력·스킬은 library.js가 한다 (window.libApplyTemplate · libSkillPrefix).
 
 // ---------- 첨부 파일 ----------
 // 공통 입력창에 끌어다 놓기 · Ctrl+V · 📎 버튼으로 올린 파일을 보낼 대상 패널마다 첨부한다.
@@ -752,12 +720,18 @@ async function send() {
         data: await file.arrayBuffer(),
       })),
     );
-    // 글 없이 파일만 보낼 때는 템플릿을 붙이지 않는다.
-    let payload = { text: text ? applyTemplate(template, text) : '', files, opts: {} };
+    // 글 없이 파일만 보낼 때는 템플릿을 붙이지 않는다. 변수가 있는 템플릿은 변수 입력 화면을 거친다 (null이면 취소).
+    const qText = text ? await window.libApplyTemplate(text) : '';
+    if (qText === null) return;
+    let payload = { text: qText, files, opts: {} };
     // 프로젝트 모드: 프로젝트 구조와 고른 파일 내용을 붙인다 (project.js). null이면 사용자가 취소했다.
     if (window.projectPrepareSend) payload = await window.projectPrepareSend(payload, ids);
     if (!payload) return;
+    // 스킬: 이 대화에 아직 받지 않은 패널(또는 "매 질문마다"면 모두)의 글 앞에 지침을 붙인다 (library.js)
+    const skill = window.libSkillPrefix?.(ids);
+    if (skill) payload = { ...payload, opts: { ...payload.opts, prefixById: skill.prefixById } };
     const results = await host.sendPrompt(payload.text, ids, payload.files, payload.opts);
+    window.onSkillSent?.(skill, results.filter((r) => r.ok).map((r) => r.id));
     const failed = results.filter((r) => !r.ok);
     window.onProjectSent?.(results.filter((r) => r.ok).map((r) => r.id)); // 프로젝트 모드: AI마다 받은 파일 내용을 기억
     const noAttach = results.filter((r) => r.ok && r.attach && r.attach.state !== 'ok');
@@ -768,7 +742,7 @@ async function send() {
     }
     $('#sendHint').textContent = failed.length
       ? `${failed.map((r) => name(r.id)).join(', ')} 보내기 실패 — 입력 내용은 남겨 두었습니다`
-      : `${results.length}곳에 보냈습니다${noAttach.length ? ` · ${noAttach.map((r) => `${name(r.id)}(${ATTACH_TEXT[r.attach.state]})`).join(', ')}` : ''}`;
+      : `${results.length}곳에 보냈습니다${skill ? ` · 스킬 지침 ${skill.ids.length}곳` : ''}${noAttach.length ? ` · ${noAttach.map((r) => `${name(r.id)}(${ATTACH_TEXT[r.attach.state]})`).join(', ')}` : ''}`;
   } catch (err) {
     $('#sendHint').textContent = `보내지 못했습니다: ${err.message}`;
   } finally {
