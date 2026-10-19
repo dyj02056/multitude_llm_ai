@@ -2,7 +2,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-const CHANNELS = new Set(['state', 'panel:status', 'synth:status', 'shortcut']);
+const CHANNELS = new Set(['state', 'panel:status', 'synth:status', 'shortcut', 'git:output', 'git:done']);
 
 contextBridge.exposeInMainWorld('host', {
   openModels: (ids) => ipcRenderer.send('models:open', ids),
@@ -43,6 +43,13 @@ contextBridge.exposeInMainWorld('host', {
       ],
     ),
   ),
+  // git 콘솔 (Windows 앱 전용): 명령 줄 글자만 넘기고, 검사·확인·실행은 메인 프로세스(gitconsole.js)가 한다
+  git: {
+    info: () => ipcRenderer.invoke('git:info'),
+    run: (line) => ipcRenderer.invoke('git:run', line),
+    stop: () => ipcRenderer.invoke('git:stop'),
+    openTerminal: () => ipcRenderer.invoke('git:openTerminal'),
+  },
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),
   on: (channel, fn) => {
     if (CHANNELS.has(channel)) ipcRenderer.on(channel, (_e, payload) => fn(payload));

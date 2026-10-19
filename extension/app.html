@@ -72,6 +72,7 @@
           <button data-umode="files" title="파일마다 하나씩 올립니다. 이름에 경로를 넣고(src__a__index.js), 한도를 넘으면 그번만 묶음 파일로 보냅니다">개별 파일</button>
         </div>
       </div>
+      <button id="psGit" title="이 프로젝트 폴더에서 git 명령을 실행합니다 (Windows 앱 전용)" hidden>⌥ git 콘솔</button>
       <button id="psSync" class="primary" hidden></button>
       <span id="psSummary" class="muted-label"></span>
     </div>
@@ -97,6 +98,28 @@
       <button id="changesClose">패널로 돌아가기</button>
     </div>
     <div id="changesCols" class="compare-cols"></div>
+  </section>
+
+  <section id="gitView" class="only-git">
+    <div class="compare-head">
+      <span class="muted-label">git 콘솔</span>
+      <span id="gitWhere" class="compare-question"></span>
+      <button data-git="git status" title="바뀐 파일 보기">status</button>
+      <button data-git="git diff --stat" title="바뀐 줄 수 요약">diff --stat</button>
+      <button data-git="git log --oneline -20" title="최근 커밋 20개">log</button>
+      <button data-git="git branch -vv" title="브랜치 목록">branch</button>
+      <button id="gitTerm" title="이 폴더에서 Windows 터미널(없으면 PowerShell)을 엽니다 — git 밖의 명령은 거기서 직접 실행하세요">터미널 열기</button>
+      <button id="gitClear">지우기</button>
+      <button id="gitClose">패널로 돌아가기</button>
+    </div>
+    <div id="gitNote" class="git-note" hidden></div>
+    <pre id="gitOut" class="git-out"></pre>
+    <form id="gitForm" class="git-form">
+      <span class="git-prompt">&gt;</span>
+      <input id="gitInput" spellcheck="false" autocomplete="off" placeholder="git status · git add -A · git commit -m &quot;메시지&quot; · git push (↑↓ 이전 명령)" />
+      <button id="gitRun" class="primary" type="submit">실행</button>
+      <button id="gitStop" type="button" disabled>중지</button>
+    </form>
   </section>
 
   <section id="editor" class="only-editor">

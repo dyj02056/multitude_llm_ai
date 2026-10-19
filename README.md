@@ -13,6 +13,7 @@ API 키 없이 각 서비스의 무료 웹 채팅을 그대로 씁니다. 처음
 
 | 버전 | 내용 |
 |---|---|
+| **v0.8.0** | **git 콘솔** (Windows 앱): 프로젝트 사이드바 **⌥ git 콘솔**에서 그 폴더의 git 명령만 실행 (셸 없이 실행, 허용한 하위 명령만, 위험한 옵션 차단, 되돌리기 어려운 명령은 확인 창, 출력의 토큰 가림, 저장소의 git 훅 알림). **터미널 열기**로 그 폴더에서 Windows 터미널을 엶 |
 | **v0.7.1** | **최대 6개** 패널(처음 값은 그대로 4개)과 배치 4가지: **격자**(4개 2×2 · 5개 위 3·아래 2 · 6개 3×2) · **가로** · **큰 칸**(첫 패널 크게 + 나머지 오른쪽) · **2열**(2개 위아래 · 6개 2×3). 패널 머리줄 **⤢**(또는 머리줄 더블클릭)로 그 패널만 크게 보고 **⤡**로 돌아옴 |
 | **v0.7.0** | **Claude**(`claude.ai/new`) · **Z.ai**(`chat.z.ai`) 추가 — 11개 서비스. 프로젝트 모드: 서비스마다 **프로젝트 파일 보내지 않기**(그 서비스에는 질문 글만), 프로젝트 파일을 처음 올리는 서비스가 있으면 어디로 가는지 확인 |
 | **v0.6.3** | 보안 보강: AI 수정안·편집기·삭제가 **`.git` 안쪽**(훅·설정)에는 쓰지 못하게 막음 (Windows 짧은 이름 `GIT~1` 포함). `.gitmodules` 변경은 `⚠` 실행 영향 파일로 표시 |
@@ -154,7 +155,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 - 1번의 브랜치 이름은 작업 중인 브랜치입니다. main에 병합한 뒤에는 `git pull origin main`을 씁니다.
-- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.7.1). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
+- 결과물은 `dist\MultitudeLLM-Setup-<버전>.exe`입니다 (지금 버전: 0.8.0). 처음에는 Electron을 내려받느라 몇 분 걸릴 수 있습니다.
 - 4번의 실행 허용은 그 PowerShell 창을 닫으면 사라집니다 (PC 설정은 바뀌지 않음).
 - `powershell -ExecutionPolicy Bypass -File ...` 형태는 PATH에 `powershell`이 없는 PC에서 `'powershell' 용어가 ... 인식되지 않습니다` 오류가 납니다. 위 4번처럼 열린 창에서 직접 실행하세요. 그래도 빌드 중 같은 오류가 나면 전체 경로로 실행합니다.
 
@@ -168,9 +169,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 | 폴더 | 내용 |
 |---|---|
-| `src/shared/` | Windows 앱과 확장 프로그램이 **같이 쓰는** 코드: 서비스 목록·셀렉터(`services.js`), 질문 보내기·종합(`rounds.js`), 답변 감시, 페이지 주입 함수, 기록, 셀렉터 원격 갱신, 단축키, 프로젝트 모드(`project-ignore.js` 제외 규칙, `secret-scan.js`, `project-context.js`, `project-upload.js` 업로드 파일 만들기, `patch.js`) |
+| `src/shared/` | Windows 앱과 확장 프로그램이 **같이 쓰는** 코드: 서비스 목록·셀렉터(`services.js`), 패널 배치(`layout.js`), 질문 보내기·종합(`rounds.js`), 답변 감시, 페이지 주입 함수, 기록, 셀렉터 원격 갱신, 단축키, 프로젝트 모드(`project-ignore.js` 제외 규칙, `secret-scan.js`, `project-context.js`, `project-upload.js` 업로드 파일 만들기, `patch.js`) |
 | `src/shared/vendor/` | 포함한 외부 라이브러리: [ignore](https://github.com/kaelzhang/node-ignore) 7.0.12 (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) 9.0.0 (BSD-3-Clause) — 라이선스 파일 함께 |
-| `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`project.js`: 프로젝트 폴더 읽기·쓰기) |
+| `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`project.js`: 프로젝트 폴더 읽기·쓰기, `git-rules.js`·`gitconsole.js`: git 콘솔 명령 검사·실행) |
 | `src/renderer/` | 화면 (두 쪽이 같은 파일을 씀) |
 | `test/` | 공통 모듈 단위 테스트 (`npm test`) |
 | `extension/` | 크롬 확장 프로그램. 직접 고치는 파일은 `host.js`·`project-fs.js`·`content.js`·`cookie-shim.js`·`cookie-bridge.js`·`background.js`·`ext.css`뿐이고, 나머지(`manifest.json`, `app.html`, `lib/`, `icons/`)는 생성 파일 |
@@ -280,6 +281,19 @@ legal/
 | 폴더 접근 | 폴더 선택 창, 다음 실행 때 자동으로 다시 엶 | File System Access API. 앱 탭을 새로 열 때마다 사이드바의 **폴더 접근 허용**을 한 번 눌러야 함 (크롬 정책) |
 | git 전역 제외 파일 | 읽음 (`core.excludesFile`, `~/.config/git/ignore`) | 읽지 못함 |
 | 상태 저장 | 앱 데이터 폴더 `projects/` | 크롬 확장 저장소 |
+| git 콘솔 · 터미널 열기 | 있음 | 없음 (확장 프로그램은 프로그램을 실행할 수 없음) |
+
+### git 콘솔 (Windows 앱)
+
+프로젝트 사이드바 아래 **⌥ git 콘솔**을 누르면 그 폴더에서 git 명령을 실행하는 화면이 열립니다. `status`·`diff --stat`·`log`·`branch` 버튼, ↑↓로 이전 명령, **중지**, **터미널 열기**(그 폴더에서 Windows 터미널, 없으면 PowerShell)가 있습니다.
+
+- **git 명령만**: 셸을 거치지 않고 git.exe를 바로 실행하므로 `;`·`&&`·`|` 같은 글자는 그냥 git 인자가 됩니다. git.exe는 PATH의 절대 경로 폴더에서만 찾습니다 (프로젝트 안의 가짜 `git.exe`는 쓰지 않음).
+- **쓸 수 있는 하위 명령**: status · log · diff · show · blame · shortlog · reflog · ls-files · rev-parse · describe · add · rm · mv · restore · reset · commit · revert · cherry-pick · branch · switch · checkout · merge · tag · stash · fetch · pull · push · remote · init · config(읽기만) · version
+- **막는 것**: git 앞 옵션(`-c`, `-C`, `--git-dir` …), `clean`·`rebase`·`submodule`·`grep`·`difftool`·`help` 등, 외부 프로그램을 띄우는 옵션(`--upload-pack`, `--exec`, `--ext-diff`), 다른 파일에 쓰는 `--output`, 대화형 옵션(`add -p`, `-i` …), 설정 쓰기, 메시지 없는 `commit`(편집기를 열 수 없음)
+- **항상 붙이는 것**: `--no-pager`, `core.fsmonitor=false`, `core.editor=:`, `protocol.ext.allow=never` / 비밀번호는 터미널로 묻지 않음(`GIT_TERMINAL_PROMPT=0`, Git 자격 증명 관리자 창은 뜰 수 있음)
+- **확인 창**: `reset --hard`, `push --force`·`+브랜치`·`:브랜치`, `branch -D`, `checkout -- 경로`·`-f`, `restore`, `stash drop/clear`, `rm`, `tag -d`, `remote remove/set-url`
+- 한 번에 하나, 시간 제한(fetch·pull·push 2분, 나머지 1분), 출력 2MB까지. 출력과 입력 줄의 `https://아이디:토큰@` 주소와 알려진 키 모양은 가립니다.
+- 콘솔을 열면 이 저장소의 **git 훅**(commit 등에서 실행되는 프로그램)이 있는지 알려 줍니다. AI 수정안은 `.git` 안쪽을 쓸 수 없으므로(v0.6.3) AI가 훅을 심을 수는 없습니다.
 
 ## 보안
 
@@ -302,6 +316,7 @@ legal/
 | iframe 안 사이트가 클립보드를 읽음 | iframe 권한은 클립보드 쓰기·마이크만 (마이크는 쓸 때 크롬이 다시 물음) |
 | 첨부 임시 파일이 남음 (Windows 앱) | 앱 전용 임시 폴더를 시작·종료 때 정리 |
 | `a.txt:stream`, `CON` 같은 Windows 특수 경로로 엉뚱한 곳에 쓰기 | 경로에서 `:`·예약 이름·끝의 점/공백을 거절 |
+| git 콘솔에서 셸 명령 끼워 넣기·설정으로 프로그램 실행·실수로 기록 지우기 (v0.8.0) | 셸 없이 git.exe만, 허용한 하위 명령·옵션만, 검사와 확인 창은 메인 프로세스에서 ([git 콘솔](#git-콘솔-windows-앱)) |
 | 수정안이 `.git/hooks/*`·`.git/config`를 써서 다음 git 명령 때 코드 실행 (v0.6.3) | `.git`(과 짧은 이름 `GIT~1`) 안쪽 경로는 수정안에서 빼고, 쓰기·지우기 함수도 거절. `.gitmodules`는 `⚠` 표시 |
 
 **크롬 확장 권한과 쓰는 이유**

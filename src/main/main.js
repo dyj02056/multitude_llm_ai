@@ -14,6 +14,7 @@ const history = require('./history');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
 const project = require('./project');
+const { setupGitConsole } = require('./gitconsole');
 
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
@@ -40,8 +41,9 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 let win = null;
 let mode = 'login'; // 'login' | 'pick' | 'chat'
-let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'history' (기록) | 'help' (단축키)
+let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'git' (git 콘솔) | 'history' (기록) | 'help' (단축키)
 let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
+let gitConsole = null; // git 콘솔 (gitconsole.js)
 let focusId = null; // 크게 보는 패널 (⤢). 나머지 패널은 크기를 그대로 둔 채 화면 밖으로 옮긴다
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
@@ -484,7 +486,11 @@ const projectCall = (fn) => async (_e, ...args) => {
   }
 };
 
-ipcMain.handle('project:pick', projectCall(async () => rememberProject(await project.pick(win))));
+ipcMain.handle('project:pick', projectCall(async () => {
+  const picked = await project.pick(win);
+  if (picked) gitConsole?.stop();
+  return rememberProject(picked);
+}));
 // Windows 앱은 접근 허용을 다시 받을 필요가 없어 restore·reconnect가 같다.
 const restoreProject = async () => {
   if (!prefs.projectRoot) return null;
@@ -497,6 +503,7 @@ const restoreProject = async () => {
 ipcMain.handle('project:restore', projectCall(restoreProject));
 ipcMain.handle('project:reconnect', projectCall(restoreProject));
 ipcMain.handle('project:close', projectCall(async () => {
+  gitConsole?.stop(); // 실행 중인 git 명령은 그 폴더와 함께 멈춘다
   project.close();
   await rememberProject(null);
   return true;
@@ -535,7 +542,7 @@ ipcMain.handle('answer:copy', async (_e, id) => {
 });
 
 ipcMain.on('view:set', (_e, value) => {
-  if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'history', 'help'].includes(value)) {
+  if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'git', 'history', 'help'].includes(value)) {
     chatView = value;
     pushState();
   }
@@ -648,7 +655,11 @@ if (!app.requestSingleInstanceLock()) {
     }
     setupSession();
     createWindow();
+    gitConsole = setupGitConsole({ ipcMain, getWin: () => win, getRoot: () => project.info()?.id || null });
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('will-quit', cleanupTemp);
+  app.on('will-quit', () => {
+    cleanupTemp();
+    gitConsole?.stop();
+  });
 }

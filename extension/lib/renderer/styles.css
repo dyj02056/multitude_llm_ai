@@ -71,6 +71,10 @@ button:hover { background: #2a2f3c; }
 .name { font-weight: 600; }
 .url { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
 .panel-head button { padding: 1px 6px; font-size: 12px; }
+/* 좁은 패널(3열 배치 등)에서도 머리줄이 한 줄로: 버튼은 줄이지 않고, 주소·상태 글이 먼저 줄어든다 */
+.panel-head { overflow: hidden; }
+.panel-head button, .panel-head .name { flex: none; white-space: nowrap; }
+.panel-head .status { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* ---------- 화면 전환 ---------- */
 .only-pick, .only-chat, .only-auth { display: none; }
@@ -396,3 +400,32 @@ body.project-open[data-mode="chat"][data-view="editor"] .project-side { display:
 .log-row .files { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .log-row.reverted { opacity: .55; }
 .panel.focused { border-color: var(--svc); }
+
+/* ---------- git 콘솔 (Windows 앱) ---------- */
+.only-git { display: none; }
+body[data-mode="chat"][data-view="git"] .only-git { display: flex; }
+body[data-view="git"] #panels { display: none !important; }
+body.project-open[data-mode="chat"][data-view="git"] .project-side { display: flex; }
+#gitView {
+  position: absolute; left: 300px; right: 0; top: 44px; bottom: 132px;
+  flex-direction: column; gap: 8px; padding: 8px;
+}
+#gitWhere { font-family: "Cascadia Mono", Consolas, monospace; }
+.ps-foot #psGit { padding: 4px 8px; font-size: 12px; text-align: left; }
+.ps-foot #psGit[hidden] { display: none; }
+.git-note { font-size: 12px; color: #e0a23b; border: 1px solid #5a4a22; border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; }
+.git-note[hidden] { display: none; }
+.git-out {
+  flex: 1; min-height: 0; margin: 0; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font: 12.5px/1.45 "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; word-break: break-all;
+}
+.git-out .cmd { color: #9ec0fa; }
+.git-out .err { color: #f0a0a0; }
+.git-out .info { color: var(--muted); }
+.git-form { display: flex; align-items: center; gap: 6px; }
+.git-prompt { font-family: "Cascadia Mono", Consolas, monospace; color: var(--muted); }
+#gitInput { flex: 1; font: 13px "Cascadia Mono", Consolas, monospace; }
+#gitInput { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; user-select: text; }
+#gitInput:focus { outline: none; border-color: var(--accent); }
+.git-out { user-select: text; }
