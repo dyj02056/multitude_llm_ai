@@ -177,3 +177,12 @@ test('답변 규칙은 파일별 전체 내용을 달라고 하고, 그 형식�
   assert.equal(X.planChange(changes[2], null).ok, false, '없는 파일은 지울 수 없다');
   assert.equal(X.planChange(changes[0], 'const a = 0;\n').after, 'const a = 1;\n');
 });
+
+test('안에 ```가 있는 .md 파일은 더 긴 울타리 한 블록으로 읽는다', () => {
+  assert.match(C.RULES, /백틱 4개/);
+  const inner = ['# 사용법', '', '```bash', 'npm start', '```', '', '끝'].join('\n');
+  const md = ['파일: docs/guide.md', '````markdown', inner, '````', '', '파일: notes.txt', '```', '메모', '```'].join('\n');
+  const changes = X.extractChanges(md);
+  assert.deepEqual(changes.map((c) => [c.path, c.type]), [['docs/guide.md', 'full'], ['notes.txt', 'full']]);
+  assert.equal(changes[0].content, inner);
+});

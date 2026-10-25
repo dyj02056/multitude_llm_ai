@@ -125,6 +125,10 @@ function createPanel(svc) {
   const needBtn = button('', '', () => window.onNeedFilesClick?.(svc.id));
   needBtn.className = 'need-btn';
   needBtn.hidden = true;
+  // 답변에 파일 수정안("파일: 경로" 코드 블록 등)이 있으면 project.js가 이 버튼을 띄운다 (프로젝트를 열지 않아도).
+  const collectBtn = button('', '', () => window.onCollectClick?.(svc.id));
+  collectBtn.className = 'collect-btn';
+  collectBtn.hidden = true;
   const loginBtn = button(UI.loginButton.label, UI.loginButton.title, () => host.panelAction(svc.id, 'login'));
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
@@ -136,6 +140,7 @@ function createPanel(svc) {
     url,
     status,
     attachBadge,
+    collectBtn,
     needBtn,
     loginBtn,
     button('복사', '최신 답변 복사', async () => {
@@ -154,7 +159,7 @@ function createPanel(svc) {
   head.addEventListener('dblclick', (e) => {
     if (!e.target.closest('button')) host.setFocus(svc.id); // 머리줄 빈 곳을 두 번 누르면 크게 보기 / 돌아오기
   });
-  const p = { el, dot, url, status, loginBtn, attachBadge, needBtn, focusBtn };
+  const p = { el, dot, url, status, loginBtn, attachBadge, needBtn, collectBtn, focusBtn };
   panels.set(svc.id, p);
   return p;
 }
@@ -206,10 +211,11 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
   if (answer === 'clear') {
     p.attachBadge.hidden = true;
     p.needBtn.hidden = true;
+    p.collectBtn.hidden = true;
     window.onPanelCleared?.(id); // 새 대화: 프로젝트 모드에서 이 AI가 아는 파일 내용을 잊는다
     window.onSkillCleared?.(id); // 새 대화: 다음 질문에 스킬 지침을 다시 붙인다
   }
-  if (answer === 'done') window.onPanelAnswerDone?.(id); // 프로젝트 모드: NEED_FILES 확인
+  if (answer === 'done') window.onPanelAnswerDone?.(id); // 파일 모아보기 버튼, 프로젝트 모드: NEED_FILES 확인
   if (answer) {
     if (answer === 'answering') p.answerStart = Date.now();
     p.status.textContent =
@@ -233,6 +239,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     if (send === 'sending') {
       p.attachBadge.hidden = true;
       p.needBtn.hidden = true;
+      p.collectBtn.hidden = true;
       if (attaching) p.status.textContent = `파일 ${attaching}개 첨부 후 보내는 중…`;
     }
     // 첨부에 실패한 패널은 글만 보냈다. 머리줄에 표시를 남겨 둔다 (다음에 보내거나 새 대화를 열 때까지).

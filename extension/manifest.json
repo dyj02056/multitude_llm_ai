@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Multitude LLM",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Gemini · ChatGPT · Claude 등 11개 AI 웹 채팅을 한 탭에 최대 6개 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.",
   "minimum_chrome_version": "116",
   "icons": {

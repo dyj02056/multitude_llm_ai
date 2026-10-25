@@ -105,7 +105,11 @@
       if (SKIP.test(tag) || el.getAttribute('role') === 'button' || skip.has(el)) return '';
 
       const code = codeRoots.get(el);
-      if (code) return wrap(keep(`\`\`\`${code.lang}\n${code.text}\n\`\`\``));
+      if (code) {
+        // 내용에 ```가 있으면(.md 파일 등) 더 긴 울타리로 감싸야 한 블록이 중간에 끊기지 않는다
+        const fence = '`'.repeat(Math.max(3, ...(code.text.match(/`{3,}/g) || []).map((m) => m.length + 1)));
+        return wrap(keep(`${fence}${code.lang}\n${code.text}\n${fence}`));
+      }
 
       switch (tag) {
         case 'CODE':

@@ -329,6 +329,27 @@ body.project-open[data-mode="chat"][data-view="panels"] .project-side { display:
 .project-chip[hidden] { display: none; }
 .project-chip:has(input:checked) { color: #9ec0fa; }
 .panel-head .need-btn { border-color: #2a6a4a; color: #8fe0b0; }
+/* 파일 모아보기: 답변이 끝나 버튼이 생기면 튀어나오고 몇 번 빛난 뒤, 누를 때까지 은은하게 빛을 남긴다 */
+.panel-head .collect-btn { position: relative; overflow: hidden; border-color: #7a5a1e; color: #ffd27a; background: #2a2414; }
+.panel-head .collect-btn:hover { background: #3a3018; }
+.panel-head .collect-btn.attn {
+  border-color: #f5b642; box-shadow: 0 0 6px rgba(245, 182, 66, .45);
+  animation: collect-pop .45s cubic-bezier(.2, 1.6, .4, 1), collect-glow 1.4s ease-in-out .45s 4;
+}
+.panel-head .collect-btn.attn::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 236, 190, .55), transparent);
+  animation: collect-shine 1.4s ease-in-out .45s 4;
+}
+@keyframes collect-pop { 0% { transform: scale(.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes collect-glow {
+  0%, 100% { box-shadow: 0 0 6px rgba(245, 182, 66, .45); }
+  50% { box-shadow: 0 0 14px 3px rgba(245, 182, 66, .85); background: #4a3a14; }
+}
+@keyframes collect-shine { 0% { left: -60%; } 60%, 100% { left: 120%; } }
+@media (prefers-reduced-motion: reduce) {
+  .panel-head .collect-btn.attn, .panel-head .collect-btn.attn::after { animation: none; }
+}
 
 /* ---------- 변경 제안 ---------- */
 .only-changes { display: none; }
@@ -395,6 +416,16 @@ body.project-open[data-mode="chat"][data-view="editor"] .project-side { display:
 .pf pre .a { background: #12301f; color: #a6f0bf; }
 .pf pre .d { background: #3a1a1d; color: #f5b3b3; }
 .pf pre .h { color: #9ec0fa; }
+.pf pre.code { padding: 6px 10px; white-space: pre; color: var(--text, #e6e6e6); }
+.pf.collect .pf-head .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf.collect .pf-head button { padding: 2px 10px; font-size: 12px; flex: none; }
+.pf.collect .pf-head button.copied { background: #1f4a30; border-color: #2a6a4a; color: #a6f0bf; }
+.pf.collect .op { font-size: 11px; padding: 0 5px; border-radius: 3px; border: 1px solid var(--border); flex: none; }
+.pf.collect .op.create { color: #8fe0b0; border-color: #2a6a4a; }
+.pf.collect .op.modify { color: #9ec0fa; border-color: #2a4a6a; }
+.pf.collect .op.delete { color: #f0a0a0; border-color: #5a2a2a; }
+.pf.collect .op.diff, .pf.collect .op.full { color: #e0a23b; border-color: #5a4a22; }
+.pf.collect .collect-del { display: block; padding: 8px 10px; }
 .log-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12.5px; }
 .log-row .files { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .log-row.reverted { opacity: .55; }

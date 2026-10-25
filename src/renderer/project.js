@@ -596,8 +596,9 @@
   }
 
   window.onPanelAnswerDone = async (id) => {
-    if (!has()) return;
     const md = await answerMd(id).catch(() => '');
+    showCollectBtn(id, md).catch(() => {});
+    if (!has()) return;
     // 개별 파일 방식이면 AI가 올린 이름(src__a__index.js)으로 요청할 수 있어 실제 경로로 되돌린다
     const wanted = [...new Set(PC.parseNeedFiles(md).map((p) => PU.restorePaths(p).find((c) => entryOf(c)) || p))];
     const p = panels.get(id);
@@ -771,7 +772,9 @@
     foot.className = 'change-foot';
     const applyBtn = button('미리보기·적용', `${ai.name}의 수정안을 미리 보고 적용합니다`, () => openPreview(ai));
     applyBtn.disabled = !ok.length;
-    foot.append(applyBtn);
+    const collectBtn = button('📋 모아보기', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다`, () => window.onCollectClick(ai.id));
+    collectBtn.disabled = !ai.plans.length;
+    foot.append(applyBtn, collectBtn);
     col.append(head, list, foot);
     return col;
   }
@@ -910,6 +913,136 @@
     if (failed.length) alert(`적용하지 못한 파일:\n${failed.join('\n')}`);
     return `${done.length}개 파일을 적용했습니다${failed.length ? ` · ${failed.length}개 실패` : ''}`;
   }
+
+  // ---------- 파일 모아보기 ----------
+  // 답변에서 찾은 파일 수정안을 "경로 + 전체 코드"로 모아, 직접 복사해 붙여 넣기 좋게 보여 준다. 파일은 쓰지 않는다.
+  // 프로젝트를 열지 않아도 쓴다. 그때는 새 파일·수정을 구분하지 못하고, diff는 전체 코드로 바꾸지 못해 diff 그대로 보여 준다.
+
+  const COLLECT_OP = { create: '새 파일', modify: '수정', full: '전체 코드', diff: '바뀐 부분(diff)', same: '변경 없음', delete: '삭제' };
+
+  const hunkText = (change) => change.hunks.map((h) => [`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`, ...h.lines].join('\n')).join('\n');
+
+  /** 답변 → [{ path, op, code, note }]. 프로젝트가 열려 있으면 지금 파일과 비교해 새 파일·수정을 나누고 diff는 전체 코드로 바꾼다 */
+  async function collectItems(md) {
+    const items = [];
+    for (const change of PX.extractChanges(md)) {
+      const { path } = change;
+      if (change.isDelete) {
+        items.push({ path, op: 'delete', code: '' });
+        continue;
+      }
+      let before; // undefined: 모름 (프로젝트가 없거나 읽지 못함)
+      if (has()) before = await currentText(path).catch(() => undefined);
+      if (change.type === 'full') {
+        const same = typeof before === 'string' && before.replace(/\r\n/g, '\n').trimEnd() === change.content.replace(/\r\n/g, '\n').trimEnd();
+        items.push({ path, op: before === undefined ? 'full' : before === null ? 'create' : same ? 'same' : 'modify', code: change.content });
+        continue;
+      }
+      let note = '프로젝트를 열면 지금 파일과 합친 전체 코드로 보여 줍니다';
+      if (before !== undefined || change.isNew) {
+        const plan = PX.planChange(change, before ?? null);
+        if (plan.ok) {
+          items.push({ path, op: plan.op, code: plan.after.replace(/\r\n/g, '\n') });
+          continue;
+        }
+        note = `전체 코드로 바꾸지 못했습니다: ${plan.error}`;
+      }
+      items.push({ path, op: 'diff', code: hunkText(change), note });
+    }
+    return items;
+  }
+
+  /** 답변이 끝나면 수정안 개수를 세어 패널 머리줄 버튼을 띄운다 (눈에 띄게 잠깐 움직임) */
+  async function showCollectBtn(id, md) {
+    const p = panels.get(id);
+    if (!p) return;
+    const changes = PX.extractChanges(md);
+    p.collectBtn.hidden = !changes.length;
+    p.collectBtn.classList.remove('attn');
+    if (!changes.length) return;
+    p.collectBtn.textContent = `📋 파일 ${changes.length}개 모아보기`;
+    p.collectBtn.title = `답변에서 찾은 파일 — 경로와 전체 코드를 모아 복사할 수 있습니다:\n${listLines(changes, (c) => `- ${c.path}`)}`;
+    void p.collectBtn.offsetWidth; // 애니메이션을 처음부터 다시 돌린다
+    p.collectBtn.classList.add('attn');
+  }
+
+  const fenceFor = (code) => '`'.repeat(Math.max(3, ...[...code.matchAll(/`{3,}/g)].map((m) => m[0].length + 1)));
+  const langOf = (path) => (/\.([\w]+)$/.exec(path)?.[1] || '').toLowerCase();
+
+  /** 전체 복사용 Markdown: 파일 목록 + 파일마다 "파일: 경로" 와 코드 블록, 지울 파일은 DELETE_FILES */
+  function collectMarkdown(items) {
+    const out = items.map((it) => `- [${COLLECT_OP[it.op]}] ${it.path}`);
+    for (const it of items.filter((x) => x.op !== 'delete')) {
+      const fence = fenceFor(it.code);
+      out.push('', `파일: ${it.path} (${COLLECT_OP[it.op]})`, `${fence}${it.op === 'diff' ? 'diff' : langOf(it.path)}`, it.code.replace(/\n$/, ''), fence);
+    }
+    const del = items.filter((x) => x.op === 'delete').map((x) => x.path);
+    if (del.length) out.push('', `DELETE_FILES: ${del.join(', ')}`);
+    return out.join('\n');
+  }
+
+  async function copyWithFeedback(btn, text, label) {
+    await host.copyText(text);
+    btn.textContent = '✓ 복사됨';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = label;
+      btn.classList.remove('copied');
+    }, 1200);
+  }
+
+  window.onCollectClick = async (id) => {
+    const p = panels.get(id);
+    p?.collectBtn.classList.remove('attn');
+    const name = state.services.find((s) => s.id === id)?.name || id;
+    const items = await collectItems(await answerMd(id).catch(() => ''));
+    const counts = Object.entries(COLLECT_OP)
+      .map(([op, label]) => [label, items.filter((x) => x.op === op).length])
+      .filter(([, n]) => n)
+      .map(([label, n]) => `${label} ${n}`)
+      .join(' · ');
+    modal.show(
+      `${name} — 파일 ${items.length}개 모아보기`,
+      `${counts}${has() ? ` · ${project.info.name} 기준` : ' · 프로젝트를 열면 새 파일·수정을 구분합니다'} — 파일에는 쓰지 않습니다`,
+    );
+    $('#patchBody').replaceChildren(
+      ...(items.length
+        ? items.map((it) => {
+            const pf = document.createElement('div');
+            pf.className = 'pf collect';
+            const head = document.createElement('div');
+            head.className = 'pf-head';
+            const tag = span(`op ${it.op}`, COLLECT_OP[it.op]);
+            if (it.op === 'full') tag.title = '프로젝트를 열면 새 파일인지 수정인지 알려 줍니다';
+            head.append(tag, span('path', it.path));
+            if (it.note) head.append(span('muted-label', it.note));
+            const pathBtn = button('경로 복사', '파일 경로를 복사합니다', () => copyWithFeedback(pathBtn, it.path, '경로 복사'));
+            head.append(pathBtn);
+            if (it.op !== 'delete') {
+              const codeBtn = button('코드 복사', '이 파일의 전체 코드를 복사합니다', () => copyWithFeedback(codeBtn, it.code, '코드 복사'));
+              codeBtn.className = 'primary';
+              head.append(codeBtn);
+            }
+            pf.append(head);
+            if (it.op === 'diff') pf.append(diffPre(it.code));
+            else if (it.op !== 'delete') {
+              const pre = document.createElement('pre');
+              pre.className = 'code';
+              pre.textContent = it.code;
+              pf.append(pre);
+            } else pf.append(span('muted-label collect-del', '이 파일을 지우라는 요청입니다'));
+            return pf;
+          })
+        : [span('change-empty', '이 답변에서 파일 수정안을 찾지 못했습니다.')]),
+    );
+    $('#patchAll').hidden = true;
+    $('#patchApply').hidden = !items.length;
+    $('#patchApply').textContent = '전체 복사';
+    $('#patchApply').onclick = async () => {
+      await host.copyText(collectMarkdown(items));
+      $('#patchStatus').textContent = `파일 ${items.length}개를 경로와 함께 복사했습니다`;
+    };
+  };
 
   const fmtAt = (ms) => new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
