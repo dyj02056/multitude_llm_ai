@@ -2,6 +2,12 @@
 // 답변 HTML을 Markdown으로 바꾼다. 표·코드 블록·목록·제목·강조·링크를 살린다.
 // 이 함수는 toString()으로 서비스 페이지 안에 주입되어 실행된다. 바깥 변수를 쓰면 안 된다.
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.markdown)이 같이 쓴다.
+//
+// [쉽게 말하면]
+// AI 사이트에 보이는 답변(웹페이지 요소, HTML)을 Markdown 글로 바꾸는 "번역기"입니다.
+// Markdown은 **굵게**, # 제목, ``` 코드 상자 ``` 처럼 기호로 서식을 나타내는 글 형식입니다.
+// 이렇게 바꿔 두어야 답변 복사·비교·기록·파일 모아보기에서 표와 코드 상자가 그대로 살아 있습니다.
+// 이 함수는 AI 사이트 페이지 안에서 실행되므로, 함수 바깥의 변수를 쓰면 안 됩니다.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;

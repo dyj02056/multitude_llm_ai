@@ -8,6 +8,12 @@
 // - 한 번에 하나만, 시간 제한(네트워크 명령 2분 · 나머지 1분)과 중지 버튼. 출력은 2MB까지, 주소의 토큰·알려진 키는 가린다.
 // - 되돌리기 어려운 명령은 앱 창 위에 확인 창을 띄운다.
 
+// [쉽게 말하면]
+// git 콘솔 화면에서 사용자가 친 명령을 실제로 실행하고, 결과 글자를 화면으로 흘려보내는 파일입니다.
+// 안전장치: 경비원(git-rules.js) 검사 통과 → 위험하면 확인 창 → 실행 → 시간이 너무 길면 자동으로 멈춤
+// "셸 없이 실행"한다는 것은, 명령 줄을 해석하는 중간 프로그램(cmd/PowerShell)을 거치지 않아
+// 명령 뒤에 다른 명령을 몰래 이어 붙이는 일(예: ; del *.*)이 불가능하다는 뜻입니다.
+
 const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
@@ -34,6 +40,7 @@ function resolveExe(name) {
 let gitExe;
 const gitPath = () => (gitExe === undefined ? (gitExe = resolveExe(process.platform === 'win32' ? 'git.exe' : 'git')) : gitExe);
 
+/** 실행 중인 git과 그 git이 띄운 하위 프로그램까지 한꺼번에 강제로 끕니다 (중지 버튼·시간 초과). */
 function killTree(child) {
   if (!child || child.exitCode !== null) return;
   if (process.platform === 'win32') {
@@ -44,6 +51,7 @@ function killTree(child) {
 /**
  * ipcMain: Electron ipcMain, getWin(): 앱 창, getRoot(): 열어 둔 프로젝트 폴더(없으면 null)
  */
+// git 콘솔이 쓰는 요청 통로(git:info, git:run, git:stop, git:openTerminal)를 등록합니다.
 function setupGitConsole({ ipcMain, getWin, getRoot }) {
   let running = null; // { child, timer }
 
@@ -79,6 +87,7 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
     return { root, isRepo: true, top, branch, hooks, hooksPath: hooksPath || null };
   });
 
+  // 명령 실행: 한 번에 하나만. 출력은 받는 즉시 화면으로 보내고(git:output), 끝나면 git:done으로 알립니다.
   ipcMain.handle('git:run', async (_e, line) => {
     const root = getRoot();
     if (!root) return { ok: false, error: '프로젝트가 열려 있지 않습니다' };
@@ -142,6 +151,7 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
     });
   });
 
+  // 중지 버튼
   ipcMain.handle('git:stop', () => {
     if (!running) return false;
     send('git:output', { stream: 'info', text: '\n중지했습니다\n' });

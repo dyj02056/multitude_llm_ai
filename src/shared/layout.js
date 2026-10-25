@@ -5,6 +5,10 @@
 //   row   가로:   한 줄에 모두
 //   main  큰 칸:  첫 패널을 왼쪽에 크게(3/5), 나머지는 오른쪽에 위아래로
 //   tall  2열:    두 열로 쌓기 (2개는 위아래, 홀수면 마지막 칸이 두 열을 차지, 6개 2×3)
+//
+// [쉽게 말하면] 패널 여러 개를 화면에 어떻게 나눠 놓을지 계산하는 "자리 배치표"입니다.
+// 화면을 바둑판(C칸 × R줄)으로 나누고, 패널마다 "몇 번째 칸부터 몇 칸을 차지하는지"를 정합니다.
+// 예: 5개 격자 = 위 3개, 아래 2개 → 6칸짜리 바둑판에서 위 패널은 2칸씩, 아래 패널은 3칸씩 차지
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -52,6 +56,7 @@
    * 화면 영역(area: { x, y, width, height })에 칸을 놓는다. → [{ x, y, width, height }] (n개, 순서대로)
    * gap: 칸 사이·가장자리 간격(px)
    */
+  // 위에서 정한 칸을 실제 픽셀 위치(x, y, 폭, 높이)로 바꿉니다. gap은 패널 사이 간격입니다.
   function placeCells(layout, n, area, gap) {
     const { C, R, cells } = layoutCells(layout, n);
     const unitW = (area.width - gap * (C + 1)) / C;

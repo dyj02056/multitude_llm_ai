@@ -4,6 +4,9 @@
 // 글자 입력은 webContents.insertText(브라우저의 실제 입력 경로)를 써서
 // textarea · ProseMirror(ChatGPT) · Quill(Gemini) 어느 편집기든 똑같이 동작하게 한다.
 
+// [쉽게 말하면] 사용자가 쓴 질문을 각 AI 사이트의 입력창에 "대신 타이핑"하고 보내기 버튼을 누르는 파일입니다.
+// 순서: 입력창 찾기 → (파일이 있으면) 첨부 → 글자 넣기 → 보내기 버튼 누르기 → 버튼이 없으면 Enter 키
+
 const { dev } = require('./dev');
 const { pageFocusInput, pageRefocusInput, pageClickSend } = require('../shared/page');
 const { attachFiles, cleanupTemp } = require('./attach');
@@ -14,6 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 페이지 함수(shared/page.js)는 toString()으로 페이지 안에 주입해 실행한다.
 const run = (wc, fn, arg) => wc.executeJavaScript(`(${fn.toString()})(${JSON.stringify(arg)})`, true);
 
+// 키보드 누르기를 흉내 냅니다. combo 예: 'Enter', 'Control+Enter'
 function pressKey(wc, combo) {
   const parts = combo.split('+');
   const keyCode = parts.pop();

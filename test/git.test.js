@@ -1,5 +1,8 @@
 'use strict';
 // git 콘솔 명령 검사 (v0.8.0) 단위 테스트:  npm test
+// [쉽게 말하면] 테스트 = "코드가 약속대로 동작하는지 자동으로 확인하는 시험지"입니다. npm test 로 모든 시험을 한 번에 돌립니다.
+// 이 파일: git 콘솔이 위험한 명령은 막고 괜찮은 명령은 통과시키는지 확인합니다.
+// assert.equal(실제, 기대) = "실제 값이 기대 값과 같아야 한다" (다르면 시험 실패)
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const G = require('../src/main/git-rules');

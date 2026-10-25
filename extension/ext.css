@@ -1,6 +1,7 @@
 /* 크롬 확장 프로그램 전용 스타일. 나머지는 Electron 앱과 같은 lib/renderer/styles.css를 쓴다. */
 
 /* 서비스 페이지 iframe은 host.js가 패널 본문 자리에 겹쳐 놓는다 (Electron의 WebContentsView처럼). */
+/* [쉽게 말하면] 크롬 확장에서만 쓰는 추가 모양입니다. AI 사이트 iframe을 담는 층(#frames)과 iframe의 기본 위치(화면 밖)를 정합니다. */
 #frames { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 .svc-frame {
   position: fixed; left: -20000px; border: 0; background: #fff;

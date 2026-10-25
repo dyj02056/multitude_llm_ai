@@ -1,6 +1,10 @@
 // 교차검토(종합) 질문 만들기.
 // 다른 AI들의 답변을 모아, 종합을 맡은 AI 하나에게 비교·정리를 부탁한다.
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.synth)이 같이 쓴다.
+//
+// [쉽게 말하면] "종합 요청" 글을 만드는 파일입니다.
+// 원래 질문과 다른 AI들의 답변을 모아 "틀린 점·빠진 점을 찾아 최종 답을 정리해 줘"라는 요청문으로 엮습니다.
+// 답변이 너무 길면 잘라서, 한 번에 보낼 수 있는 길이로 맞춥니다.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;

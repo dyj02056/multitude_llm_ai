@@ -2,6 +2,11 @@
 // 질문 보내기 · 답변 감시 · 교차검토(종합) · 답변 모으기.
 // 공통 입력창으로 보낸 질문 한 번을 "라운드"라고 부른다. 자동 종합은 라운드의 모든 답변이 끝났을 때 한 번만 실행한다.
 // 패널을 다루는 방법만 바꿔 끼워서(adapter) Electron 앱과 크롬 확장 프로그램(전역 MLA.rounds)이 같이 쓴다.
+//
+// [쉽게 말하면]
+// 질문을 여러 AI에게 동시에 보내고, 답변이 끝날 때까지 지켜보고, 기록에 남기고,
+// 원하면 "종합"(다른 AI들의 답을 모아 한 AI에게 정리시키기)까지 하는 "진행자"입니다.
+// 패널을 실제로 다루는 방법(adapter, 아래 a)은 Windows 앱과 크롬 확장이 각자 넘겨줍니다.
 (function (root, factory) {
   const api = factory(root.MLA && root.MLA.synth, root.MLA && root.MLA.services);
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -230,7 +235,14 @@
       return { question: round?.question || '', answers: list };
     }
 
-    return { sendAll, sendFollowUp, runSynth, collectMarkdown, answers, cancelWatch };
+    /** 패널 하나의 최신 답변 (답변이 끝날 때마다 그 패널만 읽으려고 — 열린 패널을 다 읽는 answers()보다 가볍다) */
+    async function answer(id) {
+      const svc = a.services.find((s) => s.id === id);
+      if (!svc || !a.hasPanel(id)) return null;
+      return { id, name: svc.name, color: svc.color, ...(await readAnswer(id)) };
+    }
+
+    return { sendAll, sendFollowUp, runSynth, collectMarkdown, answers, answer, cancelWatch };
   }
 
   return { createRounds };

@@ -3,6 +3,13 @@
 // Electron 앱은 toString()으로 페이지에 주입하고(executeJavaScript), 크롬 확장 프로그램은 content script에서 바로 부른다.
 // 그래서 함수마다 바깥 변수를 쓰면 안 된다 (필요한 것은 함수 안에 둔다).
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.page)이 같이 쓴다.
+//
+// [쉽게 말하면]
+// AI 사이트 페이지 "안에서" 실행되는 작은 일꾼 함수 모음입니다.
+//   - 입력창 찾아서 클릭하기 / 파일 첨부하기 / 보내기 버튼 누르기
+//   - 지금 답변을 쓰는 중인지, 최신 답변 글이 무엇인지 읽기
+//   - 로그아웃 상태인지 확인하기
+// 함수를 글자로 바꿔 페이지 안에 넣어 실행하기 때문에, 각 함수는 필요한 것을 모두 자기 안에 갖고 있어야 합니다.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -150,6 +157,7 @@
    * 보내기 버튼을 찾아 누른다. cfg: { send, sendText, dry }
    * 결과: true(눌렀음) · null(버튼은 있지만 꺼져 있음 — 업로드 중 등) · false(버튼이 없음)
    */
+  // 보내기 버튼을 찾아 누릅니다. 결과: true(눌렀음) / null(버튼은 있는데 꺼져 있음 — 업로드 중 등) / false(못 찾음)
   function pageClickSend(cfg) {
     const usable = (el) =>
       !!el &&
@@ -177,6 +185,8 @@
    * 지금 상태: { stop: 중지 버튼이 보이는지, count: 답변 덩어리 수, text: 최신 답변 글, md: Markdown }
    * cfg: { stop, response, messages }. toMarkdown이 있으면 최신 답변을 Markdown으로도 바꿔 md에 담는다.
    */
+  // 페이지의 "지금 사진"을 찍습니다: 멈춤 버튼이 보이는지(=답변 쓰는 중), 답변 덩어리 개수, 최신 답변 글.
+  // 답변 감시원(watch.js)이 이 사진을 여러 번 비교해 답변이 끝났는지 판단합니다.
   function pageSnapshot(cfg, toMarkdown) {
     const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
     const stop = cfg.stop.some((s) => [...document.querySelectorAll(s)].some(visible));
@@ -216,6 +226,7 @@
   }
 
   /** 로그아웃 상태인지. cfg: 서비스 설정 (loggedOut 사용) */
+  // 로그아웃 상태인지: 로그인 화면 주소이거나, "로그인" 버튼·링크가 보이면 로그아웃으로 봅니다.
   function pageIsLoggedOut(cfg) {
     const visible = (el) =>
       !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length) &&

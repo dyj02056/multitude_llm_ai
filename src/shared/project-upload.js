@@ -7,6 +7,11 @@
 //          본문에 "올린 이름 → 실제 경로" 목록을 넣는다. 한도를 넘으면 그번만 묶음 파일로 보낸다.
 // 어느 방식이든 inlineText(예전처럼 본문에 다 넣은 글)를 함께 돌려준다. 문서 첨부를 받지 않는 서비스와,
 // 업로드에 실패했을 때(내부 예비 경로) 이 글을 대신 보낸다.
+//
+// [쉽게 말하면] 프로젝트 파일을 AI에게 "첨부 파일"로 보낼 수 있게 포장하는 파일입니다.
+//   - 묶음 파일: 여러 파일 내용을 .md 파일 하나로 묶어 올림 (기본)
+//   - 개별 파일: 파일마다 하나씩 올림 (이름에 경로를 넣어 src/a.js → src__a.js)
+// 첨부를 못 받는 서비스에는 같은 내용을 본문 글로 넣을 수 있게 예비 글도 함께 만듭니다.
 (function (root, factory) {
   const api = factory(root.MLA && root.MLA.projectContext);
   if (typeof module === 'object' && module.exports) module.exports = api;

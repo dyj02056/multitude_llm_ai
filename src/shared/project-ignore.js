@@ -4,6 +4,13 @@
 //   L3 선택 적용: .dockerignore · .npmignore 등 — 다른 목적(이미지·배포 크기)의 파일이라 기본은 끔
 // 파일마다 "어느 규칙 파일의 몇째 줄 때문에 빠졌는지"를 남겨 화면에 보여 준다.
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.projectIgnore)이 같이 쓴다. 파일 읽기는 fsx(쓰는 쪽이 넘김)로 한다.
+//
+// [쉽게 말하면]
+// 프로젝트 폴더에서 "AI에게 보내면 안 되는 파일"을 골라내는 거름망입니다. 3단계로 거릅니다.
+//   L1 항상 제외: 비밀번호 파일(.env), 키, node_modules, 그림·압축 파일 등 — 사용자가 켜도 못 보냄
+//   L2 기본 제외: .gitignore 등 프로젝트가 스스로 "빼 달라"고 적어 둔 파일 — 직접 체크하면 보낼 수 있음
+//   L3 선택 제외: .dockerignore 등 — 사용자가 켜야 적용
+// 각 파일이 왜 빠졌는지(어느 파일 몇째 줄 때문인지)도 기억해 화면에 알려 줍니다.
 (function (root, factory) {
   const api = factory(root.MLA && root.MLA.vendor && root.MLA.vendor.ignore);
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -86,6 +93,7 @@
 
   const L1 = makeSource({ source: '기본 제외 규칙(앱 내장)', layer: 'L1', content: L1_RULES.join('\n') });
 
+  // 여러 제외 규칙 파일을 모아 "이 경로는 빼야 하나?"에 답하는 판정기를 만듭니다. git과 같은 문법을 씁니다.
   function createMatcher() {
     const l2 = []; // rank 순으로 정렬해 둔다
     const l3 = []; // { ...source, enabled }
@@ -210,6 +218,8 @@
    * opts.l3Enabled: 켤 L3 규칙 파일 이름들, opts.globalExclude: { source, content } (git 전역 제외 파일, 있으면)
    * 결과: { entries(트리 순서), matcher, l2Found, l3Found: [{ source, enabled, count }], truncated }
    */
+  // 프로젝트 폴더 전체를 훑어 파일·폴더 목록을 만들고, 항목마다 제외 여부와 이유를 붙입니다.
+  // 폴더 안에 .gitignore가 있으면 그 폴더부터 그 규칙을 더해 가며 내려갑니다.
   async function scanProject(fsx, { l3Enabled = [], globalExclude = null, maxEntries = MAX_ENTRIES } = {}) {
     const matcher = createMatcher();
     const l2Found = [];

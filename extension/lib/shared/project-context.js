@@ -1,6 +1,12 @@
 // 자동 생성 파일 — 직접 고치지 말고 원본을 고친 뒤 npm run build:ext (원본: src/shared/project-context.js)
 // 프로젝트 맥락(구조 + 고른 파일 내용)을 AI에게 보낼 글로 만들고, 답변 끝의 NEED_FILES 요청을 읽는다.
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.projectContext)이 같이 쓴다.
+//
+// [쉽게 말하면]
+// 프로젝트 모드에서 AI에게 보낼 "설명 자료"를 만드는 파일입니다.
+//   - 프로젝트 구조(파일 이름 목록)와 고른 파일 내용을 정리해 붙이고
+//   - "이런 형식으로 답해 줘"라는 답변 규칙(RULES)을 덧붙입니다.
+//   - AI 답변 끝의 "NEED_FILES: a.js, b.js"(더 보고 싶은 파일)를 읽어 냅니다.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -12,6 +18,7 @@
   const TREE_LINE_LIMIT = 3000; // 구조 목록이 이보다 길면 자른다
   const CONTEXT_FILE = 'project-context.md';
 
+  // AI에게 매번 함께 보내는 답변 규칙. 이 형식을 지켜야 변경 제안·파일 모아보기가 수정안을 찾을 수 있습니다.
   const RULES = [
     '[답변 규칙]',
     '1) 먼저 원인이나 설계를 3줄 이내로 설명해 줘.',
@@ -52,6 +59,7 @@
    *   main/
    *     main.js
    */
+  // 파일 경로 목록을 들여쓰기 된 나무 모양 목록으로 바꿉니다 (폴더 안의 파일이 한 칸 들여 써짐).
   function buildTree(paths) {
     const lines = [];
     const seen = new Set();

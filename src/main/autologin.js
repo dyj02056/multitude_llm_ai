@@ -3,11 +3,19 @@
 // 서비스 패널에서 "Google로 계속하기"를 대신 눌러 준다. 비밀번호는 다루지 않는다.
 // Google 계정 선택·동의 화면(accounts.google.com)은 건드리지 않고 사용자가 직접 누른다.
 
+// [쉽게 말하면]
+// 각 AI 사이트에 들어가면 보이는 "Google로 계속하기" 버튼을 앱이 대신 눌러 주는 "자동 로그인 도우미"입니다.
+// 비밀번호를 입력하거나 저장하지 않습니다. Google 계정 고르기·동의 화면은 사용자가 직접 누릅니다.
+// 같은 버튼을 계속 누르는 일을 막으려고, 2분 동안 최대 6번까지만 누릅니다.
+
 const MAX_ATTEMPTS = 6; // 창 하나에서 연속으로 누르는 최대 횟수
 const WINDOW_MS = 2 * 60 * 1000; // 이 시간이 지나면 횟수를 다시 센다
 
 // pageLoginStep은 toString()으로 페이지 안에 주입되어 실행된다. 바깥 변수를 쓰면 안 된다.
 // 로그아웃 상태 확인(pageIsLoggedOut)은 크롬 확장 프로그램과 같이 쓰는 shared/page.js에 있다.
+// 이 함수는 앱이 아니라 "AI 사이트 페이지 안"에서 실행됩니다.
+// 하는 일: 캡차(사람 확인)가 있으면 멈춤 → "Google로 로그인" 버튼을 찾아 누름 → 없으면 일반 "로그인" 버튼을 누름
+// 결과로 무엇을 했는지(step)를 돌려줍니다.
 function pageLoginStep(cfg) {
   const visible = (el) =>
     !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length) &&
@@ -49,6 +57,7 @@ const { pageIsLoggedOut } = require('../shared/page');
 const { isServiceUrl, isLoginUrl } = require('../shared/services');
 const log = (svc, ...args) => devLog('autologin', svc.id, ...args);
 
+// 함수를 글자로 바꿔(toString) 페이지 안에 넣어 실행하는 도우미. 그래서 위의 페이지 함수는 바깥 변수를 쓰면 안 됩니다.
 const run = (wc, fn, arg) => wc.executeJavaScript(`(${fn.toString()})(${JSON.stringify(arg)})`, true);
 
 const isGoogleAuthPage = (url) => /^https:\/\/accounts\.google\.com\//.test(url);
@@ -60,9 +69,12 @@ const onServiceHost = isServiceUrl;
  * 서비스 패널 하나를 감시한다.
  * onState(state): 'needs-login' | 'logging-in' | 'google' | 'captcha' | 'ready'
  */
+// 패널 페이지가 새로 열리거나 주소가 바뀔 때마다 check()로 "로그인이 필요한지" 살피고, 필요하면 버튼을 누릅니다.
+// 결과 상태는 onState로 화면에 알려 패널 머리줄에 "로그인 필요" 같은 표시를 띄웁니다.
 function attach(wc, svc, onState) {
   const st = { running: false, count: 0, since: 0, timer: null };
 
+  // 한 번 살펴보기: Google 로그인 페이지면 사용자에게 맡기고, 로그인돼 있으면 'ready', 아니면 버튼을 눌러 봅니다.
   async function check() {
     if (wc.isDestroyed() || st.running) return;
     const url = wc.getURL();
@@ -111,6 +123,7 @@ function attach(wc, svc, onState) {
     }
   }
 
+  // ms(1000분의 1초) 뒤에 check를 다시 실행하도록 예약합니다. 이미 예약된 것은 취소하고 새로 잡습니다.
   function schedule(ms = 1200) {
     clearTimeout(st.timer);
     st.timer = setTimeout(check, ms);

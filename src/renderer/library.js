@@ -8,6 +8,12 @@
 // - 스킬: 고른 스킬의 지침을 각 패널의 새 대화 첫 질문(또는 매 질문) 앞에 붙여 보낸다.
 //   패널마다 이 대화에 어떤 스킬을 보냈는지 기억하고, 새 대화(＋ · ⌂ · 모두 새 대화)를 열면 잊는다.
 
+// [쉽게 말하면]
+// 📚 라이브러리 화면입니다. 자주 쓰는 질문 양식(템플릿)과 AI에게 줄 지침(스킬)을 만들고 고르는 곳입니다.
+//   - 템플릿에 {{이름}} 같은 빈칸이 있으면, 보낼 때 "변수 입력" 화면을 띄워 채우게 합니다.
+//   - 스킬을 켜 두면 질문 앞에 지침을 붙여 보냅니다. 같은 대화에는 한 번만 붙이고, 새 대화를 열면 다시 붙입니다.
+//   - 스킬이 너무 길면 AI에게 줄여 달라고 부탁하는 "AI로 압축" 기능도 여기 있습니다.
+// 전체를 (() => { … })() 로 감싸 이름이 다른 파일과 부딪히지 않게 했습니다.
 (() => {
   const PL = MLA.promptLib;
   const { scanSecrets, describeSecrets } = MLA.secretScan;
@@ -23,6 +29,7 @@
   const userTpl = (id) => lib.templates.find((t) => t.id === id);
   const findTpl = (id) => builtinTpl(id) || userTpl(id);
 
+  /** 라이브러리를 저장합니다 (모양을 정리한 뒤). 실패하면 알림 창을 띄웁니다. */
   async function save() {
     lib = PL.normalizeLibrary(lib);
     const ok = await host.library.save(lib).catch(() => false);
@@ -38,6 +45,7 @@
     return o;
   }
 
+  // 입력창 왼쪽의 템플릿 고르기 목록: 즐겨찾기 → 내 템플릿 → 기본 템플릿 순서, 맨 아래 "라이브러리 열기"
   function renderTplSelect() {
     const group = (label, items) => {
       const g = document.createElement('optgroup');
@@ -55,6 +63,7 @@
     $('#tplSelect').value = template.id;
   }
 
+  // 템플릿을 고르면 입력창의 안내 글(hint)을 그 템플릿에 맞게 바꾸고, 다음에도 기억합니다.
   function setTemplate(id) {
     template = findTpl(id) || TEMPLATES[0];
     $('#tplSelect').value = template.id;
@@ -106,6 +115,7 @@
     return out;
   }
 
+  // 변수 입력 화면: 빈칸마다 입력 칸(또는 고르기 목록)을 만들고, 마지막에 넣었던 값을 미리 채웁니다.
   function renderVars() {
     const { tpl, q } = varsWait;
     const last = lib.lastVars[tpl.id] || {};
@@ -141,6 +151,7 @@
     $('#varsPreview').textContent = PL.fillTemplate(tpl.text, q.length > 300 ? `${q.slice(0, 300)}…` : q, varValues(), builtins);
   }
 
+  // 변수 입력을 끝냄: send가 true면 채운 글로 보내고, false면 취소하고 원래 화면으로
   function finishVars(send) {
     if (!varsWait) return;
     const { resolve, tpl, q, builtins } = varsWait;
@@ -179,6 +190,7 @@
     return { text: `${label}${len.toLocaleString()}자`, level };
   }
 
+  // 🧩 스킬 칩 줄: 스킬마다 켜기/끄기 단추, 켠 순서(①②③)가 우선순위입니다.
   function renderSkillBar() {
     const active = activeList();
     const { len } = PL.prefixSize(active);
@@ -204,6 +216,7 @@
   }
 
   /** 스킬 켜기/끄기 (켜면 맨 뒤 = 가장 낮은 우선순위) */
+  // 스킬 켜기/끄기 (최대 3개). 너무 긴 스킬이면 켜기 전에 한 번 확인합니다.
   async function toggleSkill(id) {
     const s = skillById(id);
     if (!s) return;
@@ -289,6 +302,7 @@
 
   // ---------- 라이브러리 화면 ----------
 
+  /** 라이브러리 화면 열기. tab: 'templates' 또는 'skills', sel: 처음에 고를 항목 */
   function openLibrary(tab, sel) {
     ui.tab = tab;
     ui.sel = sel || null;
@@ -317,6 +331,7 @@
     return row;
   }
 
+  // 라이브러리 화면 왼쪽 목록(템플릿·스킬)과 오른쪽 편집기를 그립니다.
   function renderLibrary() {
     for (const b of document.querySelectorAll('[data-libtab]')) b.classList.toggle('active', b.dataset.libtab === ui.tab);
     $('#libMode').hidden = ui.tab !== 'skills';
@@ -424,6 +439,7 @@
     return s ? { kind: 'skill', name: s.name, hint: s.description, text: s.body, item: s } : null;
   }
 
+  // 고른 템플릿·스킬의 편집 칸 (기본 템플릿은 읽기만 하고 "복제해서 고치기"를 보여 줌)
   function renderEditor() {
     const c = current();
     const ed = $('#libEditor');
@@ -637,6 +653,7 @@
     openCompress(c.item.id);
   });
 
+  /** "AI로 압축" 화면 열기: 맡길 AI와 목표 길이를 고르고, 원문과 압축본을 나란히 봅니다. */
   function openCompress(skillId) {
     const s = skillById(skillId);
     if (!s) return;
@@ -688,6 +705,7 @@
   }
 
   /** 패널의 지금 최신 답변에서 압축본을 꺼낸다 → 글 | '' */
+  // 패널의 최신 답변에서 압축본(코드 상자 안의 글)을 꺼내 압축본 칸에 넣습니다.
   async function readCompressed(id) {
     const got = await host.getAnswers().catch(() => null);
     const a = got?.answers?.find((x) => x.id === id);
@@ -778,6 +796,7 @@
 
   // ---------- 파일 가져오기 · 내보내기 ----------
 
+  // 글을 파일로 내려받게 합니다 (내보내기: .json, SKILL.md).
   function download(name, text, type) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type }));
@@ -853,6 +872,7 @@
 
   // ---------- 시작 · 상태 ----------
 
+  // 템플릿 목록·스킬 칩·라이브러리 화면을 한꺼번에 다시 그립니다.
   function refreshAll() {
     if (!findTpl(template.id)) template = TEMPLATES[0];
     renderTplSelect();

@@ -6,6 +6,9 @@
 //
 // 표에 없는 키는 그대로 페이지에 넘어간다.
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.shortcuts)이 같이 쓴다.
+//
+// [쉽게 말하면] 키보드 단축키 목록과, 누른 키가 어떤 단축키인지 알아내는 함수입니다.
+// 크롬 확장에서는 크롬이 이미 쓰는 단축키와 겹치지 않게 Alt+Shift 조합을 씁니다 (browser: true).
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;

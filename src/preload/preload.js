@@ -1,9 +1,17 @@
 'use strict';
 
+// [쉽게 말하면]
+// 앱 화면(index.html)과 본체(main.js) 사이의 "창구"입니다.
+// 화면은 보안상 컴퓨터 파일 등에 직접 손댈 수 없어서, 여기 정해 둔 기능(window.host.○○)만 부탁할 수 있습니다.
+// 예: host.sendPrompt(…) → 본체에 "질문 보내 줘" 요청 → 본체가 처리하고 결과를 돌려줌
+// 크롬 확장 프로그램에서는 extension/host.js가 같은 이름의 기능을 제공합니다. 그래서 화면 코드는 두 곳에서 똑같이 동작합니다.
+
 const { contextBridge, ipcRenderer } = require('electron');
 
+// 본체가 화면으로 보내는 알림 중, 화면이 들을 수 있는 종류만 허락합니다.
 const CHANNELS = new Set(['state', 'panel:status', 'synth:status', 'shortcut', 'git:output', 'git:done']);
 
+// 화면에서 window.host 로 쓸 수 있는 기능 목록. send는 "부탁만", invoke는 "부탁하고 결과 받기"입니다.
 contextBridge.exposeInMainWorld('host', {
   openModels: (ids) => ipcRenderer.send('models:open', ids),
   pickModels: () => ipcRenderer.send('models:pick'),
@@ -15,6 +23,7 @@ contextBridge.exposeInMainWorld('host', {
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
   setView: (value) => ipcRenderer.send('view:set', value),
   getAnswers: () => ipcRenderer.invoke('answers:get'),
+  getAnswer: (id) => ipcRenderer.invoke('answer:get', id),
   history: {
     list: (query) => ipcRenderer.invoke('history:list', query),
     get: (id) => ipcRenderer.invoke('history:get', id),

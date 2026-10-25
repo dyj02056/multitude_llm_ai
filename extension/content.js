@@ -4,6 +4,9 @@
 // Multitude LLM 탭의 패널 iframe으로 열렸을 때만 동작하고, 일반 탭으로 연 사이트에서는 아무것도 하지 않는다.
 // 앱 탭(host.js)의 요청을 받아 질문을 넣고 보내고, 답변을 읽어 돌려준다.
 
+// [쉽게 말하면] 각 AI 사이트 페이지 안에 들어가 일하는 "현장 직원"입니다.
+// 앱 탭(host.js)이 "이 질문 넣고 보내", "지금 답변 읽어 와"라고 메시지를 보내면 그대로 해 주고 결과를 돌려줍니다.
+// 앱 탭 안의 패널로 열렸을 때만 일하고, 사용자가 일반 탭으로 연 사이트에서는 아무것도 하지 않습니다.
 (() => {
   const EXT_ORIGIN = `chrome-extension://${chrome.runtime.id}`;
   let embedded = false;
@@ -74,6 +77,7 @@
   );
 
   /** 입력창에 글을 넣는다. textarea와 편집기(ProseMirror · Quill · Lexical)를 모두 다룬다. */
+  // 입력창에 글자 넣기. 사이트마다 편집기 종류가 달라서, 사람이 붙여넣기 한 것처럼 흉내 냅니다.
   async function insertText(el, text) {
     if (isField(el)) {
       el.focus();
@@ -104,6 +108,7 @@
   }
 
   /** 질문을 보낸다. upload가 있으면 먼저 첨부하고, 첨부에 실패해도 글은 보낸다. */
+  // 질문 보내기: 입력창 찾기 → (파일 첨부) → 글 넣기 → 보내기 버튼 누르기 → 없으면 Enter
   async function send({ cfg, text, upload, fallbackText }) {
     const focus = pageFocusInput(cfg);
     let el = findInput(cfg);

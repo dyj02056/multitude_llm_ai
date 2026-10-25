@@ -9,10 +9,14 @@
 //   extension/manifest.json        서비스 목록(src/shared/services.js)과 package.json 버전으로 생성
 //   extension/app.html             src/renderer/index.html에서 생성
 //   extension/lib/shared/*.js      src/shared/*.js 복사 (vendor/ 안의 외부 라이브러리·라이선스 포함)
-//   extension/lib/renderer/*       src/renderer/renderer.js · templates.js · styles.css 복사
+//   extension/lib/renderer/*       src/renderer/renderer.js · templates.js · project.js · library.js · styles.css 복사
 //   extension/icons/icon-*.png     scripts/make-icon.js로 생성
 //
 // 생성 결과도 저장소에 커밋해 둔다. 그래야 받은 그대로 "압축해제된 확장 프로그램을 로드"할 수 있다.
+
+// [쉽게 말하면] Windows 앱의 코드(src/)를 복사해 크롬 확장 프로그램 폴더(extension/)를 만드는 "조립 도구"입니다.
+// src/를 고친 뒤에는 꼭 npm run build:ext 를 실행해 확장 쪽에도 반영해야 합니다.
+// --check 로 실행하면 만들지 않고 "확장 폴더가 src/와 맞는지"만 검사합니다 (안 맞으면 실패).
 
 const fs = require('fs');
 const path = require('path');
@@ -34,6 +38,7 @@ const CONTENT_SHARED = ['page', 'markdown', 'shortcuts'];
 const ICON_SIZES = [16, 32, 48, 128];
 
 /** 만들 파일 목록: { 경로(extension/ 기준): 내용(문자열 | Buffer) } */
+// 만들 파일 목록 전체를 계산합니다 (공통 모듈 복사, 화면 파일 복사, app.html, manifest.json, 아이콘).
 function buildFiles() {
   const files = {};
 
@@ -57,6 +62,8 @@ function buildFiles() {
 }
 
 /** Electron 화면(index.html)을 확장 프로그램 탭용으로 바꾼다: CSP에 iframe 허용, 공통 모듈·host.js 추가. */
+// index.html을 확장용 app.html로 바꿉니다: 파일 경로를 lib/… 로, 확장 전용 스크립트(host.js 등)를 끼워 넣음.
+// 주의: 여기서 찾는 글자가 index.html에서 바뀌면 조립이 실패합니다 (스크립트 줄 등).
 function buildAppHtml(html) {
   const replace = (from, to) => {
     if (!html.includes(from)) throw new Error(`src/renderer/index.html에서 "${from}"을 찾지 못했습니다`);
@@ -91,6 +98,7 @@ function buildAppHtml(html) {
   return html;
 }
 
+// manifest.json = 크롬에게 "이 확장은 무엇이고 어떤 권한·사이트가 필요한지" 알려 주는 신분증 파일
 function buildManifest() {
   const hosts = [...new Set(SERVICES.flatMap((s) => s.hosts))];
   const matches = hosts.map((h) => `https://${h}/*`);
@@ -137,6 +145,7 @@ function buildManifest() {
 const lf = (buf) => buf.toString('utf8').replace(/\r\n/g, '\n');
 const same = (have, want, text) => (text ? lf(have) === lf(want) : have.equals(want));
 
+// 실행 시작점: 만들기 또는 검사(--check)
 function main() {
   const files = buildFiles();
   const stale = [];

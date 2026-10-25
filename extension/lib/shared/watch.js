@@ -3,6 +3,11 @@
 // 완료 판단: 답변이 시작된 뒤 "중지" 버튼이 사라지고, 최신 답변 글이 일정 시간 바뀌지 않으면 완료.
 // 중지 버튼을 못 찾는 서비스(DeepSeek 등)도 글이 멈춘 것만으로 완료를 판단할 수 있다.
 // 페이지를 읽는 방법(getSnap)만 바꿔 끼워서 Electron 앱과 크롬 확장 프로그램(전역 MLA.watch)이 같이 쓴다.
+//
+// [쉽게 말하면] AI가 답변을 다 썼는지 판단하는 규칙입니다.
+// 0.5~1초마다 페이지 "사진"(page.js의 pageSnapshot)을 찍어 비교하다가,
+// 멈춤 버튼이 사라지고 글이 한동안 더 늘지 않으면 "답변 완료"로 봅니다.
+// 너무 오래 걸리면 "시간 초과"로 알리되, 그 뒤에도 계속 지켜보다가 늦게 끝나면 완료로 바꿉니다.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;

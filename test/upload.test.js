@@ -1,5 +1,6 @@
 'use strict';
 // 프로젝트 파일 업로드(묶음 파일 / 개별 파일) 공통 모듈 단위 테스트:  npm test
+// [쉽게 말하면] 프로젝트 파일을 묶음 파일 / 개별 파일로 포장할 때 이름·크기 한도·예비 글이 맞게 만들어지는지 확인합니다.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const U = require('../src/shared/project-upload');

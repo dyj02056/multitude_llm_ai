@@ -25,6 +25,17 @@
 //
 // 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Genspark·Duck.ai·Claude·Z.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
 // 틀린 것은 remote/selectors.json으로 앱을 다시 배포하지 않고 고칠 수 있다.
+//
+// [쉽게 말하면]
+// 앱이 지원하는 AI 서비스 11개의 "주소록 + 사용 설명서"입니다.
+// 서비스마다 "주소는 어디인지, 질문 입력창은 화면의 어느 요소인지, 보내기 버튼은 어떻게 생겼는지,
+// 답변은 어디에 나타나는지"를 적어 두었습니다. 앱은 이 설명서를 보고 사람 대신 입력하고 답변을 읽습니다.
+//   - 셀렉터(selector): 웹페이지에서 특정 요소를 가리키는 "주소" 같은 글자. 예: 'textarea' = 글 입력 칸
+//   - 정규식(regex): 글자 모양을 찾는 규칙. 예: '^(로그인|sign in)$' = "로그인" 또는 "sign in"과 정확히 같은 글자
+//
+// [아래 (function (root, factory) { … }) 포장에 대해]
+// 같은 코드를 Windows 앱(Node.js의 require)과 크롬 확장 프로그램(<script>로 읽고 전역 MLA.이름으로 씀)
+// 양쪽에서 쓰기 위한 표준 포장입니다. src/shared/의 모든 파일이 같은 포장을 씁니다.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -32,6 +43,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // 서비스 목록. 순서가 화면에 보이는 순서입니다.
   const SERVICES = [
     {
       id: 'gemini',
@@ -275,6 +287,8 @@
     return ordered.length ? ordered.slice(0, MAX_SELECTED) : [...DEFAULT_SELECTED];
   }
 
+  // 주소 확인 도우미: 'www.perplexity.ai'가 'perplexity.ai' 목록에 속하는지 등 (하위 주소까지 같은 서비스로 봄)
+  // https가 아닌 주소는 받지 않습니다 (암호화되지 않은 연결에는 질문·파일을 넣지 않기 위해).
   const hostIn = (host, list) => (list || []).some((h) => host === h || host.endsWith(`.${h}`));
   const httpsHost = (url) => {
     try {

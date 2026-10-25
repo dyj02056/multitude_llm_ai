@@ -1,5 +1,6 @@
 'use strict';
 // 패널 배치 (v0.7.1) 단위 테스트:  npm test
+// [쉽게 말하면] 패널 배치(격자·가로·큰 칸·2열)를 1~6개로 계산했을 때 칸이 겹치지 않고 화면 안에 들어가는지 확인합니다.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const L = require('../src/shared/layout');

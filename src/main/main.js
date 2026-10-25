@@ -1,5 +1,26 @@
 'use strict';
 
+// ============================================================================
+// Windows 앱의 "본체(메인 프로세스)" 파일입니다.
+//
+// [이 파일이 하는 일 — 쉽게 말하면]
+// 앱을 켜면 가장 먼저 실행되는 곳으로, 건물의 "관리실" 같은 역할을 합니다.
+//   - 앱 창(window)을 만들고, 그 안에 AI 서비스 화면(ChatGPT·Gemini 등)을 "패널"로 붙입니다.
+//   - 화면(index.html, renderer)이 "이거 해 줘"라고 요청하면(IPC라고 부릅니다) 받아서 처리합니다.
+//     예: 질문 보내기, 배치 바꾸기, 프로젝트 파일 읽기·쓰기, 기록 저장, 복사 등
+//   - 설정(prefs.json)을 저장하고 불러옵니다.
+//
+// [용어 풀이]
+//   - 메인 프로세스: 앱의 뒤편에서 돌아가는 프로그램. 파일·창·네트워크처럼 강한 권한을 가집니다.
+//   - 화면(렌더러): 사용자가 보는 버튼·입력창. 보안 때문에 권한이 약하고, 필요한 일은 메인에 부탁합니다.
+//   - IPC: 화면과 메인이 서로 메시지를 주고받는 통로 (ipcMain.on / ipcMain.handle).
+//   - 패널(WebContentsView): AI 서비스 웹페이지 하나를 보여 주는 "작은 브라우저 창".
+//     앱 화면 "위에" 따로 얹히는 창이라, 앱 화면의 어떤 요소도 패널 위로 올라갈 수 없습니다.
+//     그래서 다른 화면(비교·변경 제안·창 띄우기 등)을 보일 때는 패널을 화면 밖으로 치웁니다(pushState).
+// ============================================================================
+
+// ---------- 필요한 도구(모듈) 불러오기 ----------
+// require는 다른 파일이나 라이브러리의 기능을 가져오는 명령입니다.
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
@@ -17,6 +38,8 @@ const { shortcutList, shortcutFor } = require('../shared/shortcuts');
 const project = require('./project');
 const { setupGitConsole } = require('./gitconsole');
 
+// ---------- 화면 크기 관련 숫자 (단위: 픽셀) ----------
+// 패널을 어디에 얼마나 크게 놓을지 계산할 때 씁니다. styles.css의 크기와 맞아야 화면이 어긋나지 않습니다.
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
 const COMPOSER_H = 132; // 채팅 화면 맨 아래 공통 입력창 높이 (첨부 파일 줄 포함)
@@ -36,13 +59,21 @@ const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20
 const AUTH_URL_RE =
   /accounts\.google\.com|accounts\.x\.ai|auth\.mistral\.ai|appleid\.apple\.com|auth0|auth\.openai\.com|\/oauth|\/auth\/|\/login|\/signin|sso/i;
 
+// 앱 전체에 적용하는 기본 설정:
+//   - 사이트에는 우리가 "일반 크롬 브라우저"라고 알립니다 (위 CHROME_UA).
+//   - MLA_PROFILE 개발 옵션이 있으면 설정·로그인 정보를 다른 폴더에 저장합니다 (시험용).
+//   - "자동화 도구로 조종 중" 표시를 꺼서 일부 사이트가 막지 않게 합니다.
 app.userAgentFallback = CHROME_UA;
 if (dev.profile) app.setPath('userData', dev.profile);
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
+// ---------- 앱이 지금 어떤 상태인지 기억하는 변수들 ----------
+// let은 "나중에 값이 바뀔 수 있는 상자", const는 "한 번 정하면 안 바뀌는 상자"입니다.
+// win: 앱 창 하나. 아직 안 만들었으면 null(비어 있음).
+// mode: 지금 보이는 큰 화면 — 로그인 / 모델 고르기 / 채팅
 let win = null;
 let mode = 'login'; // 'login' | 'pick' | 'chat'
-let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'git' (git 콘솔) | 'history' (기록) | 'help' (단축키)
+let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'dialog' (패널 위에 띄운 창 — 패널을 화면 밖으로 치움) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'git' (git 콘솔) | 'library' (라이브러리) | 'vars' (변수 입력) | 'compress' (스킬 AI 압축) | 'history' (기록) | 'help' (설정·단축키)
 let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
 let gitConsole = null; // git 콘솔 (gitconsole.js)
 let focusId = null; // 크게 보는 패널 (⤢). 나머지 패널은 크기를 그대로 둔 채 화면 밖으로 옮긴다
@@ -51,6 +82,8 @@ const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비
 
 // ---------- 설정 저장 ----------
 
+// 사용자가 고른 값(선택한 AI, 배치, 종합 담당 등)을 이 PC의 앱 데이터 폴더에 JSON 파일로 저장합니다.
+// 앱을 껐다 켜도 같은 설정으로 시작하기 위해서입니다.
 const prefsFile = () => path.join(app.getPath('userData'), 'prefs.json');
 const libraryFile = () => path.join(app.getPath('userData'), 'library.json'); // 프롬프트 라이브러리·스킬
 const TIMEOUT_CHOICES = [5, 10, 20, 30, 60]; // 답변 최대 대기 시간(분) 선택지
@@ -64,6 +97,11 @@ let prefs = {
   projectRoot: null, // 마지막으로 연 프로젝트 폴더
 };
 
+/**
+ * 저장해 둔 설정 파일을 읽어 prefs에 덮어씁니다.
+ * 파일이 없거나 깨졌으면 그냥 기본값을 씁니다 (catch에서 조용히 넘어감).
+ * 예전 버전 설정(없어진 서비스 등)이 남아 있어도 지금 목록에 맞게 고칩니다.
+ */
 function loadPrefs() {
   try {
     prefs = { ...prefs, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) };
@@ -74,6 +112,7 @@ function loadPrefs() {
   if (!SERVICES.some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
 }
 
+/** 지금 설정(prefs)을 파일에 씁니다. 실패해도 앱은 계속 돌아가고, 터미널에 이유만 남깁니다. */
 function savePrefs() {
   try {
     fs.writeFileSync(prefsFile(), JSON.stringify(prefs, null, 2));
@@ -84,8 +123,14 @@ function savePrefs() {
 
 // ---------- 세션 ----------
 
+// 세션 = 쿠키·로그인 정보가 저장되는 "지갑". 모든 패널이 같은 지갑을 써서 Google 로그인을 같이 씁니다.
 const ses = () => session.fromPartition(PARTITION);
 
+/**
+ * 세션(지갑)의 기본 규칙을 정합니다.
+ *   - 사이트가 요청하는 권한(카메라·위치 등)은 "복사"와 "전체 화면"만 허락하고 나머지는 거절합니다.
+ *   - Google 로그인 페이지에는 Firefox인 척하는 정보를 보내 "안전하지 않은 브라우저" 차단을 피합니다.
+ */
 function setupSession() {
   const s = ses();
   s.setUserAgent(CHROME_UA);
@@ -104,6 +149,7 @@ function setupSession() {
   });
 }
 
+/** Google에 로그인돼 있는지: 로그인하면 생기는 쿠키(SID 등)가 있는지 봅니다. async = 결과를 기다려야 하는 함수 */
 async function isGoogleLoggedIn() {
   const cookies = await ses().cookies.get({ domain: 'google.com' });
   return cookies.some((c) => c.name === 'SID' || c.name === '__Secure-1PSID');
@@ -111,6 +157,11 @@ async function isGoogleLoggedIn() {
 
 // ---------- 뷰 ----------
 
+/**
+ * AI 서비스 페이지를 띄울 "작은 브라우저 창(패널)"을 하나 만듭니다.
+ * 보안 설정: 페이지가 컴퓨터 파일 등에 손대지 못하게 격리(sandbox)합니다.
+ * 페이지가 새 창을 열려고 하면: 로그인 팝업만 앱 안에서 열고, 나머지 링크는 기본 브라우저로 보냅니다.
+ */
 function newView() {
   const view = new WebContentsView({
     webPreferences: {
@@ -142,16 +193,22 @@ function newView() {
   return view;
 }
 
+/** 패널 하나를 창에서 떼어 내고 완전히 닫습니다 (메모리 정리). */
 function destroyView(view) {
   if (!view) return;
   win?.contentView.removeChildView(view);
   if (!view.webContents.isDestroyed()) view.webContents.close();
 }
 
+/** 패널의 상태(불러오는 중, 답변 중, 답변 완료 등)를 화면에 알립니다. 화면은 이걸 받아 머리줄 글자를 바꿉니다. */
 function sendPanel(id, patch) {
   if (win && !win.isDestroyed()) win.webContents.send('panel:status', { id, ...patch });
 }
 
+/**
+ * 서비스 하나(svc)의 패널을 새로 열고, 페이지가 움직일 때마다(불러오기 시작·끝, 주소 이동, 실패) 화면에 알립니다.
+ * 자동 로그인 도우미(autologin)도 여기서 붙입니다.
+ */
 function openPanel(svc) {
   const view = newView();
   const wc = view.webContents;
@@ -176,6 +233,10 @@ function openPanel(svc) {
 
 // ---------- 화면 전환 ----------
 
+/**
+ * "Google 로그인" 화면으로 바꿉니다. 열린 패널은 모두 닫고, Google 로그인 페이지를 크게 띄웁니다.
+ * 로그인이 끝났는지는 페이지 주소가 아니라 "로그인 쿠키가 생겼는지"로 알아챕니다.
+ */
 function showLogin() {
   for (const { view } of panels.values()) destroyView(view);
   panels.clear();
@@ -207,6 +268,7 @@ function showLogin() {
   pushState();
 }
 
+/** "모델 고르기" 화면으로 바꿉니다. 열린 패널은 닫지 않고 화면에서만 빼 둡니다 (대화 유지). */
 function showPick() {
   destroyView(loginView);
   loginView = null;
@@ -216,6 +278,10 @@ function showPick() {
   pushState();
 }
 
+/**
+ * "채팅" 화면으로 바꿉니다. selected = 사용자가 고른 서비스 id 목록 (최대 6개).
+ * 고르지 않은 패널은 닫고, 새로 고른 패널은 열고, 이미 있던 패널은 그대로 다시 붙입니다.
+ */
 function showChat(selected) {
   const ids = SERVICES.map((s) => s.id).filter((id) => selected.includes(id)).slice(0, MAX_SELECTED);
   if (!ids.length) return;
@@ -239,6 +305,7 @@ function showChat(selected) {
   pushState();
 }
 
+/** 로그아웃: 모든 패널을 닫고 쿠키·캐시(로그인 정보)를 지운 뒤 로그인 화면으로 돌아갑니다. 질문·답변 기록은 남습니다. */
 async function logout() {
   destroyView(loginView);
   loginView = null;
@@ -253,6 +320,10 @@ async function logout() {
 
 // ---------- 배치 ----------
 
+/**
+ * 지금 창 크기와 고른 배치(격자·가로·큰 칸·2열)에 맞춰 패널마다 위치·크기(사각형)를 계산합니다.
+ * 결과의 frame은 머리줄을 포함한 칸 전체, content는 머리줄 아래 실제 웹페이지가 들어갈 자리입니다.
+ */
 function computeRects() {
   const [w, h] = win.getContentSize();
   const side = mode === 'chat' && sidebarOpen ? SIDEBAR_W : 0;
@@ -282,6 +353,11 @@ function computeRects() {
   };
 }
 
+/**
+ * "지금 상태"를 화면에 보내고 패널 위치를 맞추는 핵심 함수입니다. 무언가 바뀔 때마다 부릅니다.
+ * 패널 화면('panels')이 아니면 패널을 x = -20000(화면 왼쪽 바깥)으로 치웁니다.
+ *   → 패널은 앱 화면 위에 얹힌 창이라, 치우지 않으면 비교·변경 제안·창('dialog') 같은 앱 화면을 가려 버립니다.
+ */
 function pushState() {
   if (!win || win.isDestroyed()) return;
   // 최소화된 동안에는 창 크기가 0으로 잡혀 패널 배치가 깨진다. 복원될 때('restore') 다시 배치한다.
@@ -316,6 +392,11 @@ function pushState() {
 
 // ---------- 창 ----------
 
+/**
+ * 앱 창을 만들고 index.html(앱 화면)을 띄웁니다.
+ * 처음 화면은: 개발 옵션이 있으면 그 화면, Google에 로그인돼 있으면 모델 고르기, 아니면 로그인 화면.
+ * 창 크기가 바뀌거나 최소화에서 돌아오면 패널 배치를 다시 계산합니다.
+ */
 function createWindow() {
   win = new BrowserWindow({
     width: 1600,
@@ -361,6 +442,10 @@ function createWindow() {
 
 // ---------- IPC ----------
 
+// ---------- 화면이 보내는 요청 받기 (IPC) ----------
+// ipcMain.on('이름', ...)      : 화면이 "이것 좀 해" 하고 보내면 처리만 합니다 (답을 돌려주지 않음).
+// ipcMain.handle('이름', ...)  : 처리한 뒤 결과를 화면에 돌려줍니다.
+// 화면에서 온 값은 믿지 않고 모양(문자열인지, 목록인지 등)을 먼저 확인합니다. 보안을 위해서입니다.
 ipcMain.on('models:open', (_e, selected) => {
   if (Array.isArray(selected)) showChat(selected.filter((id) => typeof id === 'string'));
 });
@@ -384,11 +469,14 @@ ipcMain.on('layout:focus', (_e, id) => {
 
 // ---------- 질문 보내기 · 교차검토(종합) ----------
 
+/** 종합(다른 AI 답변을 모아 한 AI에게 정리 요청) 진행 상태를 화면에 알립니다. */
 function sendSynthStatus(patch) {
   if (win && !win.isDestroyed()) win.webContents.send('synth:status', patch);
 }
 
 // 질문 보내기·답변 감시·종합은 크롬 확장 프로그램과 같이 쓰는 shared/rounds.js가 한다.
+// rounds = 질문 보내기·답변 기다리기·종합을 맡는 공통 부품입니다 (src/shared/rounds.js).
+// 크롬 확장 프로그램과 같은 코드를 쓰기 때문에, "패널을 다루는 방법"만 Windows 앱 식으로 넘겨줍니다.
 const rounds = createRounds({
   services: SERVICES,
   hasPanel: (id) => panels.has(id),
@@ -445,6 +533,7 @@ ipcMain.handle('synth:run', (_e, judgeId, kind) =>
 );
 
 /** 화면이 넘긴 보내기 옵션 검사: { question, textById, prefixById, fallbackText, plainIds, userFileCount } */
+// 화면이 같이 보낸 "보내기 옵션"에서 아는 항목만 골라 길이를 잘라 둡니다 (엉뚱하거나 너무 큰 값을 막음).
 function sendOpts(opts) {
   if (!opts || typeof opts !== 'object') return {};
   const out = {};
@@ -474,17 +563,21 @@ ipcMain.handle('prompt:followup', async (_e, { id, text, files, opts }) => {
 
 // ---------- 프로젝트 모드 (로컬 폴더 읽기·쓰기는 project.js, 처리는 화면 쪽 공통 모듈) ----------
 
+// 프로젝트 사이드바가 열리고 닫힐 때: 패널 자리를 사이드바 폭만큼 비우거나 되돌립니다.
 ipcMain.on('layout:sidebar', (_e, open) => {
   sidebarOpen = !!open;
   pushState();
 });
 
+/** 마지막으로 연 프로젝트 폴더를 설정에 기억합니다 (다음에 앱을 켜면 자동으로 다시 열기 위해). */
 async function rememberProject(p) {
   prefs.projectRoot = p ? p.id : null;
   savePrefs();
   return p;
 }
 
+// 프로젝트 관련 요청을 감싸는 도우미: 성공하면 { ok: true, value }, 오류가 나면 { ok: false, error }로 돌려줍니다.
+// 이렇게 하면 오류가 나도 앱이 멈추지 않고, 화면이 이유를 보여 줄 수 있습니다.
 const projectCall = (fn) => async (_e, ...args) => {
   try {
     return { ok: true, value: await fn(...args) };
@@ -523,6 +616,7 @@ ipcMain.handle('project:globalExclude', projectCall(() => project.globalExclude(
 ipcMain.handle('project:loadState', projectCall(() => (project.info() ? project.loadState(project.info().id) : null)));
 ipcMain.handle('project:saveState', projectCall((data) => (project.info() ? project.saveState(project.info().id, data) : false)));
 
+// 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 사이트 셀렉터 자동 갱신 켜기/끄기
 ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors }) => {
   if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
   if (typeof remoteSelectors === 'boolean' && remoteSelectors !== prefs.remoteSelectors) {
@@ -534,6 +628,7 @@ ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors }) => {
   pushState();
 });
 
+// 종합 담당 AI와 "완료 후 자동 종합" 켜기/끄기 저장
 ipcMain.on('synth:set', (_e, { target, auto }) => {
   if (typeof target === 'string' && SERVICES.some((s) => s.id === target)) prefs.synthTarget = target;
   if (typeof auto === 'boolean') prefs.autoSynth = auto;
@@ -548,8 +643,9 @@ ipcMain.handle('answer:copy', async (_e, id) => {
   return { copied, total };
 });
 
+// 채팅 안의 화면 바꾸기 (패널 / 창 띄우기 / 비교 / 변경 제안 / 편집기 …). 목록에 있는 이름만 받습니다.
 ipcMain.on('view:set', (_e, value) => {
-  if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'git', 'library', 'vars', 'compress', 'history', 'help'].includes(value)) {
+  if (mode === 'chat' && ['panels', 'dialog', 'compare', 'changes', 'editor', 'git', 'library', 'vars', 'compress', 'history', 'help'].includes(value)) {
     chatView = value;
     pushState();
   }
@@ -566,7 +662,11 @@ ipcMain.handle('clipboard:write', (_e, text) => {
 
 // 답변 비교 화면용: 열린 패널마다 최신 답변 글과 마지막 공통 질문
 ipcMain.handle('answers:get', () => rounds.answers());
+// 패널 하나의 최신 답변 (답변이 끝난 패널만 읽을 때: 파일 모아보기 버튼, NEED_FILES 확인)
+ipcMain.handle('answer:get', (_e, id) => (typeof id === 'string' ? rounds.answer(id) : null));
 
+// 패널 머리줄 버튼: 새로고침 · 처음 주소 · 뒤로 · 개발자 도구 · 로그인 다시 시도 · 새 대화
+// id가 '*'이면 열린 패널 전부에 같은 동작을 합니다 (모두 새 대화 등).
 ipcMain.on('panel:action', (_e, { id, action }) => {
   const targets = id === '*' ? [...panels.entries()] : [[id, panels.get(id)]].filter(([, p]) => p);
   for (const [pid, p] of targets) {
@@ -591,8 +691,11 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
 
 // ---------- 사이트 셀렉터 원격 갱신 ----------
 
+// 서비스 사이트의 화면 구조가 바뀌면 입력창·답변을 못 찾게 됩니다.
+// 그래서 6시간마다 GitHub의 remote/selectors.json(찾는 위치 목록)을 받아 고친 값으로 바꿔 씁니다.
 const REMOTE_REFRESH_MS = 6 * 60 * 60 * 1000;
 
+/** 원격 셀렉터를 한 번 받아 옵니다. 설정에서 꺼 두었으면 아무것도 하지 않습니다. */
 async function refreshRemote() {
   if (!prefs.remoteSelectors) return remote.getStatus();
   const st = await remote.refresh();
@@ -654,6 +757,8 @@ function runShortcut(action) {
 }
 
 // 메인 창과 서비스 패널 모두에서 단축키를 받는다.
+// 앱 창이든 AI 패널이든, 키보드를 누를 때마다 단축키인지 먼저 확인합니다.
+// 단축키면 처리하고, 그 키가 페이지로 넘어가지 않게 막습니다 (preventDefault).
 app.on('web-contents-created', (_e, wc) => {
   wc.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.control || input.alt)) log('key', input.key, input.code, input.control ? 'ctrl' : 'alt');
@@ -662,8 +767,12 @@ app.on('web-contents-created', (_e, wc) => {
   });
 });
 
+// 창 위쪽의 기본 메뉴(파일·편집…)는 쓰지 않으므로 없앱니다.
 Menu.setApplicationMenu(null);
 
+// ---------- 앱 시작 ----------
+// 앱은 한 번에 하나만 켜지게 합니다. 이미 켜져 있으면 새로 켠 것은 끄고, 기존 창을 앞으로 가져옵니다.
+// 준비가 끝나면(whenReady): 임시 파일 정리 → 설정 읽기 → 기록·원격 셀렉터 준비 → 세션 설정 → 창 만들기 → git 콘솔 준비
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

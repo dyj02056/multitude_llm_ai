@@ -4,6 +4,9 @@
 // Windows 앱의 src/main/project.js와 같은 일을 한다. host.js가 window.host.project로 화면에 넘긴다.
 // 고른 폴더(핸들)는 IndexedDB에 기억하지만, 크롬 정책상 탭을 새로 열면 "폴더 접근 허용"을 한 번 다시 눌러야 한다.
 
+// [쉽게 말하면] 크롬 확장에서 프로젝트 폴더를 읽고 쓰는 "파일 담당자"입니다 (Windows 앱의 src/main/project.js와 같은 일).
+// 크롬의 "파일 시스템 접근" 기능을 써서, 사용자가 허락한 폴더 안에서만 읽고 씁니다.
+// 폴더 밖 경로, .git 안쪽 쓰기는 Windows 앱과 똑같이 거절합니다.
 (() => {
   const { looksBinary, MAX_FILE_BYTES } = MLA.projectIgnore;
   const { safeRelPath, isGitInternal } = MLA.patch;
@@ -12,6 +15,7 @@
   const STORE = 'handles';
   let rootHandle = null;
 
+  // IndexedDB: 브라우저 안의 작은 데이터베이스. 고른 폴더(핸들)를 기억해 두는 데 씁니다.
   function idb() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(DB, 1);
@@ -82,6 +86,7 @@
     await idbDel('root').catch(() => {});
   }
 
+  // 상대 경로를 안전하게 다듬어 폴더 이름 조각 목록으로 나눕니다 (밖으로 나가는 경로면 오류).
   function parts(rel) {
     if (rel === '') return [];
     const clean = safeRelPath(rel);
@@ -89,6 +94,7 @@
     return clean.split('/');
   }
 
+  // 경로 조각을 따라 폴더를 찾아 들어갑니다. create가 true면 없는 폴더를 만듭니다.
   async function dirHandle(segs, create = false) {
     if (!rootHandle) throw new Error('프로젝트가 열려 있지 않습니다');
     let h = rootHandle;
@@ -134,6 +140,7 @@
     if (isGitInternal(rel)) throw new Error(`git 내부 파일은 바꿀 수 없습니다: ${rel}`);
   }
 
+  /** 파일 쓰기 (필요한 폴더는 만듦). .git 안쪽에는 쓰지 않습니다. */
   async function writeFile(rel, text) {
     if (typeof text !== 'string') throw new Error('쓸 내용이 없습니다');
     refuseGitInternal(rel);

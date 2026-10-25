@@ -6,6 +6,14 @@
 // AI가 준 diff는 줄 번호·줄 수가 틀리는 일이 많아서 줄 수를 다시 세고, jsdiff로 안 되면 문맥 찾아 바꾸기로 한 번 더 해 본다.
 // 실제 파일 쓰기는 하지 않는다 (쓰는 쪽이 계산 결과를 보고 쓴다).
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.patch)이 같이 쓴다.
+//
+// [쉽게 말하면]
+// AI 답변 속의 "이 파일을 이렇게 고쳐라"를 찾아내고, 실제로 고치면 파일이 어떻게 바뀌는지 미리 계산하는 파일입니다.
+// 변경 제안·미리보기·적용·파일 모아보기가 모두 이 계산을 씁니다.
+//   - 전체 내용 방식: "파일: src/app.js" 다음 코드 상자 = 그 파일의 새 전체 내용
+//   - diff 방식: 바뀐 줄만 +(추가) / -(삭제) 표시로 준 것. AI가 줄 번호를 자주 틀려서 여러 방법으로 맞춰 봅니다.
+//   - DELETE_FILES: 지울 파일 목록
+// 안전장치: 프로젝트 밖 경로, Windows에서 위험한 이름, .git 안쪽 경로는 받지 않습니다.
 (function (root, factory) {
   const api = factory(root.Diff);
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -41,6 +49,8 @@
   // ---------- 코드 블록 찾기 ----------
 
   /** Markdown의 울타리 코드 블록: [{ lang, body, before: 블록 바로 앞 두 줄 }] */
+  // 답변에서 ``` 로 감싼 코드 상자를 모두 찾습니다. 각 상자 바로 앞 두 줄도 함께 기억합니다 ("파일: 경로"를 찾으려고).
+  // 바깥 울타리가 ```` (백틱 4개)면 안쪽의 ``` 에서 끊기지 않습니다 (.md 파일을 한 상자로 받기 위해).
   function fencedBlocks(md) {
     const lines = String(md || '').split(/\r?\n/);
     const blocks = [];
@@ -170,6 +180,7 @@
    * 답변에서 수정안을 꺼낸다.
    * 결과: [{ path, type: 'diff', hunks, isNew, isDelete } | { path, type: 'full', content }]  (같은 파일은 뒤의 것이 이긴다)
    */
+  // 핵심 함수: 답변 전체에서 "파일별 수정안" 목록을 만듭니다. 같은 파일이 여러 번 나오면 마지막 것을 씁니다.
   function extractChanges(md) {
     const changes = [];
     for (const b of fencedBlocks(md)) {
@@ -236,6 +247,8 @@
    * before: 지금 파일 내용(없으면 null)
    * 결과: { path, op: 'modify'|'create'|'delete', before, after, ok, error, add, del }
    */
+  // 수정안 하나를 지금 파일 내용(before)에 적용하면 결과(after)가 어떻게 되는지 계산합니다. 실제 파일은 쓰지 않습니다.
+  // op: 'create'(새 파일) / 'modify'(수정) / 'delete'(삭제), add·del: 추가·삭제되는 줄 수
   function planChange(change, before) {
     const base = { path: change.path, before, after: null, ok: false, error: null, add: 0, del: 0 };
     const crlf = typeof before === 'string' && before.includes('\r\n');

@@ -1,4 +1,7 @@
 /* 자동 생성 파일 — 직접 고치지 말고 원본을 고친 뒤 npm run build:ext (원본: src/renderer/styles.css) */
+/* [쉽게 말하면] 앱 화면의 "모양"(색·크기·배치·움직임)을 정하는 파일입니다. Windows 앱과 크롬 확장이 같이 씁니다. */
+/* 화면 전환 방식: body에 data-view="compare" 같은 값이 붙으면, 아래 규칙이 그 화면(.only-compare)만 보여 주고 나머지는 숨깁니다. */
+/* :root의 --이름 값은 "색 이름표"입니다. 여러 곳에서 var(--이름)으로 같은 색을 씁니다. */
 :root {
   --bg: #0f1117;
   --panel: #171a22;
@@ -298,7 +301,8 @@ body.drag-files #attachHint { color: #9ec0fa; }
   flex-direction: column; gap: 6px; padding: 6px 6px 6px 8px;
   border-right: 1px solid var(--border); background: var(--bg);
 }
-body.project-open[data-mode="chat"][data-view="panels"] .project-side { display: flex; }
+body.project-open[data-mode="chat"][data-view="panels"] .project-side,
+body.project-open[data-mode="chat"][data-view="dialog"] .project-side { display: flex; }
 .ps-head { display: flex; align-items: center; gap: 4px; }
 .ps-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ps-head button { padding: 1px 7px; font-size: 12px; }
@@ -331,6 +335,7 @@ body.project-open[data-mode="chat"][data-view="panels"] .project-side { display:
 .project-chip:has(input:checked) { color: #9ec0fa; }
 .panel-head .need-btn { border-color: #2a6a4a; color: #8fe0b0; }
 /* 파일 모아보기: 답변이 끝나 버튼이 생기면 튀어나오고 몇 번 빛난 뒤, 누를 때까지 은은하게 빛을 남긴다 */
+/* animation: collect-pop(튀어나옴) → collect-glow(빛 4번), ::after는 버튼 위를 가로지르는 빛줄기, @keyframes는 움직임의 단계표 */
 .panel-head .collect-btn { position: relative; overflow: hidden; border-color: #7a5a1e; color: #ffd27a; background: #2a2414; }
 .panel-head .collect-btn:hover { background: #3a3018; }
 .panel-head .collect-btn.attn {

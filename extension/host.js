@@ -8,6 +8,12 @@
 // 이 파일이 패널 본문 자리에 겹쳐 놓는다. 그래서 모델 선택 화면을 오가도 iframe이 다시 로드되지 않는다.
 // 서비스 페이지와는 content.js(각 iframe 안에서 실행)와 메시지로 주고받는다.
 
+// [쉽게 말하면]
+// 크롬 확장 프로그램의 "본체"입니다. Windows 앱에서는 main.js + preload.js가 하던 일을 크롬 탭 하나 안에서 합니다.
+//   - AI 사이트를 iframe(페이지 안의 작은 창)으로 띄우고 자리를 맞춤
+//   - 화면이 쓰는 window.host 기능(질문 보내기, 복사, 기록, 설정 …)을 Windows 앱과 같은 이름으로 제공
+//   - 각 iframe 안의 content.js와 메시지를 주고받아 입력·보내기·답변 읽기를 시킴
+// 덕분에 화면 코드(renderer.js 등)는 Windows 앱과 확장에서 똑같은 파일을 씁니다.
 (() => {
   const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, serviceForHost, uploadOf } =
     MLA.services;
@@ -39,6 +45,7 @@
 
   // ---------- 저장 (chrome.storage.local) ----------
 
+  // 크롬 확장 저장소에서 값 읽기 (없으면 fallback)
   async function load(key, fallback) {
     try {
       const r = await chrome.storage.local.get(key);
@@ -81,7 +88,7 @@
   // ---------- 상태 ----------
 
   let mode = 'pick'; // 'pick' | 'chat'  (확장 프로그램은 크롬에 로그인된 계정을 그대로 써서 로그인 화면이 없다)
-  let chatView = 'panels'; // 'panels' | 'compare' | 'changes' | 'editor' | 'history' | 'help'
+  let chatView = 'panels'; // 'panels' (웹 패널) | 'dialog' (패널 위에 띄운 창 — 패널을 화면 밖으로 치움) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'library' (라이브러리) | 'vars' (변수 입력) | 'compress' (스킬 AI 압축) | 'history' (기록) | 'help' (설정·단축키) — git 콘솔은 없음
   let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
   let tabId = null;
   const panels = new Map(); // id -> { iframe, frameId, origin, url, retried, helloTimer, loginTimer }
@@ -99,6 +106,8 @@
   let port = null;
 
   /** 백그라운드에 연결하고 규칙이 걸릴 때까지 기다린다. 연결이 끊기면(확장 업데이트 등) 다시 연결한다. */
+  // AI 사이트는 보통 "다른 페이지 안에 띄우지 마"라는 표시를 보냅니다. 이 앱 탭 안에서만 그 표시를 무시하도록
+  // background.js에 부탁합니다 (앱 탭을 떠나면 바로 해제).
   function allowFraming() {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('백그라운드가 응답하지 않습니다')), 10000);
@@ -126,6 +135,7 @@
 
   const svcOf = (id) => SERVICES.find((s) => s.id === id);
 
+  /** 서비스 하나의 iframe 패널을 엽니다. 처음에는 화면 밖에 두고, pushState가 제자리로 옮깁니다. */
   function openPanel(svc) {
     const iframe = document.createElement('iframe');
     iframe.className = 'svc-frame';
@@ -187,6 +197,7 @@
   }
 
   /** 패널 페이지의 content.js에 요청을 보낸다. */
+  // 패널 iframe 안의 content.js에 일을 시키고 답을 받습니다 (예: 질문 넣기, 지금 상태 읽기).
   async function callFrame(id, msg) {
     const p = panels.get(id);
     if (!p || p.frameId === null) throw new Error('패널 페이지와 아직 연결되지 않았습니다');
@@ -264,6 +275,7 @@
 
   // Electron 앱(main.js computeRects)과 같은 배치 (shared/layout.js)
   let focusId = null; // 크게 보는 패널 (⤢). 나머지 iframe은 크기를 그대로 둔 채 화면 밖으로 옮긴다
+  // 패널마다 위치·크기 계산 (Windows 앱의 main.js computeRects와 같은 규칙)
   function computeRects() {
     if (mode !== 'chat') return [];
     const side = sidebarOpen ? SIDEBAR_W : 0;
@@ -284,6 +296,10 @@
     });
   }
 
+  /**
+   * 지금 상태를 화면에 알리고 iframe 위치를 맞춥니다. 패널 화면('panels')이 아니면 iframe을 화면 왼쪽 바깥(-20000)으로 치웁니다.
+   * 숨기지(display:none) 않고 옮기는 이유: 숨기면 페이지 크기가 0이 되어 답변을 읽지 못하기 때문입니다.
+   */
   function pushState() {
     const rects = computeRects();
     // 모델 선택·비교·기록·도움말 화면에서는 iframe을 화면 밖으로 옮겨 둔다.
@@ -332,6 +348,7 @@
   });
   const snapCfg = (svc) => ({ stop: svc.stop || [], response: svc.response || [], messages: svc.messages || null });
 
+  // 패널의 지금 상태(답변 중인지, 최신 답변 글)를 content.js에게 읽어 오게 합니다.
   async function snapshot(id, { markdown = false } = {}) {
     try {
       return await callFrame(id, { type: 'mla:snapshot', cfg: snapCfg(svcOf(id)), markdown });
@@ -393,6 +410,7 @@
     }
   }
 
+  // 패널 머리줄 버튼 처리: 새로고침 · 처음 주소 · 뒤로 · 새 대화 · 로그인 탭 열기
   function panelAction(id, action) {
     const ids = id === '*' ? [...panels.keys()] : [id].filter((x) => panels.has(x));
     for (const pid of ids) {
@@ -423,6 +441,7 @@
   const remoteBase = remoteCore.snapshotBase(SERVICES);
   let remoteStatus = { source: 'builtin' };
 
+  // 사이트 셀렉터 원격 갱신 (Windows 앱의 remote.js와 같은 일). 받은 값은 확장 저장소에 기억합니다.
   async function refreshRemote() {
     if (!prefs.remoteSelectors) return remoteStatus;
     const checkedAt = Date.now();
@@ -462,6 +481,7 @@
   // ---------- 단축키 ----------
 
   /** 단축키 동작을 실행한다. 처리했으면 true */
+  // 단축키 처리 (Windows 앱의 main.js runShortcut과 같은 일)
   function runShortcut(action) {
     if (mode !== 'chat') return false;
     if (action.startsWith('view:')) {
@@ -542,12 +562,13 @@
       return { copied, total };
     },
     setView: (value) => {
-      if (mode === 'chat' && ['panels', 'compare', 'changes', 'editor', 'library', 'vars', 'compress', 'history', 'help'].includes(value)) {
+      if (mode === 'chat' && ['panels', 'dialog', 'compare', 'changes', 'editor', 'library', 'vars', 'compress', 'history', 'help'].includes(value)) {
         chatView = value;
         pushState();
       }
     },
     getAnswers: () => rounds.answers(),
+    getAnswer: (id) => (typeof id === 'string' ? rounds.answer(id) : null),
     history: {
       list: async (query) => history.list(typeof query === 'string' ? query : ''),
       get: async (id) => history.get(id),
@@ -607,6 +628,7 @@
 
   // ---------- 시작 ----------
 
+  // 앱 탭을 열 때: 설정·기록·원격 셀렉터를 불러오고, 지난번에 고른 모델로 채팅 화면을 엽니다.
   async function init() {
     fixButtonTitles();
     prefs = { ...prefs, ...(await load('prefs', {})) };

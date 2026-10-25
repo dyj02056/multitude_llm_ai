@@ -1,5 +1,8 @@
 'use strict';
 // 프로젝트 모드 공통 모듈 단위 테스트:  npm test
+// [쉽게 말하면] 프로젝트 모드의 계산이 맞는지 확인합니다: 제외 규칙(L1·L2·L3), 비밀 정보 찾기,
+// 답변에서 수정안 꺼내기, diff 적용(줄 번호가 틀려도), 백틱 4개로 감싼 .md 파일 읽기 등.
+// 실제 폴더 대신 메모리 속 가짜 폴더(memFs)를 씁니다.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const P = require('../src/shared/project-ignore');

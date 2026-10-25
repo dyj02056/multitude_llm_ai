@@ -1,6 +1,21 @@
 // 자동 생성 파일 — 직접 고치지 말고 원본을 고친 뒤 npm run build:ext (원본: src/renderer/renderer.js)
 'use strict';
 
+// ============================================================================
+// 앱 "화면"의 기본 동작을 맡는 파일입니다 (Windows 앱과 크롬 확장이 똑같이 씀).
+//
+// [이 파일이 하는 일 — 쉽게 말하면]
+//   - 모델 고르기 화면, 패널 머리줄(이름·상태·버튼), 아래 공통 입력창, 첨부 파일
+//   - 답변 비교·기록·설정 화면, 단축키, 종합 버튼
+//   - 본체(host)가 보내는 알림(state = 전체 상태, panel:status = 패널 상태)을 받아 화면을 고쳐 그림
+// 프로젝트 모드는 project.js, 라이브러리·스킬은 library.js가 이어서 맡습니다 (이 파일 다음에 읽힘).
+//
+// [용어 풀이]
+//   - host: 본체에 일을 부탁하는 창구 (Windows 앱: preload.js / 크롬 확장: extension/host.js)
+//   - state: 본체가 알려 주는 "지금 상태" (어느 화면인지, 고른 모델, 배치, 설정 등)
+//   - $('#이름'): 화면(index.html)에서 id가 그 이름인 요소를 찾는 짧은 도우미
+// ============================================================================
+
 const $ = (sel) => document.querySelector(sel);
 const panelsEl = $('#panels');
 const panels = new Map(); // id -> { el, dot, url, status }
@@ -27,6 +42,7 @@ const LOGIN_TEXT = {
   ready: '',
 };
 
+// 버튼 하나 만들기 도우미: 글자(label), 마우스를 올리면 보이는 설명(title), 눌렀을 때 할 일(onClick)
 function button(label, title, onClick) {
   const b = document.createElement('button');
   b.textContent = label;
@@ -35,6 +51,7 @@ function button(label, title, onClick) {
   return b;
 }
 
+// 짧은 글자 조각(span) 만들기 도우미
 function span(className, text = '') {
   const s = document.createElement('span');
   s.className = className;
@@ -46,6 +63,7 @@ function span(className, text = '') {
 
 const pickedIds = () => [...document.querySelectorAll('#modelList input:checked')].map((b) => b.value);
 
+/** 모델 고르기 화면을 그립니다: 서비스마다 체크 상자, 최대 6개까지 고르기 */
 function renderPick() {
   $('#pickNote').textContent = `${UI.pickNote} 한 번에 최대 ${state.maxSelected}개까지 고를 수 있습니다.`;
   const list = $('#modelList');
@@ -86,6 +104,10 @@ $('#openBtn').addEventListener('click', () => {
 
 // ---------- 패널 머리줄 ----------
 
+/**
+ * 본체가 알려 준 패널 위치(state.rects)에 맞춰 화면의 패널 머리줄을 만들고 옮깁니다.
+ * 실제 웹페이지(AI 사이트)는 본체가 따로 그 자리에 얹고, 이 화면은 머리줄과 테두리만 그립니다.
+ */
 function syncPanels() {
   const ids = state.rects.map((r) => r.id);
   for (const [id, p] of panels) {
@@ -110,6 +132,10 @@ function syncPanels() {
   }
 }
 
+/**
+ * 패널 하나의 머리줄을 만듭니다: 점(상태 색) · 이름 · 주소 · 상태 글자 · 버튼들
+ * 버튼: 📋 파일 모아보기 · 📂 요청 파일 보내기 · 로그인 · 복사 · ⤢ 크게 보기 · ＋ 새 대화 · ← 뒤로 · ⌂ 처음 주소 · ↻ 새로고침
+ */
 function createPanel(svc) {
   const el = document.createElement('section');
   el.className = 'panel';
@@ -175,6 +201,7 @@ const ANSWER_TEXT = {
   clear: '',
 };
 
+// 상태 글자를 1.8초 동안만 다른 글로 바꿔 보여 주고 원래대로 돌립니다 (예: "답변을 복사했습니다").
 function flash(el, text) {
   const prev = { text: el.textContent, state: el.dataset.state };
   el.textContent = text;
@@ -195,6 +222,7 @@ const fmtElapsed = (ms) => {
   return s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`;
 };
 
+// 답변을 기다리는 패널마다 "답변 중… 12초"처럼 기다린 시간을 1초마다 고쳐 씁니다.
 function tickAnswerTimers() {
   for (const p of panels.values()) {
     const st = p.status.dataset.state;
@@ -205,6 +233,9 @@ function tickAnswerTimers() {
 }
 setInterval(tickAnswerTimers, 1000);
 
+// 본체가 "이 패널 상태가 바뀌었어"라고 알려 올 때마다 실행됩니다.
+// 알림 종류: 불러오는 중(loading) · 주소(url) · 오류(error) · 로그인 상태(login) · 보내기 결과(send) · 답변 상태(answer)
+// 답변 완료('done')면 다른 파일들(project.js 등)에게도 알려 📋 파일 모아보기·📂 요청 파일 버튼을 띄우게 합니다.
 host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching }) => {
   const p = panels.get(id);
   if (!p) return;
@@ -275,6 +306,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
 
 // ---------- 공통 입력창 ----------
 
+// 입력창 위에 "답변 3개 중 2개 완료" 같은 요약을 보여 줍니다.
 function updateAnswerSummary() {
   const states = [...panels.values()].map((p) => p.status.dataset.state || '');
   const asked = states.filter((s) => s.startsWith('answer-') && s !== 'answer-clear').length;
@@ -286,6 +318,7 @@ function updateAnswerSummary() {
 const targets = new Set(); // 보낼 대상 서비스 id
 let knownTargets = new Set(); // 지금까지 칩을 만든 서비스 (새로 열린 패널은 기본으로 켠다)
 
+// "보낼 대상" 칩(서비스 이름 단추)들을 그립니다. 누르면 그 서비스에 보낼지 말지 바뀝니다.
 function renderTargets() {
   const open = state.rects.map((r) => r.id);
   for (const id of open) if (!knownTargets.has(id)) targets.add(id);
@@ -310,6 +343,7 @@ function renderTargets() {
 
 // ---------- 답변 비교 ----------
 
+/** 답변 비교 화면: 마지막 질문과 각 AI의 최신 답변을 칸마다 나란히 보여 줍니다. */
 async function renderCompare() {
   const { question, answers } = await host.getAnswers();
   $('#compareQuestion').textContent = question || '(아직 공통 입력창으로 보낸 질문이 없습니다)';
@@ -355,6 +389,7 @@ let historySelected = null;
 const fmtTime = (ms) =>
   new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+/** 기록 화면 왼쪽: 보낸 질문 목록 (검색어가 있으면 걸러서) */
 async function renderHistoryList() {
   const query = $('#historySearch').value;
   const items = await host.history.list(query);
@@ -387,6 +422,7 @@ async function renderHistoryList() {
 const NO_TEXT = '(글 없이 첨부 파일만 보냄)';
 const filesLine = (files) => files.map((f) => `${f.name} (${fmtSize(f.size)})`).join(' · ');
 
+// 기록 하나(질문 + 각 AI 답변 + 종합)를 Markdown 글 하나로 엮습니다 (복사용).
 function recordToMarkdown(rec) {
   const question = rec.question || NO_TEXT;
   const parts = [`# ${question.split('\n')[0]}`, '', `> ${fmtTime(rec.at)}`, '', '## 질문', '', question];
@@ -399,6 +435,7 @@ function recordToMarkdown(rec) {
   return parts.join('\n');
 }
 
+/** 기록 화면 오른쪽: 고른 기록의 질문과 답변 전체 */
 async function renderHistoryDetail() {
   const rec = await host.history.get(historySelected);
   const box = $('#historyDetail');
@@ -464,6 +501,7 @@ $('#historyClear').addEventListener('click', async () => {
 
 // ---------- 단축키 ----------
 
+// 본체가 "이 단축키가 눌렸어"라고 알려 오면 그에 맞는 버튼을 대신 누릅니다.
 host.on('shortcut', (action) => {
   if (action === 'focus-composer') return $('#prompt').focus();
   if (action.startsWith('target:')) {
@@ -478,6 +516,7 @@ $('#timeoutSelect').addEventListener('change', (e) => host.setSettings({ answerT
 
 const REMOTE_SOURCE = { builtin: '앱에 들어 있는 셀렉터', cache: '저장해 둔 원격 셀렉터', remote: '원격 셀렉터' };
 
+// 설정 화면의 "사이트 셀렉터 원격 갱신" 상태 글
 function renderRemoteStatus() {
   const r = state.remote || {};
   const parts = [
@@ -509,6 +548,7 @@ function renderSettings() {
   select.value = String(state.answerTimeoutMin);
 }
 
+/** 설정·단축키(?) 화면: 대기 시간 고르기, 원격 갱신 상태, 단축키 표 */
 async function renderHelp() {
   renderSettings();
   const rows = await host.shortcuts();
@@ -530,6 +570,7 @@ $('#helpClose').addEventListener('click', () => host.setView('panels'));
 
 // ---------- 교차검토(종합) ----------
 
+// 종합 담당 AI 고르기 목록과 "완료 후 자동" 체크 상자를 지금 상태에 맞춥니다.
 function renderSynth() {
   const select = $('#synthTarget');
   const open = state.rects.map((r) => r.id);
@@ -552,6 +593,7 @@ $('#synthTarget').addEventListener('change', (e) => host.setSynth({ target: e.ta
 $('#autoSynth').addEventListener('change', (e) => host.setSynth({ auto: e.target.checked }));
 $('#synthBtn').addEventListener('click', () => host.runSynth($('#synthTarget').value));
 
+// 종합 요청 진행 상황(보내는 중·보냄·실패)을 입력창 아래 안내 글로 보여 줍니다.
 host.on('synth:status', ({ state: st, judge, count, error, cause }) => {
   const prefix = cause === 'auto' ? '자동 종합: ' : '';
   $('#sendHint').textContent =
@@ -576,6 +618,7 @@ const fmtSize = (bytes) =>
 const fileKind = (type) => (/^image\//.test(type || '') ? 'image' : 'document');
 const KIND_TEXT = { image: '이미지', document: '문서' };
 
+// 첨부 줄 옆의 안내 글 (예: "Duck.ai은(는) 문서 빼고 보냄")
 function attachHint(text, cls = '') {
   const hint = $('#attachHint');
   hint.textContent = text;
@@ -583,6 +626,7 @@ function attachHint(text, cls = '') {
 }
 
 /** 파일을 첨부 목록에 더한다. 한도를 넘는 파일은 빼고 이유를 보여 준다. */
+/** 올린 파일을 첨부 목록에 더합니다. 개수(10개)·크기(파일당 25MB, 합계 50MB)를 넘는 파일은 빼고 이유를 알립니다. */
 function addFiles(list) {
   const limits = state?.attachLimits;
   if (!limits || state.mode !== 'chat') return;
@@ -615,6 +659,7 @@ function clearAttachments() {
   renderAttachments();
 }
 
+// 첨부 파일 칩(이름 · 크기 · ✕ 빼기 버튼)들을 그립니다.
 function renderAttachments() {
   $('#attachList').replaceChildren(
     ...attachments.map((a, i) => {
@@ -712,6 +757,10 @@ document.addEventListener('drop', (e) => {
 
 let sending = false;
 
+/**
+ * 보내기 버튼(또는 Enter)을 눌렀을 때: 템플릿·스킬·프로젝트 맥락을 붙여 고른 AI들에게 동시에 보냅니다.
+ * 실제 전송은 본체(host.sendPrompt)가 하고, 결과(서비스별 성공·실패)를 받아 안내합니다.
+ */
 async function send() {
   const box = $('#prompt');
   const text = box.value.trim();
@@ -773,6 +822,9 @@ $('#prompt').addEventListener('keydown', (e) => {
 
 // ---------- 전체 상태 ----------
 
+// 본체가 "전체 상태"를 보내올 때마다 실행되는 가장 중요한 부분입니다.
+// 지금 화면(패널·비교·기록·설정 …)에 맞게 body의 data-view 값을 바꾸면, styles.css가 그에 맞는 화면만 보여 줍니다.
+// 새로 들어온 화면이면 내용을 새로 그립니다 (예: 비교 화면에 처음 들어오면 답변을 다시 읽음).
 host.on('state', (next) => {
   const modeChanged = !state || state.mode !== next.mode;
   const enteredCompare = next.chatView === 'compare' && (modeChanged || state.chatView !== 'compare');

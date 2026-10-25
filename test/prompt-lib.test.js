@@ -1,5 +1,6 @@
 'use strict';
 // 프롬프트 라이브러리·스킬 (v0.9.0) 단위 테스트:  npm test
+// [쉽게 말하면] 템플릿 변수({{이름}}) 채우기, 스킬 지침 붙이기·줄이기, 라이브러리 가져오기·내보내기가 맞는지 확인합니다.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const P = require('../src/shared/prompt-lib');

@@ -1,6 +1,9 @@
 // 보내기 전에 파일 내용에서 비밀 정보(API 키·토큰·개인 키)로 보이는 문자열을 찾는다.
 // 걸린 파일은 기본으로 빼 두고, 사용자가 확인해야만 보낸다. 오탐이 있을 수 있어 "그래도 보내기"를 둔다.
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.secretScan)이 같이 쓴다.
+//
+// [쉽게 말하면] 파일 안에 비밀번호·API 키·개인 키 같은 "비밀 정보"가 들어 있는지 찾아 주는 탐지기입니다.
+// 찾으면 화면에 ⚠ 비밀? 표시를 하고, AI에게 보내기 전에 한 번 더 묻습니다. (가끔 비밀이 아닌데 걸릴 수 있음)
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -27,6 +30,7 @@
   ];
 
   /** 비밀로 보이는 것: [{ name, line }] (최대 20개) */
+  // 글 전체를 줄마다 검사해 [{ 종류 이름, 몇째 줄 }] 목록을 돌려줍니다.
   function scanSecrets(text) {
     const found = [];
     const lines = String(text).split(/\r?\n/);

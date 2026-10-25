@@ -1,5 +1,7 @@
 'use strict';
 // 서비스 목록·보내기 대상별 첨부 (v0.7.0) 단위 테스트:  npm test
+// [쉽게 말하면] 서비스 목록(주소·로그인 화면)과 질문 보내기 진행자(rounds)가 맞게 동작하는지 확인합니다.
+// 실제 AI 사이트 대신 가짜 패널(adapter)을 넘겨 시험합니다.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const S = require('../src/shared/services');
@@ -64,4 +66,26 @@ test('보내기: 스킬 지침(prefixById)은 그 패널의 글과 예비 글 �
   await r.sendAll('질문', ['gemini', 'chatgpt'], [file], { prefixById: { gemini: '[지침]\n' }, fallbackText: '본문' });
   assert.deepEqual(sent.gemini, { text: '[지침]\n질문', fallback: '[지침]\n본문' });
   assert.deepEqual(sent.chatgpt, { text: '질문', fallback: '본문' });
+});
+
+test('패널 하나의 답변만 읽기 (answer)', async () => {
+  const read = [];
+  const r = createRounds({
+    services: S.SERVICES,
+    hasPanel: (id) => id !== 'grok',
+    snapshot: async (id) => (read.push(id), { text: `${id} 글`, md: `**${id}**` }),
+    sendPrompt: async () => ({ ok: true }),
+    watch: () => {},
+    sendPanel: () => {},
+    sendSynthStatus: () => {},
+    history: { add: () => 1, setAnswer: () => {}, addSynth: () => {} },
+    prefs: () => ({}),
+    log: () => {},
+  });
+  const a = await r.answer('claude');
+  assert.equal(a.name, 'Claude');
+  assert.equal(a.md, '**claude**');
+  assert.deepEqual(read, ['claude']); // 다른 패널은 읽지 않는다
+  assert.equal(await r.answer('grok'), null); // 열려 있지 않은 패널
+  assert.equal(await r.answer('없는서비스'), null);
 });

@@ -1,5 +1,7 @@
 'use strict';
 // 보안 보강(v0.4.1) 단위 테스트:  npm test
+// [쉽게 말하면] 보안 장치가 제대로 막는지 확인합니다: 위험한 파일 경로, .git 안쪽 쓰기, 실행에 영향을 주는 파일 표시,
+// 인터넷에서 받은 셀렉터 목록의 위험한 값 걸러 내기 등.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const X = require('../src/shared/patch');

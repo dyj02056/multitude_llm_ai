@@ -3,6 +3,10 @@
 // 답변이 다 써졌는지 지켜보고, 최신 답변 글을 꺼낸다.
 // 완료 판단은 크롬 확장 프로그램과 같이 쓰는 shared/watch.js가 하고, 여기서는 패널 페이지를 읽는 방법만 준다.
 
+// [쉽게 말하면] AI가 답변을 "다 썼는지" 지켜보는 감시원입니다.
+// AI는 글자를 조금씩 이어서 쓰기 때문에, 글이 더 이상 늘지 않고 "멈춤" 버튼이 사라지면 다 쓴 것으로 봅니다.
+// 그 판단 규칙은 공통 부품(shared/watch.js)에 있고, 여기서는 "패널 페이지를 읽는 방법"만 알려 줍니다.
+
 const { htmlToMarkdown } = require('../shared/markdown');
 const { pageSnapshot } = require('../shared/page');
 const core = require('../shared/watch');

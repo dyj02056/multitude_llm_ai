@@ -10,6 +10,15 @@
 //   - 설정 쓰기 (git config는 읽기만)
 // 되돌리기 어려운 명령(reset --hard, push --force, branch -D …)은 확인 창을 띄우도록 이유를 돌려준다.
 
+// [쉽게 말하면]
+// git은 코드의 변경 기록을 관리하는 도구입니다. 앱 안의 "git 콘솔"에서 사용자가 git 명령을 칠 수 있는데,
+// 잘못 쓰면 컴퓨터에서 엉뚱한 프로그램이 실행되거나 작업 내용이 사라질 수 있습니다.
+// 이 파일은 "이 명령을 실행해도 되는지" 검사하는 "경비원"입니다.
+//   - 허락된 명령(status, commit, push …)만 통과
+//   - 위험한 옵션은 거절
+//   - 되돌리기 어려운 명령은 "정말 할까요?" 확인 창을 띄우도록 이유를 알려 줌
+
+// 허락하는 git 하위 명령 목록 (git 다음에 오는 단어)
 const SUBCOMMANDS = new Set([
   'status', 'log', 'diff', 'show', 'blame', 'shortlog', 'reflog', 'ls-files', 'rev-parse', 'describe',
   'add', 'rm', 'mv', 'restore', 'reset', 'commit', 'revert', 'cherry-pick',
@@ -31,6 +40,7 @@ const INTERACTIVE_SUBS = new Set(['add', 'checkout', 'restore', 'reset', 'stash'
 const INTERACTIVE_OPT = /^(--interactive|--patch|--edit|-[ipe])$/;
 
 /** 명령 줄을 인자로 나눈다. "…" · '…' 묶음만 알아듣고 다른 셸 문법은 해석하지 않는다. → string[] | null(따옴표가 안 닫힘) */
+// 예: git commit -m "첫 커밋"  →  ['git', 'commit', '-m', '첫 커밋']
 function splitArgs(line) {
   const out = [];
   let cur = '';
@@ -62,6 +72,8 @@ const hasAny = (args, list) => args.some((a) => list.includes(a));
 /**
  * 명령 줄 검사 → { ok: true, args(git 뒤 인자), danger(확인할 이유 | null) } | { ok: false, error }
  */
+// 검사 순서: 따옴표·빈 명령 확인 → 'git'으로 시작하는지 → 허락된 하위 명령인지 → 막는 옵션이 없는지
+//           → config는 읽기만, commit은 메시지 필수 등 명령별 규칙 → 위험도(danger) 판단
 function checkCommand(line) {
   const parts = splitArgs(String(line || '').trim());
   if (!parts) return { ok: false, error: '따옴표가 닫히지 않았습니다' };
@@ -138,6 +150,7 @@ const FORCED_ENV = {
 };
 
 /** 출력에서 주소에 든 아이디·토큰(https://user:token@host)과 알려진 키 모양을 가린다 */
+// 예: https://사용자:비밀토큰@github.com  →  https://***@github.com  (화면에 비밀번호가 보이지 않게)
 function maskOutput(text, patterns = []) {
   let s = String(text).replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@');
   for (const p of patterns) {

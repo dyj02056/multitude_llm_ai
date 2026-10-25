@@ -5,6 +5,8 @@
 //   node scripts/make-icon.js
 // 크롬 확장 프로그램 아이콘(16·32·48·128)은 scripts/build-extension.js가 renderPng(크기)로 만든다.
 
+// [쉽게 말하면] 그림 프로그램 없이 코드로 앱 아이콘 PNG를 그리는 도구입니다. 점을 하나하나 칠해 이미지 파일을 만듭니다.
+
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');

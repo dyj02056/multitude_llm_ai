@@ -11,6 +11,16 @@
 // 프로젝트 파일은 AI에게 파일 업로드로 보낸다 (묶음 파일 / 개별 파일, 사이드바에서 고름 — shared/project-upload.js).
 // 문서 첨부를 받지 않는 서비스와 업로드에 실패한 패널에는 같은 내용을 본문에 넣어 보낸다 (내부 예비 경로).
 
+// [쉽게 말하면]
+// 📁 프로젝트 기능의 화면 쪽 전부를 맡는 파일입니다. 큰 흐름은 이렇습니다.
+//   1. 폴더 열기 → 왼쪽 사이드바에 파일 나무(트리) 표시, 보내면 안 되는 파일은 L1·L2·L3 표시
+//   2. 보내기 → 고른 파일과 프로젝트 구조를 AI에게 첨부 파일로 함께 보냄 (답변 규칙도 붙임)
+//   3. AI가 "NEED_FILES"로 파일을 더 달라고 하면 📂 버튼으로 보내 줌
+//   4. AI 답변의 수정안 → 변경 제안 화면에서 비교 · 미리보기 · 적용 · 되돌리기
+//   5. 📋 파일 모아보기 → 경로와 전체 코드를 모아 복사 (파일에는 쓰지 않음)
+//   6. 편집기 → 파일을 직접 고쳐 저장
+// 전체를 (() => { … })() 로 감싼 이유: 이 안의 이름들이 다른 파일의 이름과 부딪히지 않게 "울타리"를 친 것입니다.
+// 다른 파일과 주고받을 것만 window.이름 으로 바깥에 내놓습니다.
 (() => {
   const PI = MLA.projectIgnore;
   const { scanSecrets, describeSecrets } = MLA.secretScan;
@@ -44,11 +54,13 @@
   // 편집기에서 연 파일: path, base(열 때·저장할 때 디스크 내용 그대로), crlf(원래 줄바꿈), indent(Tab 키로 넣을 들여쓰기)
   const ed = { path: null, base: null, crlf: false, indent: '  ' };
 
+  // fsx: 폴더 읽기·쓰기 창구 / has(): 프로젝트가 열려 있고 파일 목록까지 읽은 상태인지
   const fsx = () => host.project;
   const has = () => !!project.info && !project.info.needsPermission && !!project.scan;
 
   // ---------- 저장 ----------
 
+  /** 이 프로젝트의 상태(고른 파일, 켠 규칙, 적용 기록 등)를 저장합니다. 다음에 같은 폴더를 열면 그대로 이어집니다. */
   function saveState() {
     if (!project.info || project.info.needsPermission) return;
     host.project
@@ -80,6 +92,7 @@
 
   // ---------- 열기 · 훑기 ----------
 
+  /** 프로젝트를 엽니다 (info가 null이면 닫음). 지난 상태를 불러오고 폴더를 훑은 뒤, 처음이면 핵심 파일을 미리 골라 둡니다. */
   async function openProject(info, { fresh = false } = {}) {
     project.info = info;
     project.scan = null;
@@ -104,6 +117,7 @@
     render();
   }
 
+  /** 폴더를 다시 훑어 파일 목록을 새로 만듭니다 (사이드바 ⟳ 버튼, 파일을 쓴 뒤 등). 사라진 파일은 고른 목록에서 뺍니다. */
   async function rescan() {
     $('#psSummary').textContent = '폴더를 읽는 중…';
     const globalExclude = await host.project.globalExclude().catch(() => null);
@@ -172,10 +186,12 @@
 
   let sidebarSent = null; // 메인/host에 알린 사이드바 상태 (바뀔 때만 알린다 — 알리면 state가 다시 와서 render가 또 불린다)
 
+  /** 사이드바 전체를 지금 상태에 맞게 다시 그립니다: 프로젝트 이름, 버튼, 요약, 규칙, 서비스, 파일 나무 */
   function render() {
     const showSide = project.open && !!project.info;
     document.body.classList.toggle('project-open', showSide);
-    const side = showSide && state?.mode === 'chat' && state.chatView === 'panels';
+    // 'dialog'(패널 화면 위에 띄운 창)에서도 뒤 배치가 흔들리지 않게 사이드바를 그대로 둔다
+    const side = showSide && state?.mode === 'chat' && (state.chatView === 'panels' || state.chatView === 'dialog');
     if (side !== sidebarSent) {
       sidebarSent = side;
       host.setSidebar(side);
@@ -205,6 +221,7 @@
   }
 
   /** 서비스마다 이 프로젝트의 파일을 보낼지 (끄면 그 서비스에는 질문 글만 보낸다) */
+  // "프로젝트 파일을 보낼 서비스" 체크 상자들. 끈 서비스에는 질문 글만 보냅니다.
   function renderServices() {
     const rows = state.services.map((s) => {
       const row = span('rule-row', '');
@@ -234,6 +251,7 @@
    * 프로젝트 파일을 처음 올리는 서비스가 있으면 어디로 가는지 확인한다. 취소하면 false.
    * 한 번 확인한 서비스는 이 프로젝트에서 다시 묻지 않는다 (사이드바 "보낼 서비스"에서 끌 수 있음).
    */
+  // 프로젝트 파일을 어떤 서비스에 처음 올릴 때 한 번 확인합니다 (각 회사 서버에 저장되고 학습에 쓰일 수 있으므로).
   function confirmUpload(ids, fileCount) {
     const fresh = ids.filter((id) => !project.uploadOk.has(id));
     if (!fresh.length) return true;
@@ -262,6 +280,7 @@
     return false;
   }
 
+  // 선택 제외 규칙(L3: .dockerignore 등) 켜기/끄기 목록
   function renderRules() {
     const s = project.scan;
     const rows = [];
@@ -298,6 +317,7 @@
 
   const filesUnder = (dir) => project.scan.entries.filter((e) => e.kind === 'file' && !e.excluded && e.path.startsWith(`${dir}/`));
 
+  /** 파일 나무를 그립니다: 접기/펼치기 ▸▾, 보낼 파일 체크, 제외 표시(L1·L2·L3), ⚠ 비밀?, 크기. 파일 이름을 누르면 편집기가 열립니다. */
   function renderTree() {
     const rows = visibleEntries().map((e) => {
       const row = document.createElement('div');
@@ -366,6 +386,7 @@
     renderTree();
   }
 
+  // 파일 체크/해제. 체크할 때 비밀 정보가 보이면 한 번 더 묻습니다.
   async function toggleFile(e, on) {
     if (!on) {
       project.checked.delete(e.path);
@@ -392,6 +413,7 @@
   // ---------- 보내기 (renderer.js send()가 부른다) ----------
 
   /** 고른 파일들을 읽는다. 비밀 정보가 새로 보이면 확인을 받는다. → { files, skipped } | null(취소) */
+  // 고른 파일들의 내용을 읽어 옵니다. 너무 크거나 바이너리·비밀 정보 파일은 빼고 이유를 남깁니다.
   async function readChosen(paths) {
     const files = [];
     const skipped = [];
@@ -428,6 +450,7 @@
   const notice = (text) => flash($('#psSummary'), text);
 
   /** 첨부 한도 중 이미 쓴 만큼(사용자가 직접 올린 파일)을 뺀 나머지 */
+  // 첨부 한도(10개, 50MB) 중 사용자가 직접 올린 파일을 빼고 프로젝트 파일에 쓸 수 있는 남은 양
   function budgetAfter(files = []) {
     const L = state.attachLimits || { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 };
     const used = files.reduce((n, f) => n + (f.data?.byteLength || 0), 0);
@@ -472,6 +495,7 @@
   };
 
   /** 패널 하나에 프로젝트 파일을 이어서 보낸다 (요청 파일 보내기 · 다시 보내기). pack: PU.pack* 결과 */
+  // 패널 하나에만 이어서 보내기 (요청 파일, 바뀐 파일, 전체 파일 다시 요청에 씀)
   async function sendProjectFollowUp(id, pack) {
     if (project.blocked.has(id)) return { ok: false, error: '이 프로젝트의 파일을 보내지 않도록 설정된 서비스' };
     if (pack.note) notice(pack.note);
@@ -488,6 +512,7 @@
   const sameText = (a, b) => (a === null || b === null ? a === b : a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n'));
 
   /** id 패널의 AI가 files 내용을 받았다고 기록한다. files: [{ path, text(지워졌으면 null) }] */
+  // "이 AI는 이 파일을 이 내용으로 알고 있다"를 기억합니다. 나중에 파일이 바뀌면 그 AI에게 바뀐 내용을 보내 주려고.
   function remember(id, files) {
     if (!files.length) return;
     if (!project.sent.has(id)) project.sent.set(id, new Map());
@@ -510,6 +535,7 @@
   };
 
   /** AI마다 아는 내용과 지금 파일을 비교한다 */
+  // AI가 아는 내용과 지금 파일이 달라진 것을 찾아 "⇪ 바뀐 파일 N개 → AI에 보내기" 버튼을 띄웁니다.
   async function checkStale() {
     const stale = [];
     const now = new Map(); // 같은 파일을 여러 번 읽지 않는다
@@ -544,6 +570,7 @@
   $('#psSync').addEventListener('click', () => syncStale());
 
   /** 바뀐 파일을 AI 탭들에 보낸다. onlyPath를 주면 그 파일만. 결과: 보낸 AI 수 */
+  // 바뀐 파일을 그 파일을 아는 AI 탭들에 보냅니다 (onlyPath가 있으면 그 파일만).
   async function syncStale(onlyPath) {
     if (!has()) return 0;
     const stale = project.stale
@@ -591,9 +618,9 @@
 
   // ---------- NEED_FILES ----------
 
+  /** 패널 하나의 최신 답변 Markdown (그 패널만 읽는다 — 열린 패널을 다 읽으면 답변이 끝날 때마다 느려진다) */
   async function answerMd(id) {
-    const { answers } = await host.getAnswers();
-    return answers.find((a) => a.id === id)?.md || '';
+    return (await host.getAnswer(id))?.md || '';
   }
 
   window.onPanelAnswerDone = async (id) => {
@@ -685,6 +712,7 @@
 
   let plansByAi = []; // [{ id, name, color, plans: [{ change, plan, block }] }]
 
+  // 지금 디스크에 있는 파일 내용 (없으면 null). 5MB까지 읽습니다.
   async function currentText(path) {
     const r = await host.project.readFile(path, { maxBytes: 5 * 1024 * 1024 });
     if (r.missing) return null;
@@ -698,6 +726,7 @@
     return r && r.layer === 'L1' ? `앱 내장 제외 경로라 쓰지 않습니다 (${PI.describe(r)})` : null;
   };
 
+  // 열린 모든 AI의 답변에서 수정안을 찾고, 지금 파일에 적용하면 어떻게 되는지 미리 계산합니다.
   async function planAll() {
     const { answers } = await host.getAnswers();
     const out = [];
@@ -735,6 +764,7 @@
     cols.replaceChildren(...plansByAi.map(changeColumn));
   };
 
+  // 변경 제안 화면의 AI 한 칸: 파일 목록(수정·새 파일·삭제, +/− 줄 수)과 미리보기·적용 / 📋 모아보기 버튼
   function changeColumn(ai) {
     const col = document.createElement('article');
     col.className = 'compare-col';
@@ -812,21 +842,52 @@
 
   // ---------- 미리보기 · 적용 · 되돌리기 ----------
 
+  // 미리보기·적용 / 적용 기록 / 파일 모아보기가 함께 쓰는 창.
+  // Windows 앱의 AI 패널은 앱 화면 위에 따로 얹힌 창이라, 패널을 둔 채 이 창을 띄우면 패널 아래에 깔려 보이지 않는다.
+  // 그래서 패널 화면에서 열 때는 'dialog' 화면으로 바꿔 패널을 화면 밖으로 치우고, 닫으면 패널 화면으로 돌아간다.
+  // 창이 열린 채 다른 화면으로 가면(Esc · 단축키 · 툴바) 안 보이는 창이 툴바를 막지 않도록 저절로 닫는다 (onViewChanged).
   const modal = {
+    view: null, // 창을 연 화면 (null이면 닫힘)
+    pending: false, // 'dialog'로 바꿔 달라고 했지만 아직 그 화면 상태를 받지 못함
     show(title, note) {
       $('#patchTitle').textContent = title;
       $('#patchNote').textContent = note || '';
       $('#patchStatus').textContent = '';
       $('#patchModal').hidden = false;
+      if (state?.chatView === 'panels') {
+        modal.view = 'dialog';
+        modal.pending = true;
+        host.setView('dialog');
+      } else {
+        modal.view = state?.chatView || null;
+        modal.pending = false;
+      }
     },
     hide() {
       $('#patchModal').hidden = true;
       $('#patchApply').onclick = null;
       $('#patchAll').onclick = null;
+      const back = modal.view === 'dialog';
+      modal.view = null;
+      modal.pending = false;
+      if (back && state?.chatView === 'dialog') host.setView('panels');
+    },
+    /** 화면 상태가 올 때마다: 창을 연 화면을 떠났으면 닫는다 */
+    onViewChanged() {
+      if (!modal.view) return;
+      if (modal.pending) {
+        if (state.chatView === modal.view) modal.pending = false; // 'dialog' 화면이 됨
+        return;
+      }
+      if (state.chatView !== modal.view) {
+        modal.view = null; // 이미 다른 화면이라 패널로 되돌리지 않는다
+        modal.hide();
+      }
     },
   };
   $('#patchCancel').addEventListener('click', () => modal.hide());
 
+  // 바뀐 줄 보기: 추가된 줄은 초록, 지운 줄은 빨강으로 칠합니다.
   function diffPre(text) {
     const pre = document.createElement('pre');
     for (const line of text.split('\n')) {
@@ -836,6 +897,7 @@
     return pre;
   }
 
+  /** 미리보기·적용 창: 파일마다 바뀌는 줄을 보여 주고, 체크한 파일만 씁니다. 실행에 영향을 주는 파일과 삭제는 기본으로 체크하지 않습니다. */
   function openPreview(ai) {
     const ok = ai.plans.filter((x) => x.plan.ok);
     modal.show(`${ai.name} 수정안 적용`, `${project.info.name} — 체크한 파일만 씁니다. 적용 전 원본은 "적용 기록"에서 되돌릴 수 있습니다.`);
@@ -1066,6 +1128,7 @@
     $('#patchBody').replaceChildren(...(rows.length ? rows : [span('change-empty', '아직 적용한 수정안이 없습니다')]));
   });
 
+  // 적용 기록 하나를 되돌립니다: 적용 전 내용으로 다시 쓰고, 새로 만든 파일은 지웁니다. 그사이 또 바뀐 파일은 먼저 묻습니다.
   async function revert(entry) {
     const changed = [];
     for (const f of entry.files) {
@@ -1106,6 +1169,7 @@
     $('#edStatus').textContent = text || (ed.path ? `${dirty ? '● 저장 안 됨' : '저장됨'} · ${ed.crlf ? 'CRLF' : 'LF'}` : '');
   }
 
+  // 편집기 닫기 (내용 비우고 패널 화면으로)
   function closeEditor() {
     Object.assign(ed, { path: null, base: null });
     $('#edText').value = '';
@@ -1114,6 +1178,7 @@
     if (state?.chatView === 'editor') host.setView('panels');
   }
 
+  /** 파일을 편집기에서 엽니다. 다른 파일에 저장 안 한 수정이 있으면 먼저 묻습니다. */
   async function openEditor(path) {
     if (!has()) return;
     if (path !== ed.path && edDirty() && !confirm(`${ed.path}에 저장하지 않은 수정 내용이 있습니다. 버리고 ${path}을(를) 열까요?`)) return;
@@ -1215,7 +1280,10 @@
 
   // ---------- 화면 상태 ----------
 
-  window.onProjectState = () => render();
+  window.onProjectState = () => {
+    modal.onViewChanged();
+    render();
+  };
 
   // 시작할 때 지난번 프로젝트를 다시 연다 (크롬 확장은 접근 허용을 다시 눌러야 할 수 있다).
   (async () => {

@@ -14,6 +14,9 @@
 // 패널 페이지를 바깥에서 살펴보려면 Chromium 옵션을 같이 넘긴다:
 //   npm start -- --remote-debugging-port=9333
 
+// [쉽게 말하면] 개발자가 시험할 때만 켜는 숨은 스위치 모음입니다. 일반 사용자는 신경 쓰지 않아도 됩니다.
+// process.env는 프로그램을 켤 때 함께 넘기는 "환경 변수"(이름=값 쌍)입니다.
+
 const env = process.env;
 
 const dev = {

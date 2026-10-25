@@ -8,6 +8,11 @@
 // 마지막으로 받은 정상 데이터는 사용자 데이터 폴더(remote-selectors.json)에 저장해 두고
 // 다음 실행 때 네트워크 없이도 먼저 적용한다.
 
+// [쉽게 말하면]
+// AI 사이트가 디자인을 바꾸면 앱이 입력창이나 답변 위치를 못 찾게 됩니다.
+// 그때 앱을 새로 설치하지 않아도 되도록, 인터넷(GitHub)에서 "새 위치 목록"만 받아 바꿔 끼우는 파일입니다.
+// 받는 것은 위치를 가리키는 글자(셀렉터)뿐이고, 프로그램 코드는 받지 않아 안전합니다.
+
 const fs = require('fs');
 const path = require('path');
 const { net } = require('electron');
@@ -24,6 +29,7 @@ let status = { source: 'builtin' }; // 'builtin' | 'cache' | 'remote', version, 
 const sanitize = (data) => sanitizeData(data, services);
 const apply = (overrides) => applyTo(services, base, overrides);
 
+/** 앱을 켤 때: 앱에 들어 있던 원래 값을 기억해 두고, 지난번에 받아 둔 목록이 있으면 먼저 적용합니다. */
 function init(userDataDir, serviceList, { remoteUrl } = {}) {
   services = serviceList;
   cacheFile = path.join(userDataDir, 'remote-selectors.json');
@@ -38,6 +44,7 @@ function init(userDataDir, serviceList, { remoteUrl } = {}) {
   } catch {}
 }
 
+/** 목록 파일을 내려받습니다. 8초 안에 응답이 없으면 포기합니다 (개발 중에는 PC의 파일 경로도 받음). */
 async function download() {
   if (!/^https?:\/\//.test(url)) return JSON.parse(fs.readFileSync(url, 'utf8')); // 개발용: 로컬 파일 경로
   const ctrl = new AbortController();

@@ -10,6 +10,8 @@
 //    이 iframe의 localStorage에 넣고, 화면이 이미 토큰 없이 떴으므로 한 번 새로고침한다.
 //    iframe에 아직 쓸 수 있는 토큰이 있으면(화면이 스스로 갱신한 토큰) 건드리지 않는다.
 //    preferCookie 사이트(Z.ai)는 화면이 손님 토큰을 스스로 만들어 두므로, 쿠키 값과 다르면 바꾼다.
+// [쉽게 말하면] 크롬에 이미 로그인된 정보를 앱 탭 안의 AI 사이트에도 전달해 주는 "다리"입니다.
+// 앱 탭 안의 사이트는 크롬이 일반 탭과 다른 보관함을 줄 때가 있어, 로그인돼 있어도 로그아웃처럼 보이기 때문입니다.
 (() => {
   const EXT_ORIGIN = `chrome-extension://${chrome.runtime.id}`;
   if (window === window.top || window.parent !== window.top || location.ancestorOrigins?.[0] !== EXT_ORIGIN) return;

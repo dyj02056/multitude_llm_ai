@@ -11,6 +11,8 @@
 // 읽기: background.js가 그 쿠키를 "이 확장 탭에서만 보이는 칸(partitioned 쿠키)"에 복사해 둔다 (mirrorJsCookies).
 // 쓰기: 여기서 document.cookie 쓰기를 같은 칸에 쓰도록 바꿔 바로 읽히게 하고, 원래 쿠키에도 반영하도록
 //       cookie-bridge.js → background.js로 넘긴다. 이 칸의 쿠키는 일반 탭의 그 사이트에는 보이지도 붙지도 않는다.
+// [쉽게 말하면] Qwen처럼 "쿠키를 직접 읽어 로그인 여부를 정하는" 사이트가 앱 탭 안에서도 로그인 상태로 보이게 돕는 작은 장치입니다.
+// (쿠키 = 사이트가 브라우저에 맡겨 두는 작은 메모. 로그인 정보가 여기 들어 있습니다.)
 (() => {
   const ancestors = location.ancestorOrigins;
   if (window === window.top || window.parent !== window.top || !ancestors?.[0]?.startsWith('chrome-extension://')) return;

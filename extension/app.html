@@ -10,6 +10,9 @@
   <link rel="icon" href="icons/icon-32.png" />
 </head>
 <body data-mode="login">
+  <!-- [쉽게 말하면] 앱 화면의 "뼈대"입니다. 어떤 버튼·칸·화면이 있는지만 적어 두고, 모양은 styles.css, 동작은 renderer.js 등이 맡습니다. -->
+  <!-- 화면 전환: body의 data-mode(로그인·모델 고르기·채팅)와 data-view(패널·비교·변경 제안 …) 값에 따라 styles.css가 필요한 부분만 보여 줍니다. -->
+  <!-- 맨 위 툴바: 배치 고르기, 라이브러리, 프로젝트, 변경 제안, 기록, 답변 비교, 복사·새 대화·새로고침, 설정, 모델 선택, 로그아웃 -->
   <header id="toolbar">
     <strong class="brand">Multitude LLM</strong>
     <span class="hint" id="hint"></span>
@@ -33,6 +36,7 @@
     <button class="only-auth danger" id="logoutBtn">로그아웃</button>
   </header>
 
+  <!-- 모델 고르기 화면 (최대 6개) -->
   <section id="pick" class="only-pick">
     <h1>사용할 모델을 고르세요</h1>
     <p class="muted" id="pickNote"></p>
@@ -43,8 +47,10 @@
     </div>
   </section>
 
+  <!-- 패널 자리: 패널 머리줄은 renderer.js가 여기에 만들고, 실제 AI 웹페이지는 본체가 그 위에 얹습니다. -->
   <main id="panels" class="only-chat"></main>
 
+  <!-- 📁 프로젝트 사이드바: 파일 나무, 제외 규칙, 보낼 서비스, 올리는 방식, git 콘솔 버튼 (project.js) -->
   <aside id="projectSide" class="project-side">
     <div class="ps-head">
       <span class="ps-title">📁 <b id="psName"></b></span>
@@ -79,6 +85,7 @@
     </div>
   </aside>
 
+  <!-- 답변 비교 화면 -->
   <section id="compare" class="only-compare">
     <div class="compare-head">
       <span class="muted-label">질문</span>
@@ -89,6 +96,7 @@
     <div id="compareCols" class="compare-cols"></div>
   </section>
 
+  <!-- 변경 제안 화면: AI별 코드 수정안 비교 (project.js) -->
   <section id="changes" class="only-changes">
     <div class="compare-head">
       <span class="muted-label">변경 제안</span>
@@ -101,6 +109,7 @@
     <div id="changesCols" class="compare-cols"></div>
   </section>
 
+  <!-- 📚 라이브러리 화면: 내 템플릿 · 스킬 (library.js) -->
   <section id="library" class="only-library">
     <div class="compare-head">
       <span class="muted-label">라이브러리</span>
@@ -160,6 +169,7 @@
     </div>
   </section>
 
+  <!-- 스킬 "AI로 압축" 화면 -->
   <section id="compressView" class="only-compress">
     <div class="compare-head">
       <span class="muted-label">스킬 압축</span>
@@ -190,6 +200,7 @@
     </div>
   </section>
 
+  <!-- 템플릿 변수 입력 화면 -->
   <section id="varsView" class="only-vars">
     <div class="compare-head">
       <span class="muted-label">템플릿 변수 입력</span>
@@ -209,6 +220,7 @@
     </form>
   </section>
 
+  <!-- git 콘솔 화면 (Windows 앱 전용) -->
   <section id="gitView" class="only-git">
     <div class="compare-head">
       <span class="muted-label">git 콘솔</span>
@@ -231,6 +243,7 @@
     </form>
   </section>
 
+  <!-- 프로젝트 파일 편집기 -->
   <section id="editor" class="only-editor">
     <div class="compare-head">
       <span class="muted-label">파일 편집</span>
@@ -244,6 +257,7 @@
     <textarea id="edText" class="ed-text" spellcheck="false" wrap="off"></textarea>
   </section>
 
+  <!-- 가운데 창: 미리보기·적용 / 적용 기록 / 📋 파일 모아보기가 함께 씀. 패널 화면에서 열면 패널을 치우는 'dialog' 화면으로 바뀝니다. -->
   <div id="patchModal" class="modal" hidden>
     <div class="modal-box">
       <div class="modal-head"><b id="patchTitle"></b><span id="patchNote" class="muted-label"></span></div>
@@ -257,6 +271,7 @@
     </div>
   </div>
 
+  <!-- 질문·답변 기록 화면 -->
   <section id="history" class="only-history">
     <aside class="history-side">
       <input id="historySearch" type="search" placeholder="질문·답변에서 찾기" />
@@ -269,6 +284,7 @@
     <div id="historyDetail" class="history-detail"></div>
   </section>
 
+  <!-- 설정·단축키(?) 화면 -->
   <section id="help" class="only-help">
     <div class="help-box">
       <h2>설정</h2>
@@ -289,6 +305,7 @@
     </div>
   </section>
 
+  <!-- 맨 아래 공통 입력창: 보낼 대상, 첨부 파일, 템플릿·스킬, 종합, 질문 쓰는 칸, 보내기 -->
   <footer id="composer" class="only-chat">
     <div class="targets">
       <span class="muted-label">보낼 대상</span>
@@ -327,6 +344,7 @@
       <button id="sendBtn" class="primary">보내기</button>
     </div>
   </footer>
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → project.js → library.js (뒤의 것이 앞의 것을 씀) -->
   <script src="lib/shared/vendor/ignore.js"></script>
   <script src="lib/shared/vendor/diff.js"></script>
   <script src="lib/shared/project-ignore.js"></script>

@@ -3,6 +3,10 @@
 // 받는 것은 CSS 셀렉터·정규식 "문자열"뿐이다. 코드는 받지도 실행하지도 않는다.
 // 받아 오기·저장은 쓰는 쪽이 한다 (Electron: 파일 / 크롬 확장 프로그램: chrome.storage).
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.remoteCore)이 같이 쓴다.
+//
+// [쉽게 말하면] 인터넷에서 받은 "새 셀렉터 목록"이 안전한지 검사하고 적용하는 파일입니다.
+// 믿을 수 없는 값(너무 긴 글자, 컴퓨터를 멈추게 할 수 있는 정규식, 서비스 밖 주소 등)은 버립니다.
+// 보안상 중요한 항목(보내기 버튼·로그인 화면 주소 등)은 인터넷 값으로 바꾸지 않습니다.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;

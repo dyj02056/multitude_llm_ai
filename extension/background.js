@@ -30,6 +30,12 @@ const DOMAINS = [...new Set(MLA.services.SERVICES.flatMap((s) => s.hosts))];
 const JS_COOKIE_HOSTS = MLA.services.SERVICES.filter((s) => s.jsCookies).flatMap((s) => s.hosts);
 const PARTITION = { topLevelSite: `chrome-extension://${chrome.runtime.id}` };
 
+// [쉽게 말하면] 크롬 확장의 "뒤에서 늘 대기하는 관리인"입니다 (화면이 없음).
+//   - 확장 아이콘을 누르면 앱 탭을 열거나 그 탭으로 이동
+//   - 앱 탭 안에서만 AI 사이트를 iframe으로 띄울 수 있게 규칙을 걸고, 탭을 떠나면 바로 지움 (다른 사이트가 악용하지 못하게)
+//   - 로그인 쿠키가 필요한 곳에 붙도록 도움
+
+// 확장 아이콘 클릭: 이미 열린 앱 탭이 있으면 그 탭으로, 없으면 새로 엽니다.
 chrome.action.onClicked.addListener(async () => {
   try {
     const [ctx] = await chrome.runtime.getContexts({ contextTypes: ['TAB'] });
@@ -74,6 +80,7 @@ const addRule = (tabId) =>
   });
 
 /** 그 탭의 규칙(iframe 규칙 + WebSocket 쿠키 규칙)을 모두 지운다 */
+// 그 탭의 iframe 허용 규칙을 지웁니다.
 async function removeRule(tabId) {
   const rules = await chrome.declarativeNetRequest.getSessionRules();
   const ids = rules.filter((r) => r.id === tabId || r.condition?.tabIds?.[0] === tabId).map((r) => r.id);
@@ -107,6 +114,7 @@ async function syncWsCookies(tabId) {
 const sameCookie = (a, b) => a.name === b.name && a.domain === b.domain && a.path === b.path;
 
 /** jsCookies 서비스의 쿠키를 확장 탭 칸(partitioned)에 맞춰 복사하고, 원래 쿠키가 사라진 복사본은 지운다 */
+// 화면 스크립트가 직접 읽는 로그인 쿠키(Qwen 등)를 앱 탭 안에서도 읽히는 칸에 복사합니다.
 async function mirrorJsCookies() {
   for (const host of JS_COOKIE_HOSTS) {
     const url = `https://${host}/`;
@@ -154,6 +162,7 @@ function parseCookieWrite(raw) {
 }
 
 /** 화면 스크립트가 쓴 쿠키를 그 사이트의 원래 쿠키에 반영한다. 보낸 페이지 도메인과 그 상위 도메인 쿠키만 받는다. */
+// 앱 탭 안의 사이트가 쓴 쿠키를 원래 쿠키에도 반영합니다. 그 사이트 도메인의 쿠키만 받아 줍니다.
 async function applyCookieWrite(pageUrl, raw) {
   const host = pageUrl.hostname;
   const c = parseCookieWrite(raw);
@@ -239,6 +248,7 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
 });
 
 /** 앱 화면이 없는 탭의 규칙을 지운다 (백그라운드가 자는 사이 앱 탭을 떠난 경우 대비) */
+// 주인(열린 앱 탭)이 없는 규칙을 정리합니다 (관리인이 다시 깨어날 때마다).
 async function sweepStaleRules() {
   const rules = await chrome.declarativeNetRequest.getSessionRules();
   if (!rules.length) return;
@@ -249,6 +259,7 @@ async function sweepStaleRules() {
 }
 globalThis.sweepStaleRules = sweepStaleRules; // 테스트용
 
+// 앱 탭이 연결되면 규칙을 걸고, 연결이 끊기면(닫기·새로고침·다른 주소) 바로 지웁니다.
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'mla-app') return;
   const tabId = port.sender?.tab?.id;
