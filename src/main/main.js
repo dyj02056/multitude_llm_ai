@@ -41,6 +41,7 @@ const { setupGitConsole } = require('./gitconsole');
 // ---------- 화면 크기 관련 숫자 (단위: 픽셀) ----------
 // 패널을 어디에 얼마나 크게 놓을지 계산할 때 씁니다. styles.css의 크기와 맞아야 화면이 어긋나지 않습니다.
 const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이
+const BAR_H = 34; // 프로젝트 모드: 답변에 수정안이 있으면 패널 아래에 띄우는 변경 바 높이 (styles.css와 같게)
 const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
 const COMPOSER_H = 132; // 채팅 화면 맨 아래 공통 입력창 높이 (첨부 파일 줄 포함)
 const GAP = 4;
@@ -77,6 +78,7 @@ let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'di
 let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
 let gitConsole = null; // git 콘솔 (gitconsole.js)
 let focusId = null; // 크게 보는 패널 (⤢). 나머지 패널은 크기를 그대로 둔 채 화면 밖으로 옮긴다
+const barIds = new Set(); // 변경 바를 띄운 패널 — 웹페이지 아래쪽을 바 높이만큼 비운다
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
 
@@ -292,6 +294,7 @@ function showChat(selected) {
     if (!ids.includes(id)) {
       destroyView(p.view);
       panels.delete(id);
+      barIds.delete(id);
     }
   }
   for (const svc of SERVICES) {
@@ -342,12 +345,14 @@ function computeRects() {
       // 크게 보기: 고른 패널은 영역 전체, 나머지는 원래 크기로 숨겨 둔다 (답변 감시는 계속)
       const frame = focusId === id ? big : cells[i];
       const hidden = !!focusId && focusId !== id;
+      const bar = barIds.has(id) ? BAR_H : 0;
       return {
         id,
         frame,
         hidden,
         focused: focusId === id,
-        content: { x: frame.x, y: frame.y + HEADER_H, width: frame.width, height: Math.max(0, frame.height - HEADER_H) },
+        bar: !!bar,
+        content: { x: frame.x, y: frame.y + HEADER_H, width: frame.width, height: Math.max(0, frame.height - HEADER_H - bar) },
       };
     }),
   };
@@ -459,6 +464,14 @@ ipcMain.on('layout:set', (_e, value) => {
     savePrefs();
     pushState();
   }
+});
+
+// 프로젝트 모드의 변경 바를 띄우거나 내릴 때: 그 패널의 웹페이지 높이를 바만큼 줄이거나 되돌린다
+ipcMain.on('layout:bar', (_e, { id, on } = {}) => {
+  if (typeof id !== 'string') return;
+  if (on && panels.has(id)) barIds.add(id);
+  else barIds.delete(id);
+  pushState();
 });
 
 // 패널 하나 크게 보기 / 돌아오기 (id가 null이거나 이미 크게 보는 패널이면 돌아온다)

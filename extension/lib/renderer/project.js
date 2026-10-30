@@ -16,7 +16,7 @@
 //   1. 폴더 열기 → 왼쪽 사이드바에 파일 나무(트리) 표시, 보내면 안 되는 파일은 L1·L2·L3 표시
 //   2. 보내기 → 고른 파일과 프로젝트 구조를 AI에게 첨부 파일로 함께 보냄 (답변 규칙도 붙임)
 //   3. AI가 "NEED_FILES"로 파일을 더 달라고 하면 📂 버튼으로 보내 줌
-//   4. AI 답변의 수정안 → 변경 제안 화면에서 비교 · 미리보기 · 적용 · 되돌리기
+//   4. AI 답변의 수정안 → 패널 아래 변경 바에서 바로 적용 · 되돌리기, 또는 변경 제안 화면에서 비교 · 미리보기 · 적용
 //   5. 📋 파일 모아보기 → 경로와 전체 코드를 모아 복사 (파일에는 쓰지 않음)
 //   6. 편집기 → 파일을 직접 고쳐 저장
 // 전체를 (() => { … })() 로 감싼 이유: 이 안의 이름들이 다른 파일의 이름과 부딪히지 않게 "울타리"를 친 것입니다.
@@ -49,6 +49,7 @@
     stale: [], // ⟳ 뒤 AI가 아는 내용과 달라진 파일 [{ id, name, files: [{ path, text }], deleted: [경로] }]
     blocked: new Set(), // 이 프로젝트의 파일을 보내지 않을 서비스 id (질문 글만 보냄)
     uploadOk: new Set(), // 이 프로젝트의 파일을 올려도 된다고 확인한 서비스 id
+    touched: new Map(), // 이번에 AI 수정안으로 바꾼 파일 경로 -> 'A'(새 파일) | 'M'(수정) — 트리에 표시
   };
 
   // 편집기에서 연 파일: path, base(열 때·저장할 때 디스크 내용 그대로), crlf(원래 줄바꿈), indent(Tab 키로 넣을 들여쓰기)
@@ -100,6 +101,8 @@
     project.sent.clear();
     project.stale = [];
     project.expanded = new Set(['']);
+    project.touched.clear();
+    clearBars();
     closeEditor();
     if (!info) return render();
     if (info.needsPermission) {
@@ -354,6 +357,12 @@
       if (hits?.length) {
         const tag = span('tag secret', '⚠ 비밀?');
         tag.title = `비밀 정보로 보이는 문자열: ${describeSecrets(hits)}`;
+        row.append(tag);
+      }
+      const touched = project.touched.get(e.path);
+      if (touched) {
+        const tag = span(`tag touched ${touched}`, touched);
+        tag.title = touched === 'A' ? 'AI 수정안으로 새로 만든 파일' : 'AI 수정안으로 바꾼 파일';
         row.append(tag);
       }
       if (e.kind === 'file') row.append(span('sz', fmtSize(e.size)));
@@ -625,7 +634,9 @@
 
   window.onPanelAnswerDone = async (id) => {
     const md = await answerMd(id).catch(() => '');
-    showCollectBtn(id, md).catch(() => {});
+    // 프로젝트가 열려 있으면 수정안을 패널 아래 변경 바로 보여 준다 (📋 모아보기도 바 안에). 바를 띄우지 않으면 머리줄 버튼.
+    const barred = has() && (await refreshBar(id, md).catch(() => false));
+    if (!barred) showCollectBtn(id, md).catch(() => {});
     if (!has()) return;
     // 개별 파일 방식이면 AI가 올린 이름(src__a__index.js)으로 요청할 수 있어 실제 경로로 되돌린다
     const wanted = [...new Set(PC.parseNeedFiles(md).map((p) => PU.restorePaths(p).find((c) => entryOf(c)) || p))];
@@ -726,28 +737,156 @@
     return r && r.layer === 'L1' ? `앱 내장 제외 경로라 쓰지 않습니다 (${PI.describe(r)})` : null;
   };
 
+  /** 답변 하나의 수정안을 찾고, 지금 파일에 적용하면 어떻게 되는지 미리 계산합니다. [{ change, plan }] */
+  async function planAnswer(md) {
+    const plans = [];
+    for (const change of PX.extractChanges(md || '')) {
+      const block = writeBlocked(change.path);
+      let plan;
+      try {
+        plan = block ? { path: change.path, ok: false, error: block, op: 'modify' } : PX.planChange(change, await currentText(change.path));
+      } catch (err) {
+        plan = { path: change.path, ok: false, error: err.message, op: 'modify' };
+      }
+      plans.push({ change, plan });
+    }
+    return plans;
+  }
+
   // 열린 모든 AI의 답변에서 수정안을 찾고, 지금 파일에 적용하면 어떻게 되는지 미리 계산합니다.
   async function planAll() {
     const { answers } = await host.getAnswers();
     const out = [];
-    for (const a of answers) {
-      const plans = [];
-      for (const change of PX.extractChanges(a.md || '')) {
-        const block = writeBlocked(change.path);
-        let plan;
-        try {
-          plan = block ? { path: change.path, ok: false, error: block, op: 'modify' } : PX.planChange(change, await currentText(change.path));
-        } catch (err) {
-          plan = { path: change.path, ok: false, error: err.message, op: 'modify' };
-        }
-        plans.push({ change, plan });
-      }
-      out.push({ id: a.id, name: a.name, color: a.color, plans });
-    }
+    for (const a of answers) out.push({ id: a.id, name: a.name, color: a.color, plans: await planAnswer(a.md) });
     return out;
   }
 
   const OP_TEXT = { modify: '수정', create: '새 파일', delete: '삭제' };
+
+  // ---------- 패널 변경 바 ----------
+  // 프로젝트가 열려 있고 답변에 수정안이 있으면 그 패널 아래에 바를 띄운다: 바뀌는 파일 요약과 [적용] 한 번.
+  // [적용]은 미리보기 창에서 기본으로 체크되는 파일(실행 영향·삭제가 아닌 것)만 바로 쓴다. 나머지는 [변경 보기]에서 골라 적용.
+  // 적용하면 바가 "적용됨 · 되돌리기"로 바뀐다. 새 질문을 보내거나 새 대화를 열면 바를 내린다 (renderer.js setChangeBar).
+
+  const SAME_TEXT = '바뀌는 내용이 없습니다'; // planChange: 이미 적용된 수정안
+  const bars = new Map(); // 패널 id -> { ai: { id, name, color, plans }, applied: 적용 기록 항목 | null }
+
+  /** 확인 없이 바로 써도 되는 수정안인지 (미리보기 창의 기본 체크와 같은 기준) */
+  const isQuick = ({ plan }) => plan.ok && plan.op !== 'delete' && !PX.executionRisk(plan.path, plan.before, plan.after);
+
+  function clearBars() {
+    for (const id of bars.keys()) setChangeBar(id, false);
+    bars.clear();
+  }
+
+  /** 패널 하나의 답변을 다시 읽어 바를 새로 그린다. 바를 띄웠으면 true */
+  async function refreshBar(id, md) {
+    const svc = state.services.find((s) => s.id === id);
+    if (!has() || !svc) return false;
+    const plans = await planAnswer(md ?? (await answerMd(id)));
+    bars.set(id, { ai: { id, name: svc.name, color: svc.color, plans }, applied: null });
+    return renderBar(id);
+  }
+
+  /** 적용하거나 되돌린 뒤: 아직 적용하지 않은 다른 패널의 바를 지금 파일 기준으로 다시 계산한다 */
+  async function refreshOtherBars(skipId) {
+    for (const [id, b] of [...bars]) if (id !== skipId && !b.applied) await refreshBar(id).catch(() => {});
+  }
+
+  const sumLine = (plans) => plans.map(({ plan }) => `${OP_TEXT[plan.op]} ${plan.path} +${plan.add} −${plan.del}`).join('\n');
+
+  /** 바 그리기. 보여 줄 것이 없으면 내리고 false */
+  function renderBar(id) {
+    const p = panels.get(id);
+    const b = bars.get(id);
+    if (!p || !b) {
+      setChangeBar(id, false);
+      return false;
+    }
+    const bar = p.changeBar;
+    const close = button('✕', '변경 바 닫기 (수정안은 변경 제안 화면에서 다시 볼 수 있습니다)', () => {
+      bars.delete(id);
+      setChangeBar(id, false);
+    });
+    close.className = 'cb-close';
+
+    if (b.applied) {
+      const { files } = b.applied;
+      const undo = button('되돌리기', '적용하기 전 내용으로 되돌립니다 (새로 만든 파일은 지웁니다)', async () => {
+        undo.disabled = true;
+        await revert(b.applied);
+        undo.disabled = false;
+      });
+      const text = span('cb-text', `${files.length}개 파일 적용됨 · ${files.map((f) => f.path).join(', ')}`);
+      text.title = files.map((f) => f.path).join('\n');
+      bar.className = 'change-bar applied';
+      bar.replaceChildren(span('cb-icon', '✓'), text, undo, close);
+      p.collectBtn.hidden = true;
+      setChangeBar(id, true);
+      return true;
+    }
+
+    const { ai } = b;
+    const live = ai.plans.filter((x) => x.plan.ok);
+    const quick = live.filter(isQuick);
+    const look = live.filter((x) => !isQuick(x));
+    const bad = ai.plans.filter((x) => !x.plan.ok && x.plan.error !== SAME_TEXT);
+    if (!live.length && !bad.length) {
+      // 수정안이 없거나 이미 모두 적용된 내용
+      bars.delete(id);
+      setChangeBar(id, false);
+      return false;
+    }
+    const add = live.reduce((n, x) => n + x.plan.add, 0);
+    const del = live.reduce((n, x) => n + x.plan.del, 0);
+    const text = span('cb-text', '');
+    text.append(span('cb-count', live.length ? `파일 ${live.length}개 변경` : '적용할 수 있는 수정안 없음'));
+    if (live.length) text.append(span('add', ` +${add}`), span('del', ` −${del}`), span('cb-files', ` · ${live.map((x) => x.plan.path).join(', ')}`));
+    text.title = [
+      sumLine(live),
+      look.length ? `\n확인 후 적용 (실행 영향·삭제):\n${sumLine(look)}` : '',
+      bad.length ? `\n적용 불가:\n${bad.map(({ plan }) => `${plan.path}: ${plan.error}`).join('\n')}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const notes = [];
+    if (look.length) notes.push(span('cb-warn', `⚠ ${look.length}개 확인 필요`));
+    if (bad.length) notes.push(span('cb-bad', `${bad.length}개 적용 불가`));
+
+    const collect = button('📋', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다 (파일에는 쓰지 않음)`, () => window.onCollectClick(id));
+    const view = live.length
+      ? button('변경 보기', '파일마다 바뀌는 줄을 보고 골라서 적용합니다', () => openPreview(ai))
+      : button('변경 제안에서 보기', '변경 제안 화면에서 전체 파일 다시 요청 등을 할 수 있습니다', () => host.setView('changes'));
+    const btns = [collect, view];
+    if (live.length) {
+      const apply = button(
+        quick.length ? `적용 (${quick.length})` : '골라서 적용',
+        quick.length
+          ? `바로 씁니다:\n${sumLine(quick)}${look.length ? `\n\n확인이 필요한 ${look.length}개는 빼고 씁니다 — "변경 보기"에서 골라 적용` : ''}\n\n적용 전 원본은 되돌릴 수 있습니다`
+          : '실행 영향 파일·삭제만 있어 미리 보고 직접 골라야 합니다',
+        () => (quick.length ? applyFromBar(id, apply) : openPreview(ai)),
+      );
+      apply.className = 'cb-apply';
+      btns.push(apply);
+    }
+    bar.className = 'change-bar';
+    bar.replaceChildren(span('cb-icon', '✎'), text, ...notes, ...btns, close);
+    p.collectBtn.hidden = true;
+    setChangeBar(id, true);
+    return true;
+  }
+
+  async function applyFromBar(id, btn) {
+    const b = bars.get(id);
+    if (!b) return;
+    btn.disabled = true;
+    btn.textContent = '적용 중…';
+    try {
+      await applyPlans(b.ai, b.ai.plans.filter(isQuick).map((x) => x.plan));
+    } finally {
+      if (bars.get(id) === b && !b.applied) renderBar(id); // 하나도 쓰지 못했으면 바를 원래대로
+    }
+  }
 
   window.renderChanges = async () => {
     const cols = $('#changesCols');
@@ -781,7 +920,8 @@
     for (const { change, plan } of ai.plans) {
       const row = document.createElement('div');
       row.className = 'change-row';
-      row.append(span(`op ${plan.ok ? plan.op : 'bad'}`, plan.ok ? OP_TEXT[plan.op] : '⚠ 적용 불가'), span('path', plan.path));
+      const same = !plan.ok && plan.error === SAME_TEXT; // 이미 적용한 수정안
+      row.append(span(`op ${plan.ok ? plan.op : same ? 'same' : 'bad'}`, plan.ok ? OP_TEXT[plan.op] : same ? '✓ 적용됨' : '⚠ 적용 불가'), span('path', plan.path));
       const risk = plan.ok && PX.executionRisk(plan.path, plan.before, plan.after);
       if (risk) {
         const tag = span('op bad', '⚠ 실행 영향');
@@ -886,6 +1026,14 @@
     },
   };
   $('#patchCancel').addEventListener('click', () => modal.hide());
+  // Ctrl+Enter: 창의 주 버튼(선택한 파일 적용 · 전체 복사)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || $('#patchModal').hidden) return;
+    const apply = $('#patchApply');
+    if (apply.hidden || apply.disabled) return;
+    e.preventDefault();
+    apply.click();
+  });
 
   // 바뀐 줄 보기: 추가된 줄은 초록, 지운 줄은 빨강으로 칠합니다.
   function diffPre(text) {
@@ -928,16 +1076,17 @@
     $('#patchAll').hidden = false;
     $('#patchAll').onclick = () => boxes.forEach((b) => (b.box.checked = true));
     $('#patchApply').textContent = '선택한 파일 적용';
+    $('#patchApply').focus(); // Enter(또는 Ctrl+Enter)로 바로 적용
     $('#patchApply').onclick = async () => {
       const chosen = boxes.filter((b) => b.box.checked).map((b) => b.plan);
       if (!chosen.length) return ($('#patchStatus').textContent = '적용할 파일을 고르세요');
       $('#patchApply').disabled = true;
       try {
-        const result = await applyPlans(ai, chosen);
-        $('#patchStatus').textContent = result;
+        const { text } = await applyPlans(ai, chosen);
+        $('#patchStatus').textContent = text;
         setTimeout(() => {
           modal.hide();
-          window.renderChanges();
+          if (state?.chatView === 'changes') window.renderChanges();
         }, 900);
       } finally {
         $('#patchApply').disabled = false;
@@ -945,7 +1094,7 @@
     };
   }
 
-  /** 적용: 쓰기 직전에 파일이 바뀌었으면 다시 계산한다. 원본은 적용 기록에 남긴다. */
+  /** 적용: 쓰기 직전에 파일이 바뀌었으면 다시 계산한다. 원본은 적용 기록에 남긴다. { entry(적용 기록 항목, 못 썼으면 null), text } */
   async function applyPlans(ai, plans) {
     const done = [];
     const failed = [];
@@ -965,16 +1114,28 @@
         failed.push(`${plan.path}: ${err.message}`);
       }
     }
+    let entry = null;
     if (done.length) {
       // 수정안을 낸 AI는 적용한 결과를 이미 안다. 다른 AI에게는 ⟳ 뒤 "바뀐 파일"로 보인다.
       remember(ai.id, done.map((f) => ({ path: f.path, text: f.after })));
-      project.log.unshift({ id: `${Date.now().toString(36)}`, at: Date.now(), ai: ai.name, files: done, reverted: false });
+      entry = { id: `${Date.now().toString(36)}`, at: Date.now(), ai: ai.name, files: done, reverted: false };
+      project.log.unshift(entry);
       project.log.length = Math.min(project.log.length, MAX_LOG);
+      for (const f of done) {
+        if (f.after === null) project.touched.delete(f.path);
+        else if (!project.touched.has(f.path)) project.touched.set(f.path, f.before === null ? 'A' : 'M');
+      }
       saveState();
+      // 그 AI의 패널 바는 "적용됨 · 되돌리기"로 (변경 제안 화면에서 적용했어도 패널로 돌아가면 보인다)
+      if (panels.has(ai.id)) {
+        bars.set(ai.id, { ai, applied: entry });
+        renderBar(ai.id);
+      }
       await rescan();
+      await refreshOtherBars(ai.id);
     }
     if (failed.length) alert(`적용하지 못한 파일:\n${failed.join('\n')}`);
-    return `${done.length}개 파일을 적용했습니다${failed.length ? ` · ${failed.length}개 실패` : ''}`;
+    return { entry, text: `${done.length}개 파일을 적용했습니다${failed.length ? ` · ${failed.length}개 실패` : ''}` };
   }
 
   // ---------- 파일 모아보기 ----------
@@ -1146,8 +1307,12 @@
       }
     }
     entry.reverted = !failed.length;
+    if (entry.reverted) for (const f of entry.files) project.touched.delete(f.path);
     saveState();
     await rescan();
+    // 이 적용으로 "적용됨"이던 바는 다시 적용할 수 있는 상태로, 다른 바도 지금 파일 기준으로 다시 계산
+    if (entry.reverted) for (const b of bars.values()) if (b.applied === entry) b.applied = null;
+    await refreshOtherBars(null);
     if (failed.length) alert(`되돌리지 못한 파일:\n${failed.join('\n')}`);
   }
 

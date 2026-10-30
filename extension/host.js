@@ -24,6 +24,7 @@
   const { shortcutList, shortcutFor } = MLA.shortcuts;
 
   const HEADER_H = 28; // 패널마다 이름·상태를 그리는 머리줄 높이 (styles.css와 같게)
+  const BAR_H = 34; // 프로젝트 모드: 답변에 수정안이 있으면 패널 아래에 띄우는 변경 바 높이 (styles.css와 같게)
   const TOOLBAR_H = 44; // 맨 위 공통 툴바 높이
   const COMPOSER_H = 132; // 채팅 화면 맨 아래 공통 입력창 높이 (첨부 파일 줄 포함)
   const GAP = 4;
@@ -90,6 +91,7 @@
   let mode = 'pick'; // 'pick' | 'chat'  (확장 프로그램은 크롬에 로그인된 계정을 그대로 써서 로그인 화면이 없다)
   let chatView = 'panels'; // 'panels' (웹 패널) | 'dialog' (패널 위에 띄운 창 — 패널을 화면 밖으로 치움) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'library' (라이브러리) | 'vars' (변수 입력) | 'compress' (스킬 AI 압축) | 'history' (기록) | 'help' (설정·단축키) — git 콘솔은 없음
   let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
+  const barIds = new Set(); // 변경 바를 띄운 패널 — iframe 아래쪽을 바 높이만큼 비운다
   let tabId = null;
   const panels = new Map(); // id -> { iframe, frameId, origin, url, retried, helloTimer, loginTimer }
 
@@ -194,6 +196,7 @@
     clearTimeout(p.loginTimer);
     p.iframe.remove();
     panels.delete(id);
+    barIds.delete(id);
   }
 
   /** 패널 페이지의 content.js에 요청을 보낸다. */
@@ -286,12 +289,14 @@
     const [big] = MLA.layout.placeCells('grid', 1, box, GAP);
     return ids.map((id, i) => {
       const frame = focusId === id ? big : cells[i];
+      const bar = barIds.has(id) ? BAR_H : 0;
       return {
         id,
         frame,
         hidden: !!focusId && focusId !== id,
         focused: focusId === id,
-        content: { x: frame.x, y: frame.y + HEADER_H, width: frame.width, height: Math.max(0, frame.height - HEADER_H) },
+        bar: !!bar,
+        content: { x: frame.x, y: frame.y + HEADER_H, width: frame.width, height: Math.max(0, frame.height - HEADER_H - bar) },
       };
     });
   }
@@ -598,6 +603,12 @@
     refreshRemote: () => refreshRemote(),
     setSidebar: (open) => {
       sidebarOpen = !!open;
+      pushState();
+    },
+    setPanelBar: (id, on) => {
+      if (typeof id !== 'string') return;
+      if (on && panels.has(id)) barIds.add(id);
+      else barIds.delete(id);
       pushState();
     },
     // 프로젝트 모드: 고른 폴더 읽기·쓰기 (project-fs.js, File System Access API)

@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('host', {
   setLayout: (value) => ipcRenderer.send('layout:set', value),
   setFocus: (id) => ipcRenderer.send('layout:focus', id),
   setSidebar: (open) => ipcRenderer.send('layout:sidebar', open),
+  setPanelBar: (id, on) => ipcRenderer.send('layout:bar', { id, on: !!on }),
   // 프로젝트 모드: 고른 폴더 안에서만 읽기·쓰기 (실패하면 Error를 던진다)
   project: Object.fromEntries(
     ['pick', 'restore', 'reconnect', 'close', 'readDir', 'readFile', 'writeFile', 'deleteFile', 'globalExclude', 'loadState', 'saveState'].map(

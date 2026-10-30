@@ -356,6 +356,34 @@ body.project-open[data-mode="chat"][data-view="dialog"] .project-side { display:
   .panel-head .collect-btn.attn, .panel-head .collect-btn.attn::after { animation: none; }
 }
 
+/* 패널 아래 변경 바 (프로젝트 모드): 본체가 웹페이지를 34px(main.js BAR_H) 짧게 두고, 그 자리에 바를 그린다 (테두리 1px 안쪽이라 33px) */
+.change-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 33px;
+  display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px;
+  border-top: 2px solid #f5b642; background: #241f12; font-size: 12px; white-space: nowrap; overflow: hidden;
+  animation: bar-in .25s ease-out;
+}
+.change-bar[hidden] { display: none; }
+.change-bar.applied { border-top-color: #2f9e5b; background: #13261b; }
+.change-bar .cb-icon { flex: none; font-weight: 700; color: #ffd27a; }
+.change-bar.applied .cb-icon { color: #8fe0b0; }
+.change-bar .cb-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+.change-bar .cb-count { font-weight: 600; }
+.change-bar .cb-files { color: var(--muted); font-family: "Cascadia Mono", Consolas, monospace; }
+.change-bar .add { color: #6bd67a; }
+.change-bar .del { color: #e57373; }
+.change-bar .cb-warn { flex: none; color: #e0a23b; }
+.change-bar .cb-bad { flex: none; color: #f0a0a0; }
+.change-bar button { flex: none; padding: 2px 8px; font-size: 12px; }
+.change-bar .cb-apply { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 2px 14px; }
+.change-bar .cb-apply:hover { background: #3f7ce0; }
+.change-bar .cb-apply:disabled { opacity: .7; cursor: default; }
+.change-bar .cb-close { background: none; border-color: transparent; color: var(--muted); padding: 2px 5px; }
+@keyframes bar-in { from { transform: translateY(100%); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .change-bar { animation: none; } }
+.ps-row .tag.touched.M { border-color: #2a4a6a; color: #9ec0fa; }
+.ps-row .tag.touched.A { border-color: #2a6a4a; color: #8fe0b0; }
+
 /* ---------- 변경 제안 ---------- */
 .only-changes { display: none; }
 body[data-mode="chat"][data-view="changes"] .only-changes { display: flex; }
@@ -373,6 +401,7 @@ body[data-view="changes"] #panels { display: none !important; }
 .change-row .op.create { color: #8fe0b0; border-color: #2a6a4a; }
 .change-row .op.delete { color: #f0a0a0; border-color: #5a2a2a; }
 .change-row .op.bad { color: #e0a23b; border-color: #5a4a22; }
+.change-row .op.same { color: #8fe0b0; border-color: #2a6a4a; }
 .change-row .add { color: #6bd67a; flex: none; }
 .change-row .del { color: #e05b5b; flex: none; }
 .change-row button { padding: 0 6px; font-size: 11px; flex: none; }

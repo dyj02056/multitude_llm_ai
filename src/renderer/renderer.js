@@ -133,6 +133,7 @@ function syncPanels() {
 
 /**
  * 패널 하나의 머리줄을 만듭니다: 점(상태 색) · 이름 · 주소 · 상태 글자 · 버튼들
+ * 아래쪽 변경 바(프로젝트 모드, 수정안이 있을 때만)는 project.js가 채운다.
  * 버튼: 📋 파일 모아보기 · 📂 요청 파일 보내기 · 로그인 · 복사 · ⤢ 크게 보기 · ＋ 새 대화 · ← 뒤로 · ⌂ 처음 주소 · ↻ 새로고침
  */
 function createPanel(svc) {
@@ -180,14 +181,26 @@ function createPanel(svc) {
     button('↻', '새로고침', () => host.panelAction(svc.id, 'reload')),
   );
   if (UI.devtools) head.append(button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')));
-  el.append(head);
+  // 프로젝트 모드: 답변에 수정안이 있으면 project.js가 패널 아래에 이 바를 채워 띄운다 (setChangeBar)
+  const changeBar = document.createElement('div');
+  changeBar.className = 'change-bar';
+  changeBar.hidden = true;
+  el.append(head, changeBar);
   panelsEl.append(el);
   head.addEventListener('dblclick', (e) => {
     if (!e.target.closest('button')) host.setFocus(svc.id); // 머리줄 빈 곳을 두 번 누르면 크게 보기 / 돌아오기
   });
-  const p = { el, dot, url, status, loginBtn, attachBadge, needBtn, collectBtn, focusBtn };
+  const p = { el, dot, url, status, loginBtn, attachBadge, needBtn, collectBtn, focusBtn, changeBar };
   panels.set(svc.id, p);
   return p;
+}
+
+/** 패널 아래 변경 바를 띄우거나 내린다. 본체가 웹페이지 높이를 바만큼 줄여 바가 페이지에 가리지 않게 한다. */
+function setChangeBar(id, on) {
+  const p = panels.get(id);
+  if (!p || p.changeBar.hidden === !on) return;
+  p.changeBar.hidden = !on;
+  host.setPanelBar(id, on);
 }
 
 const FINISHED_STATES = new Set(['done', 'timeout', 'no-answer']);
@@ -243,12 +256,16 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     p.attachBadge.hidden = true;
     p.needBtn.hidden = true;
     p.collectBtn.hidden = true;
+    setChangeBar(id, false);
     window.onPanelCleared?.(id); // 새 대화: 프로젝트 모드에서 이 AI가 아는 파일 내용을 잊는다
     window.onSkillCleared?.(id); // 새 대화: 다음 질문에 스킬 지침을 다시 붙인다
   }
   if (answer === 'done') window.onPanelAnswerDone?.(id); // 파일 모아보기 버튼, 프로젝트 모드: NEED_FILES 확인
   if (answer) {
-    if (answer === 'answering') p.answerStart = Date.now();
+    if (answer === 'answering') {
+      p.answerStart = Date.now();
+      setChangeBar(id, false); // 페이지에서 직접 물어본 경우에도 지난 답변의 변경 바는 내린다
+    }
     p.status.textContent =
       answer === 'done' ? `${ANSWER_TEXT.done} · ${chars}자${late ? ' (늦게 끝남)' : ''}` : ANSWER_TEXT[answer];
     p.status.dataset.state = `answer-${answer}`;
@@ -271,6 +288,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
       p.attachBadge.hidden = true;
       p.needBtn.hidden = true;
       p.collectBtn.hidden = true;
+      setChangeBar(id, false);
       if (attaching) p.status.textContent = `파일 ${attaching}개 첨부 후 보내는 중…`;
     }
     // 첨부에 실패한 패널은 글만 보냈다. 머리줄에 표시를 남겨 둔다 (다음에 보내거나 새 대화를 열 때까지).
