@@ -180,4 +180,4 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
   return { stop: () => running && killTree(running.child) };
 }
 
-module.exports = { setupGitConsole, resolveExe };
+module.exports = { setupGitConsole, resolveExe, killTree };

@@ -64,6 +64,12 @@ contextBridge.exposeInMainWorld('host', {
     stop: () => ipcRenderer.invoke('git:stop'),
     openTerminal: () => ipcRenderer.invoke('git:openTerminal'),
   },
+  // 미리보기 창의 테스트 실행 (Windows 앱 전용): 고칠 파일 목록만 넘기고, 확인·실행·되돌리기는 메인(devtest.js)이 한다
+  devtest: {
+    info: () => ipcRenderer.invoke('devtest:info'),
+    trial: (changes) => ipcRenderer.invoke('devtest:trial', changes),
+    stop: () => ipcRenderer.invoke('devtest:stop'),
+  },
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),
   on: (channel, fn) => {
     if (CHANNELS.has(channel)) ipcRenderer.on(channel, (_e, payload) => fn(payload));

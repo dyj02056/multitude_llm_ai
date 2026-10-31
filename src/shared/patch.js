@@ -285,6 +285,81 @@
     return { ...base, op, after, ok: true, add, del, preview };
   }
 
+  // ---------- 덩어리(hunk) 단위 적용 ----------
+  // 미리보기 창에서 파일 하나의 바뀐 곳을 덩어리마다 골라 적용한다 (되돌리기는 파일 단위 — 적용 기록에 파일 전체 원본이 남는다).
+  // 덩어리 = 바뀌지 않은 줄 사이에 붙어 있는 지운 줄·더한 줄 묶음. 줄바꿈(CRLF·마지막 줄바꿈 없음)은 글 그대로 다룬다.
+
+  /** before → after의 덩어리 목록. [{ index, oldStart, oldLines, newStart, newLines, lines(['-…', '+…', ' …']), context }] */
+  function splitHunks(before, after, context = 3) {
+    const parts = Diff.diffLines(before || '', after || '');
+    const lineList = (v) => v.replace(/\r?\n$/, '').split(/\r?\n/);
+    const hunks = [];
+    let oldLine = 1;
+    let newLine = 1;
+    let cur = null;
+    let lastSame = [];
+    for (const p of parts) {
+      const lines = p.value === '' ? [] : lineList(p.value);
+      if (!p.added && !p.removed) {
+        if (cur) {
+          cur.after = lines.slice(0, context);
+          hunks.push(cur);
+          cur = null;
+        }
+        lastSame = lines;
+        oldLine += p.count;
+        newLine += p.count;
+        continue;
+      }
+      if (!cur) {
+        cur = { index: hunks.length, oldStart: oldLine, oldLines: 0, newStart: newLine, newLines: 0, lines: [], before: lastSame.slice(-context), after: [] };
+      }
+      for (const l of lines) cur.lines.push((p.added ? '+' : '-') + l);
+      if (p.added) {
+        cur.newLines += p.count;
+        newLine += p.count;
+      } else {
+        cur.oldLines += p.count;
+        oldLine += p.count;
+      }
+    }
+    if (cur) hunks.push(cur);
+    return hunks.map((h) => ({
+      index: h.index,
+      oldStart: h.oldStart,
+      oldLines: h.oldLines,
+      newStart: h.newStart,
+      newLines: h.newLines,
+      lines: [...h.before.map((l) => ` ${l}`), ...h.lines, ...h.after.map((l) => ` ${l}`)],
+    }));
+  }
+
+  /**
+   * 고른 덩어리만 적용한 글. selected: 적용할 덩어리 번호들 (splitHunks의 index).
+   * 고르지 않은 덩어리는 before 그대로 둔다. 모두 고르면 after와 같고, 하나도 고르지 않으면 before와 같다.
+   */
+  function applyHunks(before, after, selected) {
+    const pick = new Set(selected);
+    const parts = Diff.diffLines(before || '', after || '');
+    let out = '';
+    let index = -1;
+    let inHunk = false;
+    for (const p of parts) {
+      if (!p.added && !p.removed) {
+        inHunk = false;
+        out += p.value;
+        continue;
+      }
+      if (!inHunk) {
+        index++;
+        inHunk = true;
+      }
+      const take = pick.has(index);
+      if ((p.added && take) || (p.removed && !take)) out += p.value;
+    }
+    return out;
+  }
+
   // ---------- 실행에 영향을 주는 파일 ----------
   // 저장만 해도 나중에 자동으로 실행될 수 있는 파일. 적용 창에서 표시하고 기본 체크를 해제한다.
   const EXEC_PATHS = [
@@ -341,5 +416,5 @@
       .join('\n');
   }
 
-  return { safeRelPath, isGitInternal, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch, executionRisk };
+  return { safeRelPath, isGitInternal, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch, executionRisk, splitHunks, applyHunks };
 });
