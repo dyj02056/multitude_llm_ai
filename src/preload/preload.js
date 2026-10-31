@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('host', {
   history: {
     list: (query) => ipcRenderer.invoke('history:list', query),
     get: (id) => ipcRenderer.invoke('history:get', id),
+    stats: () => ipcRenderer.invoke('history:stats'),
     remove: (id) => ipcRenderer.invoke('history:delete', id),
     clear: () => ipcRenderer.invoke('history:clear'),
   },

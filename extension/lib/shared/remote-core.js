@@ -73,6 +73,11 @@
     for (const f of LIST_FIELDS) {
       if (Array.isArray(raw[f])) out[f] = raw[f].filter(validSelector).slice(0, MAX_ITEMS);
     }
+    // 사용 한도 안내 문구 (서비스 화면 문구가 바뀌면 원격으로 고친다). 위험한 정규식은 받지 않는다.
+    if (raw.limitText !== undefined) {
+      if (validRegex(raw.limitText)) out.limitText = raw.limitText;
+      else drop('limitText');
+    }
     if (raw.newChatUrl !== undefined) {
       if (validServiceUrl(raw.newChatUrl, svc)) out.newChatUrl = raw.newChatUrl;
       else drop('newChatUrl');
@@ -125,7 +130,7 @@
     return new Map(
       services.map((s) => [
         s.id,
-        Object.fromEntries([...LIST_FIELDS, ...STRING_FIELDS, 'messages', 'loggedOut', 'upload'].map((f) => [f, clone(s[f])])),
+        Object.fromEntries([...LIST_FIELDS, ...STRING_FIELDS, 'messages', 'loggedOut', 'upload', 'limitText'].map((f) => [f, clone(s[f])])),
       ]),
     );
   }
@@ -144,7 +149,7 @@
         if (!o[f]) continue;
         svc[f] = o.replace ? [...o[f]] : [...new Set([...o[f], ...(b[f] || [])])];
       }
-      for (const f of [...STRING_FIELDS, 'messages']) if (o[f]) svc[f] = clone(o[f]);
+      for (const f of [...STRING_FIELDS, 'messages', 'limitText']) if (o[f]) svc[f] = clone(o[f]);
       if (o.loggedOut) svc.loggedOut = { ...(b.loggedOut || {}), ...clone(o.loggedOut) };
       // methods·fileInput은 원격으로 바뀌지 않는다 (sanitize에서 이미 뺐다)
       if (o.upload) svc.upload = { ...(b.upload || {}), ...clone(o.upload) };

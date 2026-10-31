@@ -16,7 +16,7 @@
   } catch {}
   if (!embedded) return;
 
-  const { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe } = MLA.page;
+  const { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe, pageLimitCheck } = MLA.page;
   const { htmlToMarkdown } = MLA.markdown;
   const { shortcutFor } = MLA.shortcuts;
 
@@ -160,6 +160,7 @@
     'mla:snapshot': ({ cfg, markdown }) => pageSnapshot(cfg, markdown ? htmlToMarkdown : null),
     'mla:loggedOut': ({ cfg }) => pageIsLoggedOut(cfg),
     'mla:probe': ({ cfg }) => pageProbe(cfg), // 셀렉터 자가진단: 입력창이 보이는지
+    'mla:limit': ({ cfg }) => pageLimitCheck(cfg), // 사용 한도 안내 찾기 (응답 통계)
     'mla:focus': ({ cfg }) => {
       const el = findInput(cfg);
       el?.focus();

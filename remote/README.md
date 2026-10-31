@@ -36,6 +36,7 @@ ChatGPT·Gemini 같은 서비스 화면이 바뀌어 **입력창·보내기 버�
 | `messages` | `{ container, role(정규식), content }` — 메시지마다 USER/ASSISTANT 같은 역할 표시가 붙는 사이트에서 답변을 고를 때 |
 | `loggedOut` | `{ url(정규식), text(정규식), selectors }` — 로그아웃 상태 단서 |
 | `upload` | 파일 첨부 확인용 `{ attached, busy, accept }` — `attached`(첨부되면 나타나는 요소)·`busy`(업로드 중 표시)는 셀렉터 목록, `accept`는 `image`·`document`. 적은 항목만 바뀝니다. |
+| `limitText` | 사용 한도 안내 문구 정규식 (v0.13.0). 앱에 들어 있는 공통 문구에 더해 찾습니다. 위험한 정규식(중첩 반복 등)은 받지 않습니다. 예: `"limitText": "you've hit the daily cap"` |
 | `newChatUrl` | "새 대화"로 열 주소. **https이고 그 서비스의 도메인일 때만** 받습니다 (예: chatgpt는 `https://chatgpt.com/...`) |
 
 ### 원격으로 바꿀 수 없는 것 (v0.4.1부터, 보안상)

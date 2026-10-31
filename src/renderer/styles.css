@@ -581,7 +581,7 @@ body[data-view="help"] #panels { display: none !important; }
   align-items: center; justify-content: center; padding: 16px;
 }
 .help-box {
-  width: min(620px, 100%); max-height: 100%; overflow: auto;
+  width: min(880px, 100%); max-height: 100%; overflow: auto;
   background: linear-gradient(160deg, rgba(30, 33, 52, .82), rgba(16, 18, 30, .9));
   border: 1px solid var(--border-strong); border-radius: 18px; padding: 22px 26px;
   box-shadow: var(--shadow-lg), 0 0 60px -20px var(--accent-glow);
@@ -644,6 +644,12 @@ body.drag-files #attachHint { color: var(--accent-text); }
   flex: none; padding: 0 8px; font-size: 11px; white-space: nowrap; border-radius: 999px;
   color: #fde68a; background: rgba(250, 204, 21, .12); border: 1px solid rgba(250, 204, 21, .45);
 }
+/* 사용 한도에 걸린 것 같음 (v0.13.0): 셀렉터 문제(노랑)와 구분되게 청록 */
+.panel-head .diag-badge.limit { color: #a5f3fc; background: rgba(34, 211, 238, .12); border-color: rgba(34, 211, 238, .5); }
+/* 응답 통계 표: 열이 많아 가로로 넘치면 표만 옆으로 밀어 본다 */
+.stats-wrap { overflow-x: auto; margin: 4px 0; border-radius: var(--r-sm); }
+.stats-table { font-size: 12px; white-space: nowrap; }
+.stats-table td[data-state="warn"] { color: #a5f3fc; font-weight: 600; }
 .diag-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 4px 0; }
 .diag-table th, .diag-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
 .diag-table th { color: var(--text-2); font-weight: 600; }

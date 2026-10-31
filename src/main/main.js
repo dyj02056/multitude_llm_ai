@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
-const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl } = require('../shared/services');
+const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl, limitTextOf } = require('../shared/services');
 const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
 const { normalizeLibrary } = require('../shared/prompt-lib');
 const autologin = require('./autologin');
@@ -33,7 +33,7 @@ const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
 const { createRounds } = require('../shared/rounds');
 const { createDiag } = require('../shared/diag');
-const { pageProbe } = require('../shared/page');
+const { pageProbe, pageLimitCheck } = require('../shared/page');
 const history = require('./history');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
@@ -606,6 +606,14 @@ const rounds = createRounds({
   history,
   prefs: () => prefs,
   diag,
+  // 사용 한도 안내 찾기 (shared/page.js pageLimitCheck) — 답변이 끝나지 않았거나 아주 짧을 때만 rounds가 부른다
+  checkLimit: async (id, { scope, answer } = {}) => {
+    const wc = panels.get(id)?.view.webContents;
+    const svc = SERVICES.find((s) => s.id === id);
+    if (!wc || wc.isDestroyed() || !svc) return null;
+    const cfg = { limitText: limitTextOf(svc), scope: scope === 'answer' ? 'answer' : 'page', answer: typeof answer === 'string' ? answer : '' };
+    return wc.executeJavaScript(`(${pageLimitCheck.toString()})(${JSON.stringify(cfg)})`, true).catch(() => null);
+  },
   log,
 });
 
@@ -774,6 +782,7 @@ ipcMain.on('view:set', (_e, value) => {
 // 질문·답변 기록
 ipcMain.handle('history:list', (_e, query) => history.list(typeof query === 'string' ? query : ''));
 ipcMain.handle('history:get', (_e, id) => history.get(id));
+ipcMain.handle('history:stats', () => history.stats());
 ipcMain.handle('history:delete', (_e, id) => history.remove(id));
 ipcMain.handle('history:clear', () => history.clear());
 ipcMain.handle('clipboard:write', (_e, text) => {

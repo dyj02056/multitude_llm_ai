@@ -247,5 +247,24 @@
     return { input: cfg.input.some((s) => [...document.querySelectorAll(s)].some(visible)) };
   }
 
-  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe };
+  /**
+   * 사용 한도 안내 찾기: 화면 글의 끝부분(안내 띠 · 마지막 메시지가 있는 곳)에서 limitText 정규식을 찾는다.
+   * cfg: { limitText, scope: 'page' | 'answer', answer } — 'answer'면 넘겨받은 짧은 답변 글에서만 찾는다.
+   * → 찾은 문구(앞뒤 조금 포함, 160자 이내) | null
+   */
+  function pageLimitCheck(cfg) {
+    let re;
+    try {
+      re = new RegExp(cfg.limitText, 'i');
+    } catch {
+      return null;
+    }
+    const text = cfg.scope === 'answer' ? String(cfg.answer || '') : String(document.body?.innerText || '').slice(-4000);
+    const m = re.exec(text);
+    if (!m) return null;
+    const from = Math.max(0, m.index - 40);
+    return text.slice(from, m.index + m[0].length + 80).replace(/\s+/g, ' ').trim().slice(0, 160);
+  }
+
+  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe, pageLimitCheck };
 });

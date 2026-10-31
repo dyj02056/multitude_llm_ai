@@ -23,6 +23,9 @@
     '사이트 화면이 바뀌어 앱이 이 부분을 찾지 못한 것 같습니다. ' +
     '① ⌂로 처음 화면으로 돌아가 다시 해 보고, ② 설정(?)의 "사이트 셀렉터 자동 갱신 › 지금 확인"을 누르세요. ' +
     '③ 그래도 계속되면 패널에서 직접 입력하고, 앱 업데이트를 기다려 주세요.';
+  const LIMIT_HINT =
+    '이 서비스의 사용 한도에 걸린 것 같습니다. 잠시 기다렸다가 다시 보내거나, 이번에는 다른 AI의 답을 쓰세요. ' +
+    '한도 안내가 아니라면 무시해도 됩니다 (답변이 끝나지 않았거나 아주 짧을 때 화면 글에서 한도 문구를 찾아 알려 줍니다).';
   const FAIL_LIMIT = 2; // 답변 영역은 연달아 이만큼 못 찾으면 "못 찾음" (한 번은 사이트 사정일 수 있음)
 
   /** onChange(id, status): 서비스 하나의 상태가 바뀌었을 때 */
@@ -30,7 +33,7 @@
     const rows = new Map(); // id -> { input, send, response, notes: { part: 글 }, misses, at }
 
     const row = (id) => {
-      if (!rows.has(id)) rows.set(id, { input: 'unknown', send: 'unknown', response: 'unknown', notes: {}, misses: 0, at: 0 });
+      if (!rows.has(id)) rows.set(id, { input: 'unknown', send: 'unknown', response: 'unknown', notes: {}, misses: 0, at: 0, limit: null });
       return rows.get(id);
     };
 
@@ -82,15 +85,27 @@
       }
     }
 
-    /** 서비스 하나의 상태 → { input, send, response, level: 'ok' | 'warn' | 'broken' | 'unknown', message, hint, notes } */
+    /** 사용 한도 안내를 찾았을 때 그 문구, 정상으로 끝났으면 null (셀렉터 상태와 따로 보여 준다) */
+    function setLimit(id, text) {
+      const r = row(id);
+      const before = JSON.stringify(status(id));
+      r.limit = text ? String(text).slice(0, 160) : null;
+      const now = status(id);
+      if (JSON.stringify(now) !== before) onChange?.(id, now);
+    }
+
+    /**
+     * 서비스 하나의 상태 → { input, send, response, level: 'ok' | 'warn' | 'broken' | 'unknown', message, hint, notes,
+     *   limit: 한도 문구 | null, limitHint }
+     */
     function status(id) {
-      const r = rows.get(id) || { input: 'unknown', send: 'unknown', response: 'unknown', notes: {} };
+      const r = rows.get(id) || { input: 'unknown', send: 'unknown', response: 'unknown', notes: {}, limit: null };
       const states = PARTS.map((p) => r[p]);
       const failed = PARTS.filter((p) => r[p] === 'fail');
       const level = failed.length ? 'broken' : states.includes('warn') ? 'warn' : states.every((s) => s === 'unknown') ? 'unknown' : 'ok';
       const message = failed.length ? `⚠ 화면이 바뀐 것 같음 (${failed.map((p) => PART_TEXT[p]).join(' · ')})` : '';
       const notes = PARTS.filter((p) => r.notes[p]).map((p) => `${PART_TEXT[p]}: ${r.notes[p]}`);
-      return { input: r.input, send: r.send, response: r.response, level, message, hint: failed.length ? HINT : '', notes };
+      return { input: r.input, send: r.send, response: r.response, level, message, hint: failed.length ? HINT : '', notes, limit: r.limit || null, limitHint: r.limit ? LIMIT_HINT : '' };
     }
 
     /** 모든 서비스의 상태 { id: status } (설정 화면의 표) */
@@ -107,8 +122,8 @@
       }
     }
 
-    return { fromProbe, fromSend, fromAnswer, status, all, reset };
+    return { fromProbe, fromSend, fromAnswer, setLimit, status, all, reset };
   }
 
-  return { PARTS, PART_TEXT, MARK, HINT, createDiag };
+  return { PARTS, PART_TEXT, MARK, HINT, LIMIT_HINT, createDiag };
 });

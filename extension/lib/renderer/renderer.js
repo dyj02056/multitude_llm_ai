@@ -212,8 +212,15 @@ function renderDiagBadge(id) {
   const d = diagById[id];
   if (!p) return;
   const broken = d?.level === 'broken';
-  p.diagBadge.hidden = !broken;
-  if (!broken) return;
+  const limit = !!d?.limit; // 사용 한도 안내를 찾음 (v0.13.0) — 셀렉터 문제보다 먼저 알린다
+  p.diagBadge.hidden = !broken && !limit;
+  p.diagBadge.classList.toggle('limit', limit);
+  if (!broken && !limit) return;
+  if (limit) {
+    p.diagBadge.textContent = '⏳ 사용 한도에 걸린 것 같음';
+    p.diagBadge.title = [`화면 문구: "${d.limit}"`, '', d.limitHint, '', '누르면 설정의 서비스별 상태 표를 엽니다'].join('\n');
+    return;
+  }
   p.diagBadge.textContent = '⚠ 화면이 바뀐 것 같음';
   p.diagBadge.title = [d.message, ...d.notes, '', d.hint, '', '누르면 설정의 서비스별 상태 표를 엽니다'].join('\n');
 }
@@ -224,7 +231,7 @@ function renderDiagTable() {
   const ids = state.rects.map((r) => r.id);
   const table = $('#diagTable');
   const head = document.createElement('tr');
-  for (const t of ['서비스', ...D.PARTS.map((p) => D.PART_TEXT[p]), '상태']) head.append(Object.assign(document.createElement('th'), { textContent: t }));
+  for (const t of ['서비스', ...D.PARTS.map((p) => D.PART_TEXT[p]), '사용 한도', '상태']) head.append(Object.assign(document.createElement('th'), { textContent: t }));
   const LEVEL = { ok: '정상', warn: '주의', broken: '⚠ 화면이 바뀐 것 같음', unknown: '아직 확인 전' };
   const STATE = { ok: '찾음', warn: '다른 방법으로 됨', fail: '못 찾음', unknown: '확인 전' };
   const rows = ids.map((id) => {
@@ -242,6 +249,11 @@ function renderDiagTable() {
       td.textContent = `${D.MARK[d[part]]} ${STATE[d[part]]}`;
       tr.append(td);
     }
+    const lim = document.createElement('td');
+    lim.dataset.state = d.limit ? 'warn' : 'unknown';
+    lim.textContent = d.limit ? '⏳ 걸린 것 같음' : '–';
+    if (d.limit) lim.title = `화면 문구: "${d.limit}"`;
+    tr.append(lim);
     const st = document.createElement('td');
     st.textContent = LEVEL[d.level];
     if (d.notes.length) st.title = d.notes.join('\n');
@@ -929,9 +941,60 @@ $('#remoteRefresh').addEventListener('click', async () => {
   $('#remoteRefresh').disabled = false;
 });
 
+// ---------- 응답 통계 (v0.13.0) ----------
+// 기록에 남은 숫자(보내기 성공 · 완료 · 실패 · 시간 · 글자 수)로 AI별 표를 그린다. 정확도는 재지 않는다.
+const fmtSec = (ms) => (ms == null ? '–' : ms >= 60000 ? `${Math.floor(ms / 60000)}분 ${Math.round((ms % 60000) / 1000)}초` : `${(ms / 1000).toFixed(1)}초`);
+const pct = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : '–');
+
+async function renderStatsTable() {
+  const st = await host.history.stats?.().catch(() => null);
+  const table = $('#statsTable');
+  if (!table) return;
+  const apply = window.projectApplyStats?.() || null; // 이 프로젝트의 적용 기록 { AI 이름: { applied, reverted } }
+  const cols = ['서비스', '질문', '답변 완료', '시간 초과 · 답 없음', '보내기 실패', '사용 한도', '첫 응답 (중앙값)', '완료까지 (중앙값)', '평균 글자 수'];
+  if (apply) cols.push('수정안 적용 · 되돌림');
+  const head = document.createElement('tr');
+  for (const t of cols) head.append(Object.assign(document.createElement('th'), { textContent: t }));
+  const rows = (st?.rows || []).map((r) => {
+    const svc = state.services.find((s) => s.id === r.id);
+    const tr = document.createElement('tr');
+    const name = document.createElement('td');
+    name.append(span('dot ready'), ` ${svc?.name || r.name}`);
+    name.style.setProperty('--svc', svc?.color || 'var(--muted)');
+    tr.append(name);
+    const cell = (text, title) => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      if (title) td.title = title;
+      tr.append(td);
+      return td;
+    };
+    cell(String(r.asked));
+    cell(`${r.done} (${pct(r.done, r.asked)})`);
+    cell(String(r.timeout + r.noAnswer), `시간 초과 ${r.timeout} · 답변 없음 ${r.noAnswer}`);
+    cell(String(r.sendFail));
+    const lim = cell(String(r.limit));
+    if (r.limit) lim.dataset.state = 'warn';
+    cell(fmtSec(r.firstMedianMs));
+    cell(fmtSec(r.doneMedianMs));
+    cell(r.charsAvg == null ? '–' : r.charsAvg.toLocaleString());
+    if (apply) {
+      const a = apply[svc?.name || r.name];
+      cell(a ? `${a.applied} · ${a.reverted}` : '–', '이 프로젝트의 적용 기록에서 센 수 (적용 · 그중 되돌린 것)');
+    }
+    return tr;
+  });
+  const empty = Object.assign(document.createElement('tr'), { textContent: '아직 기록이 없습니다' });
+  table.replaceChildren(head, ...(rows.length ? rows : [empty]));
+  $('#statsNote').textContent = st?.records
+    ? `기록 ${st.records}개 기준 (${fmtTime(st.since)}부터). 기록을 지우면 통계도 함께 지워집니다. 정확도는 재지 않습니다 — 보내기 · 완료 · 시간 · 글자 수만 셉니다. v0.13.0 이전 기록에는 시간 정보가 없어 –로 나옵니다.`
+    : '';
+}
+
 function renderSettings() {
   renderRemoteStatus();
   renderDiagTable();
+  renderStatsTable();
   const select = $('#timeoutSelect');
   select.replaceChildren(
     ...state.timeoutChoices.map((m) => Object.assign(document.createElement('option'), { value: m, textContent: `${m}분` })),

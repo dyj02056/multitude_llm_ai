@@ -88,6 +88,51 @@
       return find(id) || null;
     }
 
+    /**
+     * 응답 통계 (v0.13.0): 저장된 기록의 답변마다 남긴 숫자(metrics)로 서비스별로 센다. 기록을 지우면 통계도 같이 사라진다.
+     * 정확도는 재지 않는다 — 보내기 성공 · 완료 · 실패 · 시간 · 글자 수처럼 사실인 숫자만.
+     * → { records: 기록 수, since: 가장 오래된 기록 시각, rows: [{ id, name, asked, sent, sendFail, done, timeout, noAnswer, limit,
+     *       firstMedianMs, doneMedianMs, charsAvg }] } (질문을 많이 받은 순)
+     */
+    function stats() {
+      const by = new Map();
+      const median = (xs) => {
+        if (!xs.length) return null;
+        const s = [...xs].sort((x, y) => x - y);
+        const m = Math.floor(s.length / 2);
+        return Math.round(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2);
+      };
+      for (const r of records) {
+        for (const id of r.targets || []) {
+          const a = r.answers?.[id];
+          if (!by.has(id)) by.set(id, { id, name: a?.name || id, asked: 0, sent: 0, sendFail: 0, done: 0, timeout: 0, noAnswer: 0, limit: 0, first: [], doneMs: [], chars: [] });
+          const row = by.get(id);
+          if (a?.name) row.name = a.name;
+          row.asked++;
+          const m = a?.metrics;
+          if (!a) continue; // 아직 답을 기다리는 중이거나 앱이 닫혀 결과가 없는 질문
+          if (a.state === 'error' || m?.sendOk === false) row.sendFail++;
+          else row.sent++;
+          if (a.state === 'done') row.done++;
+          else if (a.state === 'timeout') row.timeout++;
+          else if (a.state === 'no-answer') row.noAnswer++;
+          if (m?.limit) row.limit++;
+          if (Number.isFinite(m?.firstMs)) row.first.push(m.firstMs);
+          if (a.state === 'done' && Number.isFinite(m?.doneMs)) row.doneMs.push(m.doneMs);
+          if (a.state === 'done' && Number.isFinite(m?.chars)) row.chars.push(m.chars);
+        }
+      }
+      const rows = [...by.values()]
+        .map(({ first, doneMs, chars, ...row }) => ({
+          ...row,
+          firstMedianMs: median(first),
+          doneMedianMs: median(doneMs),
+          charsAvg: chars.length ? Math.round(chars.reduce((n, x) => n + x, 0) / chars.length) : null,
+        }))
+        .sort((x, y) => y.asked - x.asked);
+      return { records: records.length, since: records.length ? records[records.length - 1].at : null, rows };
+    }
+
     function remove(id) {
       records = records.filter((r) => r.id !== id);
       changed();
@@ -98,7 +143,7 @@
       changed();
     }
 
-    return { load, add, setAnswer, addSynth, list, get, remove, clear };
+    return { load, add, setAnswer, addSynth, list, get, stats, remove, clear };
   }
 
   return { createHistory };

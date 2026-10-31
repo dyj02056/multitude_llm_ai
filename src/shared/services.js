@@ -266,6 +266,15 @@
     busy: ['[role="progressbar"]'],
     accept: ['image', 'document'],
   };
+  // 사용 한도 안내 문구 (정규식). 답변이 끝나지 않았거나(답변 없음 · 시간 초과 · 보내기 실패) 아주 짧게 끝났을 때만
+  // 화면 글에서 찾는다 — 한도에 관한 질문의 정상 답변을 한도로 잘못 보지 않게. 서비스마다 limitText로 더하고, 원격 셀렉터로 고칠 수 있다.
+  const DEFAULT_LIMIT_TEXT =
+    '(?:usage|message|rate|daily|hourly) (?:limit|cap)|reached (?:the|your|our) (?:usage |message |free |daily )?limit|limit reached|' +
+    'out of (?:free )?messages|too many (?:requests|messages)|upgrade to (?:continue|keep)|' +
+    '한도(?:에|를)? ?(?:도달|초과)|사용량 (?:한도|제한)|요청이 너무 많|무료 (?:메시지|사용량)를 모두';
+  /** 서비스의 한도 문구 정규식 글 (기본 + 서비스 것) */
+  const limitTextOf = (svc) => (svc && svc.limitText ? `${DEFAULT_LIMIT_TEXT}|${svc.limitText}` : DEFAULT_LIMIT_TEXT);
+
   // 공통 입력창 첨부 한도
   const ATTACH_LIMITS = { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 };
 
@@ -374,6 +383,8 @@
     isAuthPopupUrl,
     uploadOf,
     fileBytesOf,
+    DEFAULT_LIMIT_TEXT,
+    limitTextOf,
     fileKind,
   };
 });

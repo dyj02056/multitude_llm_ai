@@ -473,6 +473,19 @@
   }
 
   // 템플릿 변수 {{프로젝트}} · {{선택 파일}} 값 (library.js)
+  // 응답 통계(설정 화면)용: 이 프로젝트의 적용 기록을 AI별로 센다 → { AI 이름: { applied, reverted } } (프로젝트가 없으면 null)
+  window.projectApplyStats = () => {
+    if (!has()) return null;
+    const out = {};
+    for (const e of project.log) {
+      if (!e.ai || e.ai === '직접 편집') continue;
+      const r = (out[e.ai] = out[e.ai] || { applied: 0, reverted: 0 });
+      r.applied++;
+      if (e.reverted) r.reverted++;
+    }
+    return out;
+  };
+
   window.projectBuiltins = () => (has() ? { 프로젝트: project.info.name, '선택 파일': [...project.checked].join(', ') } : {});
 
   window.projectPrepareSend = async (payload, targetIds) => {

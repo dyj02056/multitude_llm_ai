@@ -34,6 +34,7 @@
    *   history: { add, setAnswer, addSynth }  (add는 { question, targets, files(이름·크기·종류) })
    *   prefs(): { synthTarget, autoSynth }
    *   diag: 셀렉터 자가진단 (shared/diag.js createDiag, 없어도 됨) — 보내기 · 답변 결과를 기록
+   *   checkLimit(id, { scope, answer }): 사용 한도 안내를 찾는다 → 찾은 문구 | null (없어도 됨, page.js pageLimitCheck)
    *   log(tag, ...args)
    */
   function createRounds(a) {
@@ -62,8 +63,28 @@
       return { state: 'ok' };
     }
 
+    // 답변이 이보다 짧게 끝나면 한도 안내일 수 있어 그 답변 글에서 한도 문구를 찾는다 (긴 정상 답변은 보지 않는다)
+    const SHORT_ANSWER = 400;
+
+    /** 사용 한도 확인: 답변이 끝나지 않았으면 화면 끝부분에서, 짧게 끝났으면 그 답변에서 찾는다 → 문구 | null */
+    async function limitOf(id, state, chars) {
+      if (!a.checkLimit) return null;
+      try {
+        if (state === 'done') {
+          if (!(chars < SHORT_ANSWER)) return null;
+          const { text } = await readAnswer(id);
+          return await a.checkLimit(id, { scope: 'answer', answer: text });
+        }
+        return await a.checkLimit(id, { scope: 'page' });
+      } catch {
+        return null;
+      }
+    }
+
     /**
-     * 패널 하나에 글(과 첨부 파일)을 보내고 답변을 지켜본다. onFinish(state): 답변이 끝났거나 실패했을 때
+     * 패널 하나에 글(과 첨부 파일)을 보내고 답변을 지켜본다.
+     * onFinish(state, metrics): 답변이 끝났거나 실패했을 때. state는 'done' · 'timeout' · 'no-answer' · 'error'
+     *   metrics: { sendOk, firstMs(보낸 뒤 답변이 시작될 때까지), doneMs(보낸 뒤 끝날 때까지), chars, limit(사용 한도 문구) } — 숫자만 (응답 통계)
      * fallbackText: 첨부에 실패하면 대신 보낼 글
      */
     async function sendToPanel(id, text, onFinish, files = [], fallbackText) {
@@ -91,18 +112,26 @@
       a.diag?.fromSend(id, res);
       a.sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error, attach });
       if (!res.ok) {
-        onFinish?.('error');
+        const limit = await limitOf(id, 'error');
+        if (limit) a.diag?.setLimit?.(id, limit);
+        onFinish?.('error', { sendOk: false, limit: limit || undefined });
       } else {
+        const sentAt = Date.now();
+        let firstMs;
         a.watch(
           id,
           before,
           () => tokens.get(id) === token && a.hasPanel(id),
-          (answer, info) => {
+          async (answer, info) => {
             a.log('answer', id, answer, info ? JSON.stringify(info) : '');
             a.sendPanel(id, { answer, ...info });
+            if (answer === 'answering' && firstMs === undefined) firstMs = Date.now() - sentAt;
             if (FINISHED.has(answer)) {
               a.diag?.fromAnswer(id, answer);
-              onFinish?.(answer);
+              const limit = await limitOf(id, answer, info?.chars);
+              // 한도 안내를 찾았으면 그 패널 머리줄에 알리고, 정상으로 끝났으면 지난 한도 표시를 지운다
+              if (limit || answer === 'done') a.diag?.setLimit?.(id, limit || null);
+              onFinish?.(answer, { sendOk: true, firstMs, doneMs: answer === 'done' ? Date.now() - sentAt : undefined, chars: info?.chars, limit: limit || undefined });
             }
           },
         );
@@ -117,10 +146,16 @@
       return { text: snap?.text || '', md: snap?.md || snap?.text || '' };
     }
 
-    async function onRoundAnswer(r, id, state) {
-      // 기록은 새 질문을 보낸 뒤에 끝난 답변이라도 그 라운드에 남긴다.
+    /** 기록에 남길 숫자만 고른다 (한도 문구 글은 남기지 않고 걸렸는지만) */
+    function cleanMetrics(m) {
+      const num = (v) => (Number.isFinite(v) && v >= 0 ? Math.round(v) : undefined);
+      return { sendOk: m.sendOk !== false, firstMs: num(m.firstMs), doneMs: num(m.doneMs), chars: num(m.chars), limit: !!m.limit };
+    }
+
+    async function onRoundAnswer(r, id, state, metrics) {
+      // 기록은 새 질문을 보낸 뒤에 끝난 답변이라도 그 라운드에 남긴다. 숫자(metrics)는 응답 통계에 쓴다.
       const { text, md } = state === 'done' ? await readAnswer(id) : { text: '', md: '' };
-      a.history.setAnswer(r.historyId, id, { name: nameOf(id), state, text, md });
+      a.history.setAnswer(r.historyId, id, { name: nameOf(id), state, text, md, ...(metrics ? { metrics: cleanMetrics(metrics) } : {}) });
       if (r !== round) return; // 그사이 새 질문을 보냈으면 자동 종합은 하지 않는다
       r.finished.set(id, state);
       if (r.finished.size < r.targets.length || r.synthDone || !a.prefs().autoSynth) return;
@@ -152,8 +187,8 @@
       return Promise.all(
         ids.map((id) =>
           plain.has(id)
-            ? sendToPanel(id, textFor(id), (state) => onRoundAnswer(r, id, state), files.slice(0, own))
-            : sendToPanel(id, textFor(id), (state) => onRoundAnswer(r, id, state), files, fallbackFor(id)),
+            ? sendToPanel(id, textFor(id), (state, m) => onRoundAnswer(r, id, state, m), files.slice(0, own))
+            : sendToPanel(id, textFor(id), (state, m) => onRoundAnswer(r, id, state, m), files, fallbackFor(id)),
         ),
       );
     }

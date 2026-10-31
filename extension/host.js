@@ -15,7 +15,7 @@
 //   - 각 iframe 안의 content.js와 메시지를 주고받아 입력·보내기·답변 읽기를 시킴
 // 덕분에 화면 코드(renderer.js 등)는 Windows 앱과 확장에서 똑같은 파일을 씁니다.
 (() => {
-  const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, serviceForHost, uploadOf, fileBytesOf } =
+  const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, serviceForHost, uploadOf, fileBytesOf, limitTextOf } =
     MLA.services;
   const { watchAnswer } = MLA.watch;
   const { createRounds } = MLA.rounds;
@@ -407,6 +407,11 @@
     history,
     prefs: () => prefs,
     diag,
+    checkLimit: async (id, { scope, answer } = {}) => {
+      if (!panels.has(id)) return null;
+      const cfg = { limitText: limitTextOf(svcOf(id)), scope: scope === 'answer' ? 'answer' : 'page', answer: typeof answer === 'string' ? answer : '' };
+      return callFrame(id, { type: 'mla:limit', cfg }).catch(() => null);
+    },
     log,
   });
 
@@ -604,6 +609,7 @@
     history: {
       list: async (query) => history.list(typeof query === 'string' ? query : ''),
       get: async (id) => history.get(id),
+      stats: async () => history.stats(),
       remove: async (id) => history.remove(id),
       clear: async () => history.clear(),
     },
