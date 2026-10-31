@@ -23,27 +23,56 @@
       <button data-layout="main" title="첫 패널을 왼쪽에 크게, 나머지는 오른쪽에 위아래로">큰 칸</button>
       <button data-layout="tall" title="두 열로 쌓기 (2개는 위아래, 6개는 2×3)">2열</button>
     </div>
+    <span class="tb-sep only-chat"></span>
     <button class="only-chat" id="libraryBtn" title="내 템플릿(변수)과 스킬을 만들고 고칩니다">📚 라이브러리</button>
     <button class="only-chat" id="projectBtn" title="로컬 프로젝트 폴더를 열어 AI에게 코드 맥락을 함께 보냅니다">📁 프로젝트</button>
     <button class="only-chat" id="changesBtn" title="AI 답변의 코드 수정안을 비교하고 적용합니다 (Ctrl+Shift+P)">변경 제안</button>
     <button class="only-chat" id="historyBtn" title="지금까지 보낸 질문과 답변 (Ctrl+H)">기록</button>
     <button class="only-chat" id="compareBtn" title="열린 패널의 최신 답변을 나란히 봅니다 (Ctrl+Shift+D)">답변 비교</button>
-    <button class="only-chat" id="copyAll" title="열린 패널의 최신 답변을 한 번에 복사 (Ctrl+Shift+C)">모든 답변 복사</button>
-    <button class="only-chat" id="newChatAll" title="Ctrl+Shift+N">모두 새 대화</button>
-    <button class="only-chat" id="reloadAll" title="Ctrl+Shift+R">모두 새로고침</button>
+    <span class="tb-sep only-chat"></span>
+    <button class="only-chat ghost" id="copyAll" title="열린 패널의 최신 답변을 한 번에 복사 (Ctrl+Shift+C)">모든 답변 복사</button>
+    <button class="only-chat ghost" id="newChatAll" title="Ctrl+Shift+N">모두 새 대화</button>
+    <button class="only-chat ghost" id="reloadAll" title="Ctrl+Shift+R">모두 새로고침</button>
+    <span class="tb-sep only-chat"></span>
     <button class="only-chat" id="helpBtn" title="설정 · 단축키 (Ctrl+/)">?</button>
     <button class="only-chat" id="pickBtn">모델 선택</button>
     <button class="only-auth danger" id="logoutBtn">로그아웃</button>
   </header>
 
   <!-- 모델 고르기 화면 (최대 6개) -->
+  <!-- 위: 제목 · 설명 카드 3장(이렇게 씁니다), 아래: 모델 카드 2열과 "열기" 버튼 -->
   <section id="pick" class="only-pick">
-    <h1>사용할 모델을 고르세요</h1>
-    <p class="muted" id="pickNote"></p>
-    <div id="modelList"></div>
-    <div class="pick-foot">
-      <button id="openBtn" class="primary">선택한 모델 열기</button>
-      <span id="pickCount" class="pick-count"></span>
+    <div class="pick-inner">
+      <div class="pick-head">
+        <span class="pick-eyebrow">✦ 여러 AI를 한 화면에서</span>
+        <h1>사용할 모델을 고르세요</h1>
+        <p class="muted" id="pickNote"></p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature">
+          <div class="feature-icon">🧭</div>
+          <span class="feature-step">STEP 1</span>
+          <h3>모델 고르기</h3>
+          <p>아래에서 함께 쓸 AI를 최대 6개까지 고릅니다.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">⚡</div>
+          <span class="feature-step">STEP 2</span>
+          <h3>한 번에 질문</h3>
+          <p>맨 아래 입력창에 쓰고 <kbd>Enter</kbd> — 모든 AI에게 동시에 보냅니다.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">⚖️</div>
+          <span class="feature-step">STEP 3</span>
+          <h3>비교 · 종합</h3>
+          <p>답변을 나란히 비교하고, 한 AI에게 최종 정리를 맡깁니다.</p>
+        </article>
+      </div>
+      <div id="modelList"></div>
+      <div class="pick-foot">
+        <button id="openBtn" class="primary">선택한 모델 열기</button>
+        <span id="pickCount" class="pick-count"></span>
+      </div>
     </div>
   </section>
 

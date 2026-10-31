@@ -5,7 +5,7 @@
 #frames { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 .svc-frame {
   position: fixed; left: -20000px; border: 0; background: #fff;
-  pointer-events: auto; border-radius: 0 0 6px 6px;
+  pointer-events: auto; border-radius: 0 0 3px 3px;
 }
 
 /* 크롬에 로그인된 계정을 그대로 쓰므로 로그아웃 버튼은 없다. */
