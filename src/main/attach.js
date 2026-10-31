@@ -67,6 +67,19 @@ async function transfer(wc, key, files) {
   );
 }
 
+/** 격리 공간에 옮겨 둔 조각(__mlaParts)과 이번 파일(__mlaFiles[key])을 지운다. 페이지가 이미 닫혔으면 조용히 넘어간다. */
+async function clearTransfer(wc, key) {
+  try {
+    if (wc.isDestroyed()) return;
+    await inWorld(
+      wc,
+      `(() => { window.__mlaParts = {}; if (window.__mlaFiles) delete window.__mlaFiles[${JSON.stringify(key)}]; return true; })()`,
+    );
+  } catch (err) {
+    log('attach', 'cleanup failed', err.message);
+  }
+}
+
 /** 개발자 프로토콜로 파일 선택 칸에 넣는다. 성공하면 true */
 // 마지막 수단: 파일을 잠깐 임시 폴더에 저장하고, 개발자 기능으로 사이트의 파일 고르기 칸에 그 경로를 넣습니다.
 // 임시 파일은 10분 뒤 지웁니다.
@@ -120,15 +133,14 @@ async function attachFiles(wc, svc, files) {
       wc,
       `(async () => {
         const files = window.__mlaFiles[${JSON.stringify(key)}];
-        try {
-          return await (${pageAttachFiles.toString()})(${JSON.stringify(cfg)}, files);
-        } finally {
-          delete window.__mlaFiles[${JSON.stringify(key)}];
-        }
+        return await (${pageAttachFiles.toString()})(${JSON.stringify(cfg)}, files);
       })()`,
     );
   } catch (err) {
     res = { ok: false, error: err.message };
+  } finally {
+    // 성공·실패·중간 오류와 상관없이 페이지에 옮겨 둔 조각과 파일을 항상 지운다
+    await clearTransfer(wc, key);
   }
   log('attach', svc.id, JSON.stringify(res));
   if (res?.ok || !cfg.upload.methods.includes('input')) return res || { ok: false, error: '첨부하지 못했습니다' };
@@ -141,4 +153,4 @@ async function attachFiles(wc, svc, files) {
   return res;
 }
 
-module.exports = { attachFiles, cleanupTemp };
+module.exports = { attachFiles, cleanupTemp, clearTransfer };

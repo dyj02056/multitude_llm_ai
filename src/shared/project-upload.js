@@ -22,7 +22,12 @@
   const PC = projectContext || require('./project-context');
   const MODES = ['bundle', 'files'];
   const DEFAULT_MODE = 'bundle';
-  const BUNDLE_CHUNK = 1000000; // 묶음 파일 하나에 넣는 최대 글자 수 (넘으면 -1, -2 …로 나눈다)
+  // 묶음 파일 하나의 최대 크기 (UTF-8 바이트). 넘으면 -1, -2 …로 나눈다.
+  // 글자 수가 아니라 바이트로 센다 — 한글은 한 글자가 3바이트라 글자 수로 세면 서비스 한도를 넘을 수 있다.
+  // budget.fileBytes(서비스별 파일 하나 한도)가 더 작으면 그 크기로 나눈다.
+  const BUNDLE_BYTES = 1000000;
+  const BUNDLE_CHUNK = BUNDLE_BYTES; // 예전 이름 (테스트·호출부 호환)
+  const MIN_CHUNK_BYTES = 4096; // 이보다 작게는 나누지 않는다 (머리글이 들어갈 자리)
   const TREE_IN_BODY = 20000; // 개별 파일 방식에서 구조 목록이 이보다 길면 project-structure.md로 올린다
   // 대부분의 서비스가 받는 텍스트·코드 확장자. 그 밖(확장자 없음 포함)은 이름 끝에 .txt를 붙여 올린다.
   const SAFE_EXT = new Set([
@@ -69,15 +74,83 @@
 
   const md = (name, text) => ({ name, type: 'text/markdown', text });
 
-  /** 묶음 파일: 내용을 BUNDLE_CHUNK 글자씩, 파일 경계에서 나눈다 */
-  function bundle(baseFile, header, blocks) {
+  /** 묶음 파일 하나의 바이트 한도: BUNDLE_BYTES와 서비스 한도(budget.fileBytes) 중 작은 것 */
+  const chunkLimit = (budget) =>
+    Math.max(MIN_CHUNK_BYTES, Math.min(BUNDLE_BYTES, budget && budget.fileBytes > 0 ? budget.fileBytes : BUNDLE_BYTES));
+
+  // 조각 머리글("(n개 중 i번째)")이 들어갈 자리
+  const PART_HEAD_ROOM = 64;
+
+  /**
+   * 글을 limit 바이트 이하 조각으로 나눈다. 줄 경계에서 자르고, 한 줄이 너무 길면 글자 경계에서 자른다
+   * (UTF-8 글자·서로게이트 쌍을 중간에서 자르지 않는다).
+   */
+  function splitBytes(text, limit) {
+    const out = [];
+    let cur = '';
+    let curBytes = 0;
+    const push = () => {
+      if (cur) out.push(cur);
+      cur = '';
+      curBytes = 0;
+    };
+    for (const line of text.match(/[^\n]*\n|[^\n]+$/g) || []) {
+      const n = bytesOf(line);
+      if (curBytes + n <= limit) {
+        cur += line;
+        curBytes += n;
+        continue;
+      }
+      push();
+      if (n <= limit) {
+        cur = line;
+        curBytes = n;
+        continue;
+      }
+      for (const ch of line) {
+        const c = bytesOf(ch);
+        if (curBytes + c > limit) push();
+        cur += ch;
+        curBytes += c;
+      }
+    }
+    push();
+    return out.length ? out : [''];
+  }
+
+  /**
+   * 한 파일의 블록이 한도보다 크면 파일 내용을 나눠 블록 여러 개로 만든다 (블록마다 코드 블록이 닫히게).
+   * file: { path, text } → ['[파일: …] 블록', …]
+   */
+  function fileBlocks(file, limit) {
+    const whole = `${PC.fileBlock(file.path, file.text)}\n`;
+    if (bytesOf(whole) <= limit) return [whole];
+    // 머리글·울타리·조각 안내가 들어갈 자리를 빼고 내용을 나눈다
+    const overhead = bytesOf(`${PC.fileBlock(file.path, '')}\n`) + 160;
+    const parts = splitBytes(file.text, Math.max(1024, limit - overhead));
+    return parts.map((p, i) => `(${file.path} — 파일이 커서 ${parts.length}조각으로 나눔: ${i + 1}/${parts.length}, 이어 붙이면 한 파일)\n${PC.fileBlock(file.path, p)}\n`);
+  }
+
+  /** 묶음 파일: 내용을 바이트 한도(chunkLimit)씩, 파일 경계에서 나눈다. 한 파일이 한도보다 크면 그 파일도 나눈다. */
+  function bundle(baseFile, header, files, budget) {
+    const limit = chunkLimit(budget) - PART_HEAD_ROOM;
+    const blocks = [];
+    const headBytes = bytesOf(header);
+    if (header) blocks.push(...(headBytes <= limit ? [header] : splitBytes(header, limit)));
+    // 머리글이 작으면 큰 파일 조각을 그만큼 작게 잘라 첫 묶음에 머리글과 함께 들어가게 한다 (머리글만 든 묶음을 만들지 않게)
+    const pieceLimit = header && headBytes < limit / 2 ? limit - headBytes - 1 : limit;
+    for (const f of files) blocks.push(...fileBlocks(f, pieceLimit));
     const chunks = [];
-    let cur = header;
+    let cur = '';
+    let curBytes = 0;
     for (const b of blocks) {
-      if (cur.length && cur.length + b.length + 1 > BUNDLE_CHUNK && cur !== header) {
+      const n = bytesOf(b) + (cur ? 1 : 0);
+      if (cur && curBytes + n > limit) {
         chunks.push(cur);
         cur = '';
+        curBytes = 0;
       }
+      curBytes += bytesOf(b) + (cur ? 1 : 0);
       cur += (cur ? '\n' : '') + b;
     }
     chunks.push(cur);
@@ -142,11 +215,7 @@
         return { mode: 'files', text, attachments, inlineText };
       }
     }
-    const attachments = bundle(
-      PC.CONTEXT_FILE,
-      `${head}\n\n[프로젝트 구조]\n${tree}\n`,
-      files.map((f) => `${PC.fileBlock(f.path, f.text)}\n`),
-    );
+    const attachments = bundle(PC.CONTEXT_FILE, `${head}\n\n[프로젝트 구조]\n${tree}\n`, files, budget);
     const names = attachments.map((a) => a.name).join(', ');
     const text = `${head}\n첨부한 ${names}에 프로젝트 구조와 파일 ${files.length}개의 내용이 있습니다.\n\n${tail}`;
     const note = mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined;
@@ -164,7 +233,7 @@
         return { mode: 'files', text, attachments, inlineText };
       }
     }
-    const attachments = bundle('requested-files.md', '', files.map((f) => `${PC.fileBlock(f.path, f.text)}\n`));
+    const attachments = bundle('requested-files.md', '', files, budget);
     const names = attachments.map((a) => a.name).join(', ');
     const text = [`요청한 파일 ${files.length}개의 내용을 첨부한 ${names}에 넣었습니다.`, '', ...skippedLines(skipped), ...tail].join('\n');
     return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined };
@@ -188,7 +257,7 @@
         return { mode: 'files', text, attachments, inlineText };
       }
     }
-    const attachments = bundle('updated-files.md', '', blocks);
+    const attachments = bundle('updated-files.md', '', files, budget);
     const names = attachments.map((a) => a.name).join(', ');
     const text = [intro, `바뀐 파일 ${files.length}개의 지금 내용을 첨부한 ${names}에 넣었습니다.`, '', ...gone, ack].join('\n');
     return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined };
@@ -212,5 +281,5 @@
 
   const normalizeMode = (m) => (MODES.includes(m) ? m : DEFAULT_MODE);
 
-  return { MODES, DEFAULT_MODE, BUNDLE_CHUNK, uploadName, restorePaths, uniqueNames, packContext, packFollowUp, packUpdate, packRefetch, normalizeMode };
+  return { MODES, DEFAULT_MODE, BUNDLE_CHUNK, BUNDLE_BYTES, bytesOf, splitBytes, uploadName, restorePaths, uniqueNames, packContext, packFollowUp, packUpdate, packRefetch, normalizeMode };
 });

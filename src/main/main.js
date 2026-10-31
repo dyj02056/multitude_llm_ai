@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
-const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf } = require('../shared/services');
+const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl } = require('../shared/services');
 const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
 const { normalizeLibrary } = require('../shared/prompt-lib');
 const autologin = require('./autologin');
@@ -57,8 +57,8 @@ const CHROME_UA =
   `Chrome/${process.versions.chrome} Safari/537.36`;
 // Google 로그인은 임베디드 Chromium을 "안전하지 않은 브라우저"로 막는다. 로그인 도메인에만 Firefox UA를 보낸다.
 const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
-const AUTH_URL_RE =
-  /accounts\.google\.com|accounts\.x\.ai|auth\.mistral\.ai|appleid\.apple\.com|auth0|auth\.openai\.com|\/oauth|\/auth\/|\/login|\/signin|sso/i;
+// 로그인 팝업으로 앱 안에서 열어도 되는 주소는 shared/services.js의 isAuthPopupUrl이 정한다
+// (공용 로그인 도메인 + 그 서비스의 authHosts + 서비스 자기 도메인, 호스트가 정확히 같을 때만).
 
 // 앱 전체에 적용하는 기본 설정:
 //   - 사이트에는 우리가 "일반 크롬 브라우저"라고 알립니다 (위 CHROME_UA).
@@ -159,12 +159,59 @@ async function isGoogleLoggedIn() {
 
 // ---------- 뷰 ----------
 
+/** 허용 밖 주소는 앱 안에서 열지 않고 기본 브라우저로 보냅니다 (http/https만). */
+function openOutside(url) {
+  if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+}
+
+/**
+ * 웹 내용(패널·로그인 팝업)이 새 창을 열려고 할 때의 규칙을 붙입니다.
+ *   - 로그인 팝업(허용 목록의 호스트와 정확히 같은 https 주소, 또는 곧 이동할 about:blank)만 같은 세션의 자식 창으로 엽니다.
+ *   - 나머지 링크는 기본 브라우저로 엽니다.
+ * 열린 팝업 안에서 다른 주소로 이동(링크·스크립트·리다이렉트)할 때도 같은 검사를 하고, 허용 밖이면 막고 기본 브라우저로 엽니다.
+ * svc: 그 패널의 서비스 (없으면 공용 로그인 도메인만 허용)
+ */
+function guardPopups(wc, svc) {
+  wc.setWindowOpenHandler(({ url }) => {
+    log('popup', url.slice(0, 160));
+    if (url === 'about:blank' || isAuthPopupUrl(svc, url)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 520,
+          height: 720,
+          parent: win,
+          autoHideMenuBar: true,
+          webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false },
+        },
+      };
+    }
+    openOutside(url);
+    return { action: 'deny' };
+  });
+  wc.on('did-create-window', (child) => {
+    const cwc = child.webContents;
+    // e: Electron 이벤트(e.url · e.isMainFrame). 예전 방식의 두 번째 인자(url)도 받는다. 팝업 안 iframe 이동은 보지 않는다.
+    const check = (e, url) => {
+      url = e?.url || url;
+      if (e?.isMainFrame === false || isAuthPopupUrl(svc, url)) return;
+      log('popup', 'navigation blocked', String(url).slice(0, 160));
+      e.preventDefault();
+      openOutside(url);
+    };
+    cwc.on('will-navigate', (e, url) => check(e, url));
+    cwc.on('will-redirect', (e, url) => check(e, url));
+    guardPopups(cwc, svc); // 팝업이 또 여는 창에도 같은 규칙
+  });
+}
+
 /**
  * AI 서비스 페이지를 띄울 "작은 브라우저 창(패널)"을 하나 만듭니다.
  * 보안 설정: 페이지가 컴퓨터 파일 등에 손대지 못하게 격리(sandbox)합니다.
- * 페이지가 새 창을 열려고 하면: 로그인 팝업만 앱 안에서 열고, 나머지 링크는 기본 브라우저로 보냅니다.
+ * 페이지가 새 창을 열려고 하면: 로그인 팝업만 앱 안에서 열고, 나머지 링크는 기본 브라우저로 보냅니다 (guardPopups).
+ * svc: 이 패널의 서비스 (Google 로그인 화면이면 없음)
  */
-function newView() {
+function newView(svc = null) {
   const view = new WebContentsView({
     webPreferences: {
       partition: PARTITION,
@@ -174,24 +221,7 @@ function newView() {
       backgroundThrottling: false, // 화면에 안 보이는 패널도 답변 스트리밍이 멈추지 않도록
     },
   });
-  view.webContents.setWindowOpenHandler(({ url }) => {
-    log('popup', url.slice(0, 160));
-    // 로그인 팝업은 같은 세션의 자식 창으로 연다. 나머지 링크는 기본 브라우저로.
-    if (url === 'about:blank' || AUTH_URL_RE.test(url)) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 520,
-          height: 720,
-          parent: win,
-          autoHideMenuBar: true,
-          webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true },
-        },
-      };
-    }
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  guardPopups(view.webContents, svc);
   return view;
 }
 
@@ -212,7 +242,7 @@ function sendPanel(id, patch) {
  * 자동 로그인 도우미(autologin)도 여기서 붙입니다.
  */
 function openPanel(svc) {
-  const view = newView();
+  const view = newView(svc);
   const wc = view.webContents;
 
   wc.on('did-start-loading', () => sendPanel(svc.id, { loading: true }));
@@ -390,9 +420,29 @@ function pushState() {
     timeoutChoices: TIMEOUT_CHOICES,
     remoteSelectors: prefs.remoteSelectors,
     remote: remote.getStatus(),
-    services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept })),
+    services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     rects: rects.panels,
   });
+}
+
+// 창 크기를 끄는 동안 resize 이벤트가 1초에 수십~수백 번 온다. 그때마다 패널 배치와 상태 전송을 하면 화면이 버벅이므로
+// 처음 한 번은 바로 하고, 그 뒤 약 30ms 동안 온 요청은 묶어서 마지막에 한 번만 한다.
+const PUSH_THROTTLE_MS = 30;
+let pushTimer = null;
+let pushPending = false;
+function schedulePushState() {
+  if (pushTimer) {
+    pushPending = true;
+    return;
+  }
+  pushState();
+  pushTimer = setTimeout(function flush() {
+    if (pushPending) {
+      pushPending = false;
+      pushState();
+      pushTimer = setTimeout(flush, PUSH_THROTTLE_MS);
+    } else pushTimer = null;
+  }, PUSH_THROTTLE_MS);
 }
 
 // ---------- 창 ----------
@@ -436,7 +486,8 @@ function createWindow() {
     else showLogin();
   });
 
-  win.on('resize', pushState);
+  // 창을 끄는 동안 resize가 아주 많이 오므로 상태 전송을 묶는다 (schedulePushState)
+  win.on('resize', schedulePushState);
   win.on('restore', pushState);
   win.on('closed', () => {
     win = null;

@@ -458,11 +458,16 @@
   const notice = (text) => flash($('#psSummary'), text);
 
   /** 첨부 한도 중 이미 쓴 만큼(사용자가 직접 올린 파일)을 뺀 나머지 */
-  // 첨부 한도(10개, 50MB) 중 사용자가 직접 올린 파일을 빼고 프로젝트 파일에 쓸 수 있는 남은 양
-  function budgetAfter(files = []) {
+  // 첨부 한도(10개, 50MB) 중 사용자가 직접 올린 파일을 빼고 프로젝트 파일에 쓸 수 있는 남은 양.
+  // ids를 주면 파일 하나의 한도는 그 서비스들의 한도(maxFileBytes) 중 가장 작은 값 — 묶음 파일도 그 크기 안으로 나눈다.
+  function budgetAfter(files = [], ids = []) {
     const L = state.attachLimits || { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 };
     const used = files.reduce((n, f) => n + (f.data?.byteLength || 0), 0);
-    return { files: L.maxFiles - files.length, bytes: L.maxTotalBytes - used, fileBytes: L.maxFileBytes };
+    const perService = ids
+      .map((id) => state.services.find((s) => s.id === id)?.maxFileBytes)
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const fileBytes = Math.min(L.maxFileBytes, ...perService);
+    return { files: L.maxFiles - files.length, bytes: L.maxTotalBytes - used, fileBytes };
   }
 
   // 템플릿 변수 {{프로젝트}} · {{선택 파일}} 값 (library.js)
@@ -475,7 +480,7 @@
     if (!withProject.length) return payload; // 모두 보내지 않기로 한 서비스 — 질문만 보낸다
     if (!confirmUpload(withProject, project.checked.size)) return null;
     const { files } = await readChosen([...project.checked]);
-    const budget = budgetAfter(payload.files);
+    const budget = budgetAfter(payload.files, withProject.filter(acceptsDocs));
     const pack = PU.packContext({ project: { name: project.info.name, paths: sendablePaths() }, files, request: payload.text, mode: project.uploadMode, budget });
     const ups = pack.attachments.map(toAttachment);
     const room = ups.length <= budget.files && ups.reduce((n, f) => n + f.data.byteLength, 0) <= budget.bytes;
@@ -612,7 +617,7 @@
     for (const s of stale) {
       const files = s.files.filter((f) => withRisky || !risky.has(f.path));
       if (!files.length && !s.deleted.length) continue;
-      const res = await sendProjectFollowUp(s.id, PU.packUpdate({ files, deleted: s.deleted, mode: project.uploadMode, budget: budgetAfter() }));
+      const res = await sendProjectFollowUp(s.id, PU.packUpdate({ files, deleted: s.deleted, mode: project.uploadMode, budget: budgetAfter([], [s.id]) }));
       if (res?.ok) {
         remember(s.id, [...files, ...s.deleted.map((path) => ({ path, text: null }))]);
         sent++;
@@ -713,7 +718,7 @@
     }
     const p = panels.get(id);
     p.needBtn.hidden = true;
-    const res = await sendProjectFollowUp(id, PU.packFollowUp({ files, skipped, mode: project.uploadMode, budget: budgetAfter() }));
+    const res = await sendProjectFollowUp(id, PU.packFollowUp({ files, skipped, mode: project.uploadMode, budget: budgetAfter([], [id]) }));
     if (!res?.ok) alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
     else remember(id, files);
   };

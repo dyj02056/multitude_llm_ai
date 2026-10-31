@@ -15,6 +15,7 @@
 //   methods: 시도 순서 'paste'(입력창에 붙여넣기) · 'input'(input[type=file]에 넣기) · 'drop'(입력창에 끌어다 놓기)
 //   fileInput: 파일 선택 칸 셀렉터, attached: 첨부가 생기면 나타나는 요소, busy: 업로드 중에만 보이는 요소
 //   accept: 받는 파일 종류 'image' · 'document' (그 밖의 종류는 보내지 않고 "첨부 없이 보냄"으로 알린다)
+//   maxFileBytes: 파일 하나의 최대 바이트 (없으면 ATTACH_LIMITS.maxFileBytes). 프로젝트 묶음 파일도 이 크기 안으로 나눈다.
 // jsCookies: 페이지 스크립트가 로그인 쿠키를 직접 읽고 쓰는 사이트 (확장 프로그램 전용, extension/cookie-*.js 참고).
 //   확장 탭 안 iframe에서는 크롬이 SameSite=Lax 쿠키를 document.cookie로 보여 주지 않아 로그아웃 상태로 보인다.
 // tokenBridge: 로그인 토큰을 localStorage에 두는 사이트 (확장 프로그램 전용, extension/cookie-bridge.js 참고).
@@ -268,6 +269,11 @@
   // 공통 입력창 첨부 한도
   const ATTACH_LIMITS = { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 };
 
+  /** 서비스가 받는 파일 하나의 최대 바이트 (upload.maxFileBytes, 없으면 공통 한도) */
+  const fileBytesOf = (svc) => {
+    const n = svc && svc.upload && svc.upload.maxFileBytes;
+    return Number.isFinite(n) && n > 0 ? Math.min(n, ATTACH_LIMITS.maxFileBytes) : ATTACH_LIMITS.maxFileBytes;
+  };
   /** 서비스의 첨부 설정 (기본값과 합친 것) */
   const uploadOf = (svc) => ({ ...DEFAULT_UPLOAD, ...(svc.upload || {}) });
   /** 파일 종류: 'image' | 'document' */
@@ -311,6 +317,37 @@
     return !!host && (hostIn(host, svc.hosts) || hostIn(host, svc.authHosts));
   }
 
+  // 로그인 팝업(새 창)으로 앱 안에서 열어도 되는 공용 로그인 도메인. 정확히 같은 호스트만 허용한다 (하위 도메인·비슷한 이름은 거부).
+  // 여기에 없는 주소로 가는 팝업·팝업 안 이동은 기본 브라우저로 연다.
+  const COMMON_AUTH_HOSTS = [
+    'accounts.google.com',
+    'accounts.google.co.kr',
+    'accounts.youtube.com',
+    'appleid.apple.com',
+    'login.microsoftonline.com',
+    'login.live.com',
+    'github.com',
+    'x.com',
+    'api.x.com',
+    'twitter.com',
+    'api.twitter.com',
+    'auth0.openai.com',
+  ];
+
+  /**
+   * 로그인 팝업 허용 목록: 공용 로그인 도메인 + 서비스의 authHosts + 서비스 자기 도메인(hosts).
+   * svc가 없으면(로그인 화면 등) 공용 로그인 도메인만.
+   */
+  function authPopupHosts(svc) {
+    return [...new Set([...COMMON_AUTH_HOSTS, ...((svc && svc.authHosts) || []), ...((svc && svc.hosts) || [])])];
+  }
+
+  /** 팝업 주소가 허용 목록의 호스트와 정확히 같은지 (https만). 정규식·부분 일치를 쓰지 않는다. */
+  function isAuthPopupUrl(svc, url) {
+    const host = httpsHost(url);
+    return !!host && authPopupHosts(svc).includes(host.toLowerCase());
+  }
+
   /** 주소의 호스트가 어느 서비스 것인지. 없으면 null */
   function serviceForHost(host) {
     return SERVICES.find((s) => s.hosts.some((h) => host === h || host.endsWith(`.${h}`))) || null;
@@ -325,7 +362,11 @@
     serviceForHost,
     isServiceUrl,
     isLoginUrl,
+    COMMON_AUTH_HOSTS,
+    authPopupHosts,
+    isAuthPopupUrl,
     uploadOf,
+    fileBytesOf,
     fileKind,
   };
 });

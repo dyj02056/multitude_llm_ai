@@ -50,7 +50,9 @@ async function download() {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await net.fetch(url, { cache: 'no-store', signal: ctrl.signal });
+    // 리다이렉트는 따라가지 않는다 (정해 둔 주소의 파일만 받는다. 다른 곳으로 보내면 실패로 보고 지금 값을 유지)
+    const res = await net.fetch(url, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
+    if (res.redirected) throw new Error('리다이렉트된 응답은 받지 않습니다');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } finally {
