@@ -65,25 +65,46 @@ function findNpmCli({ env = process.env, platform = process.platform, exists }) 
 }
 
 /**
- * 실행 방법: 셸 없이 execPath(앱 자신)로 npm-cli.js test.
- * isElectron이면 ELECTRON_RUN_AS_NODE=1을 붙여 Electron이 Node처럼 동작하게 한다.
+ * npm-cli.js와 같은 Node 설치에 들어 있는 node(.exe). 없으면 null.
+ * npm-cli.js는 보통 <Node 폴더>/node_modules/npm/bin/npm-cli.js (Windows) 또는 <prefix>/lib/node_modules/npm/bin/npm-cli.js
  */
-function buildTestSpawn({ root, npmCli, execPath, isElectron, env = process.env }) {
+function findNodeFor(npmCli, { platform = process.platform, exists }) {
+  if (!npmCli) return null;
+  const P = platform === 'win32' ? path.win32 : path.posix;
+  const npmDir = P.dirname(P.dirname(npmCli)); // …/node_modules/npm
+  const names = platform === 'win32' ? ['node.exe'] : ['node'];
+  for (const base of [P.join(npmDir, '..', '..'), P.join(npmDir, '..', '..', '..', 'bin')]) {
+    for (const n of names) {
+      const p = P.normalize(P.join(base, n));
+      if (P.isAbsolute(p) && exists(p)) return p;
+    }
+  }
+  return null;
+}
+
+/**
+ * 실행 방법: 셸 없이 npm-cli.js test.
+ *   - nodeExe(npm과 같은 Node 설치의 node.exe)가 있으면 그것으로 실행한다 — 테스트 쪽에 Electron 설정이 물려가지 않는다
+ *   - 없으면 execPath(앱 자신)로 실행하고, isElectron이면 ELECTRON_RUN_AS_NODE=1을 붙여 Electron이 Node처럼 동작하게 한다.
+ *     이 값은 테스트가 띄우는 프로그램에도 물려가므로(테스트 안에서 Electron을 띄우는 프로젝트는 오동작) 마지막 수단이다.
+ */
+function buildTestSpawn({ root, npmCli, execPath, isElectron, nodeExe = null, env = process.env }) {
   const childEnv = { ...env, CI: '1', FORCE_COLOR: '0', NO_COLOR: '1', npm_config_update_notifier: 'false', npm_config_fund: 'false' };
-  if (isElectron) childEnv.ELECTRON_RUN_AS_NODE = '1';
+  const viaNode = !!nodeExe;
+  if (isElectron && !viaNode) childEnv.ELECTRON_RUN_AS_NODE = '1';
   else delete childEnv.ELECTRON_RUN_AS_NODE;
   // 바깥에서 물려받으면 프로젝트의 테스트가 다르게 동작하는 값은 뺀다 (node --test 안에서 띄운 경우 등)
   for (const k of ['NODE_TEST_CONTEXT', 'NODE_OPTIONS', 'npm_lifecycle_event', 'npm_lifecycle_script']) delete childEnv[k];
   return {
-    command: execPath,
+    command: viaNode ? nodeExe : execPath,
     args: [npmCli, 'test'],
     options: { cwd: root, env: childEnv, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] },
   };
 }
 
 /** 허용 규칙: 이 모양이 아니면 실행하지 않는다 (devtest.js가 spawn 직전에 다시 검사) */
-function isAllowedTestSpawn(spec, { root, execPath }) {
-  if (!spec || spec.command !== execPath) return false;
+function isAllowedTestSpawn(spec, { root, execPath, nodeExe = null }) {
+  if (!spec || !(spec.command === execPath || (nodeExe && spec.command === nodeExe))) return false;
   if (!Array.isArray(spec.args) || spec.args.length !== 2 || spec.args[1] !== 'test') return false;
   if (!/(^|[\\/])npm-cli\.js$/i.test(spec.args[0]) || !path.isAbsolute(spec.args[0])) return false;
   const o = spec.options || {};
@@ -116,6 +137,37 @@ function summarizeTestOutput(text) {
   return null;
 }
 
+/**
+ * 확인 창에 보여 줄 경고: 체크한 수정안이 테스트 실행 방식을 바꾸는지.
+ *   - 맨 위 package.json이 바뀌면, "적용 후" 실행에서는 바뀐 test · pretest · posttest가 돈다 → 바뀐 스크립트를 보여 준다
+ *   - 그 밖의 실행 영향 파일(risk(path, before, after)가 이유를 돌려주는 파일)은 이름과 이유를 보여 준다
+ * changes: [{ path, before(문자열 | null=없던 파일), after(문자열 | null=삭제) }]
+ * → { scriptLines: ['test: 이전 → 이후', …], riskLines: ['경로 — 이유', …] }
+ */
+function trialWarnings(changes, risk = () => null) {
+  const scriptLines = [];
+  const riskLines = [];
+  for (const c of changes) {
+    if (c.path === 'package.json') {
+      const before = readTestScript(typeof c.before === 'string' ? c.before : undefined);
+      const after = readTestScript(typeof c.after === 'string' ? c.after : undefined);
+      if (!after.ok) scriptLines.push(`수정안을 쓰면 test 스크립트를 실행할 수 없습니다 (${after.error})`);
+      else {
+        for (const k of ['pre', 'script', 'post']) {
+          const name = { pre: 'pretest', script: 'test', post: 'posttest' }[k];
+          const a = before.ok ? before[k] || '' : '';
+          const b = after[k] || '';
+          if (a !== b) scriptLines.push(`${name}: ${a || '(없음)'} → ${b || '(없음)'}`);
+        }
+      }
+      continue;
+    }
+    const why = risk(c.path, c.before, c.after);
+    if (why) riskLines.push(`${c.path} — ${why}`);
+  }
+  return { scriptLines, riskLines };
+}
+
 /** 화면에서 받은 임시 적용 목록 검사: [{ path, after(문자열 | null=삭제) }] 최대 200개 */
 function checkTrialChanges(changes) {
   if (!Array.isArray(changes) || !changes.length || changes.length > 200) return null;
@@ -136,8 +188,10 @@ module.exports = {
   MAX_OUTPUT,
   readTestScript,
   findNpmCli,
+  findNodeFor,
   buildTestSpawn,
   isAllowedTestSpawn,
   summarizeTestOutput,
   checkTrialChanges,
+  trialWarnings,
 };

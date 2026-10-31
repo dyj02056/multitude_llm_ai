@@ -202,6 +202,12 @@ function guardPopups(wc, svc) {
       log('popup', 'navigation blocked', String(url).slice(0, 160));
       e.preventDefault();
       openOutside(url);
+      // 로그인 도중 허용 밖 주소(회사 SSO 등)로 가면 로그인이 끊기므로 패널에 알린다
+      let host = '';
+      try {
+        host = new URL(url).host;
+      } catch {}
+      if (svc) sendPanel(svc.id, { notice: `로그인 창이 허용 밖 주소(${host || '알 수 없음'})로 가서 기본 브라우저로 열었습니다` });
     };
     cwc.on('will-navigate', (e, url) => check(e, url));
     cwc.on('will-redirect', (e, url) => check(e, url));
@@ -249,7 +255,10 @@ function openPanel(svc) {
   const view = newView(svc);
   const wc = view.webContents;
 
-  wc.on('did-start-loading', () => sendPanel(svc.id, { loading: true }));
+  wc.on('did-start-loading', () => {
+    loadFailed.delete(svc.id);
+    sendPanel(svc.id, { loading: true });
+  });
   wc.on('did-stop-loading', () => sendPanel(svc.id, { loading: false, url: wc.getURL() }));
   wc.on('did-navigate', (_e, url, code) => {
     log('nav', svc.id, code, url.slice(0, 160));
@@ -258,7 +267,9 @@ function openPanel(svc) {
   wc.on('did-redirect-navigation', (d) => d.isMainFrame && log('nav', svc.id, 'redirect', d.url.slice(0, 160)));
   wc.on('did-navigate-in-page', (_e, url) => sendPanel(svc.id, { url }));
   wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
-    if (isMainFrame && code !== -3) sendPanel(svc.id, { error: `${desc} (${code})`, url });
+    if (!isMainFrame || code === -3) return;
+    loadFailed.add(svc.id); // 오류 페이지에서는 셀렉터 자가진단을 하지 않는다 (입력창이 없는 게 당연하다)
+    sendPanel(svc.id, { error: `${desc} (${code})`, url });
   });
 
   const login = autologin.attach(wc, svc, (state) => {
@@ -275,6 +286,7 @@ function openPanel(svc) {
 const diag = createDiag({ onChange: (id, st) => sendPanel(id, { diag: st }) });
 const PROBE_GAP_MS = 30 * 1000; // 같은 패널을 이보다 자주 살펴보지 않는다 (로그인 확인은 대화 중에도 반복된다)
 const lastProbe = new Map();
+const loadFailed = new Set(); // 페이지 불러오기에 실패한 패널 (네트워크 오류 · 오프라인) — 다시 불러오기 시작하면 지운다
 
 /** 로그인된 패널 페이지에서 입력창이 보이는지 살펴본다. 페이지가 다 그려지도록 잠깐 기다린 뒤 */
 function probePanel(id) {
@@ -284,7 +296,7 @@ function probePanel(id) {
   setTimeout(async () => {
     const wc = panels.get(id)?.view.webContents;
     const svc = SERVICES.find((s) => s.id === id);
-    if (!wc || wc.isDestroyed() || !svc || !isServiceUrl(svc, wc.getURL())) return;
+    if (!wc || wc.isDestroyed() || !svc || loadFailed.has(id) || !isServiceUrl(svc, wc.getURL())) return;
     try {
       diag.fromProbe(id, await wc.executeJavaScript(`(${pageProbe.toString()})(${JSON.stringify({ input: svc.input || [] })})`, true));
     } catch {} // 페이지가 바뀌는 중

@@ -46,12 +46,16 @@
       if (JSON.stringify(now) !== before) onChange?.(id, now);
     }
 
-    /** 페이지가 열린 뒤 살펴본 결과 (로그인된 상태에서만 부른다): { input: 찾았는지 } */
+    /**
+     * 페이지가 열린 뒤 살펴본 결과 (로그인된 상태에서만 부른다): { input: 찾았는지 }
+     * 살펴보기만으로는 "못 찾음"(✕)으로 정하지 않고 "주의"(△)까지만 둔다 — 오류 페이지 · 점검 안내 · 팝업처럼
+     * 셀렉터와 상관없이 입력창이 안 보이는 때가 많아서다. ✕는 실제로 보낼 때 입력창을 못 찾았을 때만.
+     * 이미 확인한 입력창(ok · fail)은 살펴보기 한 번으로 바꾸지 않는다.
+     */
     function fromProbe(id, probe) {
       if (!probe || typeof probe.input !== 'boolean') return;
-      // 이미 보내기로 확인한 입력창을 살펴보기 한 번으로 "못 찾음"으로 바꾸지는 않는다 (화면이 다시 그려지는 순간일 수 있음)
       if (probe.input) set(id, 'input', 'ok');
-      else if (row(id).input !== 'ok') set(id, 'input', 'fail', '페이지에서 입력창을 찾지 못했습니다');
+      else if (row(id).input === 'unknown' || row(id).input === 'warn') set(id, 'input', 'warn', '페이지에서 입력창이 보이지 않았습니다 (보낼 때 다시 확인)');
     }
 
     /** 보내기 결과: { ok, via: 'button' | 'key' | …, code: 'no-input' | … } */

@@ -242,10 +242,11 @@ test('자가진단: 답변 영역은 연달아 2번 못 찾으면 못 찾음, �
   assert.equal(d.status('g').response, 'ok');
 });
 
-test('자가진단: 살펴보기는 이미 보내기로 확인한 입력창을 못 찾음으로 바꾸지 않음, 초기화', () => {
+test('자가진단: 살펴보기는 주의(△)까지만, 이미 확인한 입력창은 바꾸지 않음, 초기화', () => {
   const d = createDiag();
   d.fromProbe('a', { input: false });
-  assert.equal(d.status('a').input, 'fail');
+  assert.equal(d.status('a').input, 'warn'); // 오류 페이지 등에서도 "화면이 바뀐 것 같음"(✕)으로 띄우지 않는다
+  assert.notEqual(d.status('a').level, 'broken');
   d.fromProbe('a', { input: true });
   assert.equal(d.status('a').input, 'ok');
   d.fromProbe('a', { input: false });
@@ -277,4 +278,38 @@ test('자가진단: rounds가 보내기 · 답변 결과를 기록한다', async
   assert.equal(d.status('a').send, 'ok');
   assert.equal(d.status('a').response, 'fail');
   assert.equal(d.status('b').input, 'fail');
+});
+
+test('테스트 실행 (v0.12.1): npm과 같은 Node 설치의 node.exe가 있으면 그것으로 — Electron 설정이 테스트에 물려가지 않음', () => {
+  const W = path.win32;
+  const nodeExe = W.join('C:', 'nodejs', 'node.exe');
+  const npmCli = W.join('C:', 'nodejs', 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const files = new Set([nodeExe, npmCli]);
+  const exists = (p) => files.has(p);
+  assert.equal(R.findNodeFor(npmCli, { platform: 'win32', exists }), nodeExe);
+  assert.equal(R.findNodeFor(npmCli, { platform: 'win32', exists: () => false }), null);
+  assert.equal(R.findNodeFor('/usr/local/lib/node_modules/npm/bin/npm-cli.js', { platform: 'linux', exists: (p) => p === '/usr/local/bin/node' }), '/usr/local/bin/node');
+  const root = path.resolve('/work/app');
+  const spec = R.buildTestSpawn({ root, npmCli, execPath: '/app/Multitude.exe', isElectron: true, nodeExe, env: { ELECTRON_RUN_AS_NODE: '1' } });
+  assert.equal(spec.command, nodeExe);
+  assert.equal(spec.options.env.ELECTRON_RUN_AS_NODE, undefined);
+  assert.equal(R.isAllowedTestSpawn(spec, { root, execPath: '/app/Multitude.exe', nodeExe }), true);
+  assert.equal(R.isAllowedTestSpawn(spec, { root, execPath: '/app/Multitude.exe' }), false); // 찾은 node.exe가 아니면 거부
+});
+
+test('테스트 실행 (v0.12.1): 수정안이 test 스크립트 · 실행 영향 파일을 바꾸면 확인 창에 경고', () => {
+  const pkg = (scripts) => JSON.stringify({ name: 'x', scripts });
+  const w = R.trialWarnings(
+    [
+      { path: 'package.json', before: pkg({ test: 'node --test' }), after: pkg({ test: 'node --test && curl evil', pretest: 'rm -rf x' }) },
+      { path: '.husky/pre-commit', before: null, after: 'echo hi' },
+      { path: 'src/a.js', before: 'a', after: 'b' },
+    ],
+    PX.executionRisk,
+  );
+  assert.deepEqual(w.scriptLines, ['pretest: (없음) → rm -rf x', 'test: node --test → node --test && curl evil']);
+  assert.equal(w.riskLines.length, 1);
+  assert.match(w.riskLines[0], /^\.husky\/pre-commit — /);
+  assert.deepEqual(R.trialWarnings([{ path: 'package.json', before: pkg({ test: 'a' }), after: pkg({ test: 'a' }) }]).scriptLines, []);
+  assert.match(R.trialWarnings([{ path: 'package.json', before: pkg({ test: 'a' }), after: '{ broken' }]).scriptLines[0], /실행할 수 없습니다/);
 });

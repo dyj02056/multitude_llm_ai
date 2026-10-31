@@ -325,8 +325,11 @@
     'accounts.google.co.kr',
     'accounts.youtube.com',
     'appleid.apple.com',
+    'idmsa.apple.com', // Apple 로그인이 중간에 거치는 곳
     'login.microsoftonline.com',
+    'login.microsoft.com',
     'login.live.com',
+    'account.live.com',
     'github.com',
     'x.com',
     'api.x.com',
@@ -346,7 +349,11 @@
   /** 팝업 주소가 허용 목록의 호스트와 정확히 같은지 (https만). 정규식·부분 일치를 쓰지 않는다. */
   function isAuthPopupUrl(svc, url) {
     const host = httpsHost(url);
-    return !!host && authPopupHosts(svc).includes(host.toLowerCase());
+    if (!host) return false;
+    const h = host.toLowerCase();
+    // 나라별 Google 로그인 (accounts.google.co.jp · accounts.google.de …) — Google 계정이 나라에 따라 거쳐 가는 곳. 정확히 이 모양만.
+    if (/^accounts\.google\.(?:[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})$/.test(h)) return true;
+    return authPopupHosts(svc).includes(h);
   }
 
   /** 주소의 호스트가 어느 서비스 것인지. 없으면 null */

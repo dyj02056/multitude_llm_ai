@@ -141,9 +141,35 @@
   }
   const key = (s) => s.replace(/\s+/g, ' ').trim();
 
+  // ---------- 비슷한 문장 ----------
+  // AI들은 같은 내용을 조금씩 다르게 씁니다 ("Python을 추천합니다" · "Python을 권합니다"). 글자가 정확히 같아야 같다고 보면
+  // 거의 모든 문장이 "다름"이 되므로, 글자 두 개씩 묶음(bigram)이 많이 겹치면 "비슷한 문장"으로 보고 강조하지 않는다.
+  // 단, 숫자가 다르면(940만 · 950만) 내용이 다른 것이므로 비슷하게 보지 않는다.
+  const SIMILAR_MIN = 0.55; // 겹침 정도(Dice 계수) 기준
+  const bare = (s) => s.toLowerCase().replace(/[\s.,!?。·:;'"`()[\]{}<>*_#|~\-–—→]+/g, '');
+  const numbersOf = (s) => (s.match(/\d+(?:[.,]\d+)*/g) || []).join(' ');
+  function bigrams(s) {
+    const t = bare(s);
+    const out = new Set();
+    for (let i = 0; i < t.length - 1; i++) out.add(t.slice(i, i + 2));
+    if (t.length === 1) out.add(t);
+    return out;
+  }
+  /** 두 문장의 겹침 정도 0~1 (숫자가 다르면 0) */
+  function similarity(a, b) {
+    if (numbersOf(a) !== numbersOf(b)) return 0;
+    const x = bigrams(a);
+    const y = bigrams(b);
+    if (!x.size || !y.size) return 0;
+    let both = 0;
+    for (const g of x) if (y.has(g)) both++;
+    return (2 * both) / (x.size + y.size);
+  }
+
   /**
    * 기준 답변(base)과 비교해 text를 조각으로 나눈다 → [{ text, changed }]
-   * changed: 기준 답변에 없는(새로 쓰거나 바뀐) 문장. 공백·줄바꿈 차이는 같은 것으로 본다. (jsdiff diffArrays)
+   * changed: 기준 답변에 없는 새 내용의 문장. 공백·줄바꿈 차이는 같은 것으로 보고,
+   * 표현만 조금 다른 문장(기준 답변의 어느 문장과 겹침 SIMILAR_MIN 이상, 숫자 같음)도 새 내용으로 보지 않는다. (jsdiff diffArrays)
    */
   function diffMarks(base, text) {
     const a = String(base || '');
@@ -151,11 +177,13 @@
     if (!b) return [];
     if (!a) return [{ text: b, changed: true }];
     const out = [];
+    const baseSentences = sentences(a).filter((s) => /\S/.test(s));
+    const isSimilar = (piece) => baseSentences.some((s) => similarity(s, piece) >= SIMILAR_MIN);
     const parts = Diff.diffArrays(sentences(a), sentences(b), { comparator: (x, y) => key(x) === key(y) });
     for (const part of parts) {
       if (part.removed) continue;
       for (const piece of part.value) {
-        const changed = !!part.added && /\S/.test(piece);
+        const changed = !!part.added && /\S/.test(piece) && !isSimilar(piece);
         const last = out[out.length - 1];
         if (last && last.changed === changed) last.text += piece;
         else out.push({ text: piece, changed });
@@ -170,5 +198,5 @@
     return total ? marks.filter((m) => m.changed).reduce((n, m) => n + m.text.length, 0) / total : 0;
   }
 
-  return { SECTIONS, sectionOf, parseAnalysis, sentences, diffMarks, changedRatio };
+  return { SECTIONS, sectionOf, parseAnalysis, sentences, similarity, diffMarks, changedRatio };
 });

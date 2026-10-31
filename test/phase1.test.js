@@ -35,7 +35,21 @@ test('로그인 팝업: 비슷한 주소·경로만 login인 주소는 거부, �
   ]) {
     assert.equal(S.isAuthPopupUrl(claude, bad), false, bad);
   }
-  for (const ok of ['https://accounts.google.com/o/oauth2/auth?x=1', 'https://appleid.apple.com/auth', 'https://claude.ai/login/callback', 'https://x.com/i/oauth2']) {
+  for (const bad of ['https://accounts.google.evil.com/', 'https://accounts.google.co.kr.evil.com/']) {
+    assert.equal(S.isAuthPopupUrl(claude, bad), false, bad);
+  }
+  for (const ok of [
+    'https://accounts.google.com/o/oauth2/auth?x=1',
+    'https://appleid.apple.com/auth',
+    'https://idmsa.apple.com/appleauth',
+    'https://login.microsoft.com/common',
+    'https://account.live.com/',
+    'https://accounts.google.co.jp/accounts/SetSID',
+    'https://accounts.google.de/',
+    'https://accounts.google.com.br/',
+    'https://claude.ai/login/callback',
+    'https://x.com/i/oauth2',
+  ]) {
     assert.equal(S.isAuthPopupUrl(claude, ok), true, ok);
   }
 });

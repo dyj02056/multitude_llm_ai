@@ -71,15 +71,23 @@
     return null;
   }
 
-  /** 예전 이름 기반 상태(project-state:폴더이름)가 있으면 새 id로 옮긴다 (새 id에 상태가 없을 때만) */
+  // ~v0.10.0은 화면이 id 없이 저장을 불러 모든 프로젝트의 상태가 이 키 하나에 들어 있었다 (가장 최근에 쓴 프로젝트의 상태)
+  const LEGACY_STATE_KEY = 'project-state:undefined';
+
+  /**
+   * 예전 상태가 있으면 새 id로 옮긴다 (새 id에 상태가 없을 때만, 한 번).
+   * 폴더 이름 키(project-state:폴더이름)가 먼저, 없으면 예전 버전이 실제로 쓰던 키 하나(LEGACY_STATE_KEY)를
+   * 업데이트 뒤 처음 여는 폴더에 옮긴다 — 예전 버전은 마지막에 연 폴더만 기억했으므로 보통 그 폴더다.
+   */
   async function migrateState(name, id) {
     try {
-      const oldKey = stateKey(name);
-      const got = await chrome.storage.local.get([oldKey, stateKey(id)]);
-      if (got[oldKey] && !got[stateKey(id)]) {
-        await chrome.storage.local.set({ [stateKey(id)]: got[oldKey] });
-        await chrome.storage.local.remove(oldKey);
-      }
+      const nameKey = stateKey(name);
+      const got = await chrome.storage.local.get([nameKey, LEGACY_STATE_KEY, stateKey(id)]);
+      if (got[stateKey(id)]) return;
+      const oldKey = got[nameKey] ? nameKey : got[LEGACY_STATE_KEY] ? LEGACY_STATE_KEY : null;
+      if (!oldKey) return;
+      await chrome.storage.local.set({ [stateKey(id)]: got[oldKey] });
+      await chrome.storage.local.remove(oldKey);
     } catch {}
   }
 

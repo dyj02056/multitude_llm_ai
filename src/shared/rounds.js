@@ -206,7 +206,12 @@
       const historyId = round.historyId;
       const r = round;
       const res = await sendToPanel(judge, text, async (state) => {
-        if (state !== 'done') return;
+        if (state !== 'done') {
+          // 분석은 화면이 "분석하는 중"을 기다리므로, 답이 오지 않고 끝나도(시간 초과 · 답변 없음) 알려 준다
+          const why = state === 'timeout' ? '시간 안에 답하지 않았습니다' : state === 'no-answer' ? '답변을 찾지 못했습니다' : '답하지 못했습니다';
+          if (mode === 'analysis' && state !== 'error') fail(`분석 실패: ${judgeName}이(가) ${why}`);
+          return;
+        }
         const got = await readAnswer(judge);
         const entry = { judge: judgeName, at: Date.now(), ...got, ...(mode === 'analysis' ? { mode, names } : {}) };
         a.history.addSynth(historyId, entry);
@@ -220,7 +225,7 @@
       return { ok: true, judge: judgeName, count: answers.length };
 
       function fail(error) {
-        a.sendSynthStatus({ state: 'error', error, cause });
+        a.sendSynthStatus({ state: 'error', error, cause, mode });
         return { ok: false, error };
       }
     }

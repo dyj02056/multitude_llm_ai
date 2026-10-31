@@ -159,3 +159,38 @@ test('차이 강조: 기준 답변에 없는 문장만 표시, 공백 차이는 
   assert.deepEqual(A.diffMarks('x', ''), []);
   assert.equal(A.sentences('pi는 3.14입니다. 끝').length, 2); // 소수점에서 끊지 않음
 });
+
+test('차이 강조: 표현만 다른 문장은 새 내용으로 보지 않고, 숫자가 다르면 새 내용', () => {
+  const base = '결론부터 말하면 처음 배운다면 Python을 추천합니다.\n문법이 쉽고 자료가 많습니다.';
+  const other = '결론부터 말하자면, 처음 배운다면 Python을 추천해요.\n문법이 쉽고 학습 자료가 많습니다.\nJavaScript는 브라우저에서 바로 실행됩니다.';
+  const changed = A.diffMarks(base, other).filter((m) => m.changed).map((m) => m.text.trim());
+  assert.deepEqual(changed, ['JavaScript는 브라우저에서 바로 실행됩니다.']);
+  assert.ok(A.similarity('인구는 940만입니다.', '인구는 950만입니다.') === 0); // 숫자가 다르면 비슷하지 않음
+  assert.ok(A.similarity('Python을 추천합니다.', 'Python을 추천해요.') >= 0.55);
+});
+
+test('분석 실행: 판정 AI가 시간 초과 · 답변 없음으로 끝나면 실패로 알려 "분석하는 중"이 풀린다 (v0.12.1)', async () => {
+  for (const end of ['timeout', 'no-answer']) {
+    const statuses = [];
+    let watcher = null;
+    const rounds = createRounds({
+      services: [{ id: 'a', name: 'ChatGPT' }, { id: 'b', name: 'Gemini' }, { id: 'j', name: 'Claude' }],
+      hasPanel: () => true,
+      sendPrompt: async () => ({ ok: true }),
+      snapshot: async (id) => ({ stop: false, count: 1, text: `답 ${id}`, md: `답 ${id}` }),
+      watch: (_id, _before, _cur, onState) => (watcher = onState),
+      sendPanel: () => {},
+      sendSynthStatus: (p) => statuses.push(p),
+      history: { add: () => 'h1', setAnswer: () => {}, addSynth: () => {} },
+      prefs: () => ({ synthTarget: 'j', autoSynth: false }),
+      log: () => {},
+    });
+    await rounds.sendAll('질문', ['a', 'b'], []);
+    await rounds.runSynth('j', 'manual', 'analysis');
+    await watcher(end);
+    const last = statuses[statuses.length - 1];
+    assert.equal(last.state, 'error', end);
+    assert.equal(last.mode, 'analysis', end);
+    assert.match(last.error, /분석 실패/);
+  }
+});

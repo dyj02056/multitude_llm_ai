@@ -306,7 +306,7 @@ setInterval(tickAnswerTimers, 1000);
 // 본체가 "이 패널 상태가 바뀌었어"라고 알려 올 때마다 실행됩니다.
 // 알림 종류: 불러오는 중(loading) · 주소(url) · 오류(error) · 로그인 상태(login) · 보내기 결과(send) · 답변 상태(answer)
 // 답변 완료('done')면 다른 파일들(project.js 등)에게도 알려 📋 파일 모아보기·📂 요청 파일 버튼을 띄우게 합니다.
-host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching, diag }) => {
+host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching, diag, notice }) => {
   if (diag) {
     // 셀렉터 자가진단 결과는 따로 온다 (다른 상태와 섞이지 않음)
     diagById[id] = diag;
@@ -316,6 +316,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
   }
   const p = panels.get(id);
   if (!p) return;
+  if (notice) return flash(p.status, notice); // 잠깐 보여 주는 안내 (예: 로그인 창이 허용 밖 주소로 감)
   window.onLibPanelStatus?.(id, { send, answer, error }); // 스킬 압축 요청의 답변을 기다리는 중이면 library.js가 본다
   if (answer === 'clear') {
     p.attachBadge.hidden = true;
@@ -430,7 +431,7 @@ function renderTargets() {
 //   분석: 판정 AI(종합 담당)가 공통 의견 · 이견 표 · 근거 부족 · 최종 답변으로 정리한 결과 (shared/analysis.js가 읽음)
 const AN = MLA.analysis;
 const COMPARE_PREFS_KEY = 'mla-compare-view';
-const compareView = { tab: 'answers', diff: false, base: null, answers: [], analysis: null, pending: null };
+const compareView = { tab: 'answers', diff: false, base: null, answers: [], analysis: null, pending: null, error: null };
 try {
   const saved = JSON.parse(localStorage.getItem(COMPARE_PREFS_KEY) || '{}');
   if (saved.tab === 'analysis') compareView.tab = 'analysis';
@@ -495,7 +496,7 @@ function renderCompareAnswers() {
       if (!base || !a.text) return answerColumn(a);
       if (a.id === base.id) return answerColumn({ ...a, badge: '기준' });
       const marks = AN.diffMarks(base.text, a.text);
-      return answerColumn({ ...a, marks, badge: `다름 ${Math.round(AN.changedRatio(marks) * 100)}%` });
+      return answerColumn({ ...a, marks, badge: `새 내용 ${Math.round(AN.changedRatio(marks) * 100)}%` });
     }),
   );
 }
@@ -506,7 +507,11 @@ function renderCompareAnalysis() {
   const run = $('#analysisRun');
   run.disabled = !!compareView.pending || compareView.answers.filter((a) => a.text).length < 2;
   run.textContent = compareView.analysis ? '다시 분석' : '분석 요청';
-  const pending = compareView.pending ? [span('analysis-note pending', `${compareView.pending}이(가) 분석하는 중입니다… 끝나면 여기에 표로 나옵니다`)] : [];
+  const pending = compareView.pending
+    ? [span('analysis-note pending', `${compareView.pending}이(가) 분석하는 중입니다… 끝나면 여기에 표로 나옵니다`)]
+    : compareView.error
+      ? [span('analysis-note', compareView.error)] // 지난 분석 요청이 실패한 이유 (시간 초과 · 답변 없음 등)
+      : [];
   if (!compareView.analysis) {
     const empty = document.createElement('div');
     empty.className = 'analysis-empty';
@@ -992,8 +997,13 @@ host.on('synth:status', ({ state: st, judge, count, error, cause, mode }) => {
           ? `${judge}의 ${what}이 끝났습니다${mode === 'analysis' ? ' — 답변 비교 › 분석 탭에서 봅니다' : ''}`
           : `${prefix}${judge}에게 답변 ${count}개 ${what}을 요청했습니다`;
   // 분석 진행 표시: 보내는 중·기다리는 중이면 분석 탭에 안내, 끝나거나 실패하면 지움
-  if (mode === 'analysis' && (st === 'sending' || st === 'sent')) compareView.pending = judge;
-  else if (st === 'done' || st === 'error') compareView.pending = null;
+  if (mode === 'analysis' && (st === 'sending' || st === 'sent')) {
+    compareView.pending = judge;
+    compareView.error = null;
+  } else if (st === 'done' || st === 'error') {
+    compareView.pending = null;
+    compareView.error = st === 'error' && mode === 'analysis' ? error : null;
+  }
   if (state?.chatView === 'compare') {
     if (st === 'done' && mode === 'analysis') renderCompare(); // 끝나면 결과를 바로 그린다
     else renderCompareAnalysis();
