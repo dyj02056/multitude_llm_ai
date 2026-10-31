@@ -149,6 +149,10 @@ function createPanel(svc) {
   const status = span('status');
   const attachBadge = span('attach-badge');
   attachBadge.hidden = true;
+  // 셀렉터 자가진단: 입력창 · 보내기 버튼 · 답변 영역을 못 찾으면 띄운다 (누르면 설정 화면의 서비스별 상태 표)
+  const diagBadge = button('', '', () => host.setView('help'));
+  diagBadge.className = 'diag-badge';
+  diagBadge.hidden = true;
   // 프로젝트 모드: 답변 끝의 NEED_FILES 요청을 보면 project.js가 이 버튼을 띄운다.
   const needBtn = button('', '', () => window.onNeedFilesClick?.(svc.id));
   needBtn.className = 'need-btn';
@@ -168,6 +172,7 @@ function createPanel(svc) {
     url,
     status,
     attachBadge,
+    diagBadge,
     collectBtn,
     needBtn,
     loginBtn,
@@ -191,9 +196,61 @@ function createPanel(svc) {
   head.addEventListener('dblclick', (e) => {
     if (!e.target.closest('button')) host.setFocus(svc.id); // 머리줄 빈 곳을 두 번 누르면 크게 보기 / 돌아오기
   });
-  const p = { el, dot, url, status, loginBtn, attachBadge, needBtn, collectBtn, focusBtn, changeBar };
+  const p = { el, dot, url, status, loginBtn, attachBadge, diagBadge, needBtn, collectBtn, focusBtn, changeBar };
   panels.set(svc.id, p);
+  renderDiagBadge(svc.id);
   return p;
+}
+
+// ---------- 셀렉터 자가진단 ----------
+// 본체(shared/diag.js)가 패널마다 입력창 · 보내기 버튼 · 답변 영역을 찾았는지 알려 준다.
+// 못 찾은 것이 있으면 머리줄에 ⚠ 화면이 바뀐 것 같음, 설정 화면에는 서비스별 표.
+const diagById = {};
+
+function renderDiagBadge(id) {
+  const p = panels.get(id);
+  const d = diagById[id];
+  if (!p) return;
+  const broken = d?.level === 'broken';
+  p.diagBadge.hidden = !broken;
+  if (!broken) return;
+  p.diagBadge.textContent = '⚠ 화면이 바뀐 것 같음';
+  p.diagBadge.title = [d.message, ...d.notes, '', d.hint, '', '누르면 설정의 서비스별 상태 표를 엽니다'].join('\n');
+}
+
+/** 설정 화면: 서비스별 입력창 · 보내기 버튼 · 답변 영역 상태 표 (열어 둔 패널만) */
+function renderDiagTable() {
+  const D = MLA.diag;
+  const ids = state.rects.map((r) => r.id);
+  const table = $('#diagTable');
+  const head = document.createElement('tr');
+  for (const t of ['서비스', ...D.PARTS.map((p) => D.PART_TEXT[p]), '상태']) head.append(Object.assign(document.createElement('th'), { textContent: t }));
+  const LEVEL = { ok: '정상', warn: '주의', broken: '⚠ 화면이 바뀐 것 같음', unknown: '아직 확인 전' };
+  const STATE = { ok: '찾음', warn: '다른 방법으로 됨', fail: '못 찾음', unknown: '확인 전' };
+  const rows = ids.map((id) => {
+    const svc = state.services.find((s) => s.id === id);
+    const d = diagById[id] || { input: 'unknown', send: 'unknown', response: 'unknown', level: 'unknown', notes: [] };
+    const tr = document.createElement('tr');
+    tr.dataset.level = d.level;
+    const name = document.createElement('td');
+    name.append(span('dot ready'), ` ${svc?.name || id}`);
+    name.style.setProperty('--svc', svc?.color || 'var(--muted)');
+    tr.append(name);
+    for (const part of D.PARTS) {
+      const td = document.createElement('td');
+      td.dataset.state = d[part];
+      td.textContent = `${D.MARK[d[part]]} ${STATE[d[part]]}`;
+      tr.append(td);
+    }
+    const st = document.createElement('td');
+    st.textContent = LEVEL[d.level];
+    if (d.notes.length) st.title = d.notes.join('\n');
+    tr.append(st);
+    return tr;
+  });
+  table.replaceChildren(head, ...(rows.length ? rows : [Object.assign(document.createElement('tr'), { textContent: '열린 패널이 없습니다' })]));
+  const broken = ids.filter((id) => diagById[id]?.level === 'broken');
+  $('#diagHint').textContent = broken.length ? MLA.diag.HINT : '';
 }
 
 /** 패널 아래 변경 바를 띄우거나 내린다. 본체가 웹페이지 높이를 바만큼 줄여 바가 페이지에 가리지 않게 한다. */
@@ -249,7 +306,14 @@ setInterval(tickAnswerTimers, 1000);
 // 본체가 "이 패널 상태가 바뀌었어"라고 알려 올 때마다 실행됩니다.
 // 알림 종류: 불러오는 중(loading) · 주소(url) · 오류(error) · 로그인 상태(login) · 보내기 결과(send) · 답변 상태(answer)
 // 답변 완료('done')면 다른 파일들(project.js 등)에게도 알려 📋 파일 모아보기·📂 요청 파일 버튼을 띄우게 합니다.
-host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching }) => {
+host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching, diag }) => {
+  if (diag) {
+    // 셀렉터 자가진단 결과는 따로 온다 (다른 상태와 섞이지 않음)
+    diagById[id] = diag;
+    renderDiagBadge(id);
+    if (state?.chatView === 'help') renderDiagTable();
+    return;
+  }
   const p = panels.get(id);
   if (!p) return;
   window.onLibPanelStatus?.(id, { send, answer, error }); // 스킬 압축 요청의 답변을 기다리는 중이면 library.js가 본다
@@ -862,6 +926,7 @@ $('#remoteRefresh').addEventListener('click', async () => {
 
 function renderSettings() {
   renderRemoteStatus();
+  renderDiagTable();
   const select = $('#timeoutSelect');
   select.replaceChildren(
     ...state.timeoutChoices.map((m) => Object.assign(document.createElement('option'), { value: m, textContent: `${m}분` })),
@@ -1163,6 +1228,10 @@ host.on('state', (next) => {
   const enteredHelp = next.chatView === 'help' && (modeChanged || state.chatView !== 'help');
   const enteredChanges = next.chatView === 'changes' && (modeChanged || state.chatView !== 'changes');
   state = next;
+  if (state.diag) {
+    Object.assign(diagById, state.diag);
+    for (const id of panels.keys()) renderDiagBadge(id);
+  }
   document.body.dataset.mode = state.mode;
   document.body.dataset.view = state.mode === 'chat' ? state.chatView : '';
   $('#compareBtn').classList.toggle('active', state.chatView === 'compare');
@@ -1173,7 +1242,10 @@ host.on('state', (next) => {
   $('#changesBtn').classList.toggle('active', state.chatView === 'changes');
   window.onProjectState?.(); // 프로젝트 사이드바 보이기/숨기기
   if (enteredHelp) renderHelp();
-  else if (state.chatView === 'help') renderRemoteStatus(); // 설정 화면을 보는 중에 갱신 결과가 오면 바로 반영
+  else if (state.chatView === 'help') {
+    renderRemoteStatus(); // 설정 화면을 보는 중에 갱신 결과가 오면 바로 반영
+    renderDiagTable();
+  }
   $('#helpBtn').classList.toggle('active', state.chatView === 'help');
   $('#hint').textContent = UI.hints[state.mode];
   for (const b of document.querySelectorAll('[data-layout]')) {

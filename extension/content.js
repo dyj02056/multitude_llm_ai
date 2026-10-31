@@ -16,7 +16,7 @@
   } catch {}
   if (!embedded) return;
 
-  const { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut } = MLA.page;
+  const { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe } = MLA.page;
   const { htmlToMarkdown } = MLA.markdown;
   const { shortcutFor } = MLA.shortcuts;
 
@@ -112,7 +112,7 @@
   async function send({ cfg, text, upload, fallbackText }) {
     const focus = pageFocusInput(cfg);
     let el = findInput(cfg);
-    if (!el) return { ok: false, error: focus.error || '입력창을 찾지 못했습니다' };
+    if (!el) return { ok: false, error: focus.error || '입력창을 찾지 못했습니다', code: 'no-input' }; // 셀렉터 자가진단용
 
     let attach;
     if (upload) {
@@ -159,6 +159,7 @@
     'mla:send': send,
     'mla:snapshot': ({ cfg, markdown }) => pageSnapshot(cfg, markdown ? htmlToMarkdown : null),
     'mla:loggedOut': ({ cfg }) => pageIsLoggedOut(cfg),
+    'mla:probe': ({ cfg }) => pageProbe(cfg), // 셀렉터 자가진단: 입력창이 보이는지
     'mla:focus': ({ cfg }) => {
       const el = findInput(cfg);
       el?.focus();

@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
-const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl } = require('../shared/services');
+const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl } = require('../shared/services');
 const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
 const { normalizeLibrary } = require('../shared/prompt-lib');
 const autologin = require('./autologin');
@@ -32,11 +32,14 @@ const { sendPrompt, cleanupTemp } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
 const { createRounds } = require('../shared/rounds');
+const { createDiag } = require('../shared/diag');
+const { pageProbe } = require('../shared/page');
 const history = require('./history');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
 const project = require('./project');
 const { setupGitConsole } = require('./gitconsole');
+const { setupDevTest } = require('./devtest');
 
 // ---------- 화면 크기 관련 숫자 (단위: 픽셀) ----------
 // 패널을 어디에 얼마나 크게 놓을지 계산할 때 씁니다. styles.css의 크기와 맞아야 화면이 어긋나지 않습니다.
@@ -77,6 +80,7 @@ let mode = 'login'; // 'login' | 'pick' | 'chat'
 let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'dialog' (패널 위에 띄운 창 — 패널을 화면 밖으로 치움) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'git' (git 콘솔) | 'library' (라이브러리) | 'vars' (변수 입력) | 'compress' (스킬 AI 압축) | 'history' (기록) | 'help' (설정·단축키)
 let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
 let gitConsole = null; // git 콘솔 (gitconsole.js)
+let devTest = null; // 미리보기 창의 테스트 실행 (devtest.js)
 let focusId = null; // 크게 보는 패널 (⤢). 나머지 패널은 크기를 그대로 둔 채 화면 밖으로 옮긴다
 const barIds = new Set(); // 변경 바를 띄운 패널 — 웹페이지 아래쪽을 바 높이만큼 비운다
 let loginView = null;
@@ -257,10 +261,34 @@ function openPanel(svc) {
     if (isMainFrame && code !== -3) sendPanel(svc.id, { error: `${desc} (${code})`, url });
   });
 
-  const login = autologin.attach(wc, svc, (state) => sendPanel(svc.id, { login: state }));
+  const login = autologin.attach(wc, svc, (state) => {
+    sendPanel(svc.id, { login: state });
+    if (state === 'ready') probePanel(svc.id); // 로그인된 화면에서 입력창이 보이는지 살펴본다 (셀렉터 자가진단)
+  });
   win.contentView.addChildView(view);
   wc.loadURL(svc.url);
   panels.set(svc.id, { view, login });
+}
+
+// ---------- 셀렉터 자가진단 ----------
+// 패널마다 입력창 · 보내기 버튼 · 답변 영역을 찾았는지 기록한다 (shared/diag.js). 바뀌면 그 패널 머리줄에 알린다.
+const diag = createDiag({ onChange: (id, st) => sendPanel(id, { diag: st }) });
+const PROBE_GAP_MS = 30 * 1000; // 같은 패널을 이보다 자주 살펴보지 않는다 (로그인 확인은 대화 중에도 반복된다)
+const lastProbe = new Map();
+
+/** 로그인된 패널 페이지에서 입력창이 보이는지 살펴본다. 페이지가 다 그려지도록 잠깐 기다린 뒤 */
+function probePanel(id) {
+  const now = Date.now();
+  if (now - (lastProbe.get(id) || 0) < PROBE_GAP_MS) return;
+  lastProbe.set(id, now);
+  setTimeout(async () => {
+    const wc = panels.get(id)?.view.webContents;
+    const svc = SERVICES.find((s) => s.id === id);
+    if (!wc || wc.isDestroyed() || !svc || !isServiceUrl(svc, wc.getURL())) return;
+    try {
+      diag.fromProbe(id, await wc.executeJavaScript(`(${pageProbe.toString()})(${JSON.stringify({ input: svc.input || [] })})`, true));
+    } catch {} // 페이지가 바뀌는 중
+  }, 2500);
 }
 
 // ---------- 화면 전환 ----------
@@ -420,6 +448,7 @@ function pushState() {
     timeoutChoices: TIMEOUT_CHOICES,
     remoteSelectors: prefs.remoteSelectors,
     remote: remote.getStatus(),
+    diag: diag.all(SERVICES.map((s) => s.id)),
     services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     rects: rects.panels,
   });
@@ -564,6 +593,7 @@ const rounds = createRounds({
   sendSynthStatus,
   history,
   prefs: () => prefs,
+  diag,
   log,
 });
 
@@ -637,7 +667,14 @@ ipcMain.on('layout:sidebar', (_e, open) => {
 async function rememberProject(p) {
   prefs.projectRoot = p ? p.id : null;
   savePrefs();
-  return p;
+  return withRecovery(p);
+}
+
+/** 프로젝트를 열 때: 지난번 "테스트 실행" 도중 앱이 꺼져 남은 임시 적용이 있으면 원래 파일로 되돌리고 몇 개인지 알린다 */
+async function withRecovery(p) {
+  if (!p || !devTest) return p;
+  const recovered = await devTest.recover().catch(() => 0);
+  return recovered ? { ...p, recovered } : p;
 }
 
 // 프로젝트 관련 요청을 감싸는 도우미: 성공하면 { ok: true, value }, 오류가 나면 { ok: false, error }로 돌려줍니다.
@@ -650,7 +687,13 @@ const projectCall = (fn) => async (_e, ...args) => {
   }
 };
 
+// 테스트 실행이 수정안을 잠깐 써 둔 동안에는 화면에서 오는 쓰기·지우기와 프로젝트 바꾸기·닫기를 받지 않는다 (끝나면 원래 파일로 되돌리므로)
+const notDuringTest = () => {
+  if (devTest?.isBusy()) throw new Error('테스트 실행 중에는 파일을 바꿀 수 없습니다 (끝나거나 중지한 뒤 다시 하세요)');
+};
+
 ipcMain.handle('project:pick', projectCall(async () => {
+  notDuringTest();
   const picked = await project.pick(win);
   if (picked) gitConsole?.stop();
   return rememberProject(picked);
@@ -659,7 +702,7 @@ ipcMain.handle('project:pick', projectCall(async () => {
 const restoreProject = async () => {
   if (!prefs.projectRoot) return null;
   try {
-    return await project.open(prefs.projectRoot);
+    return await withRecovery(await project.open(prefs.projectRoot));
   } catch {
     return rememberProject(null); // 폴더가 없어졌으면 잊는다
   }
@@ -667,6 +710,7 @@ const restoreProject = async () => {
 ipcMain.handle('project:restore', projectCall(restoreProject));
 ipcMain.handle('project:reconnect', projectCall(restoreProject));
 ipcMain.handle('project:close', projectCall(async () => {
+  notDuringTest();
   gitConsole?.stop(); // 실행 중인 git 명령은 그 폴더와 함께 멈춘다
   project.close();
   await rememberProject(null);
@@ -674,8 +718,8 @@ ipcMain.handle('project:close', projectCall(async () => {
 }));
 ipcMain.handle('project:readDir', projectCall((rel) => project.readDir(String(rel))));
 ipcMain.handle('project:readFile', projectCall((rel, opts) => project.readFile(String(rel), opts || {})));
-ipcMain.handle('project:writeFile', projectCall((rel, text) => project.writeFile(String(rel), text)));
-ipcMain.handle('project:deleteFile', projectCall((rel) => project.deleteFile(String(rel))));
+ipcMain.handle('project:writeFile', projectCall((rel, text) => (notDuringTest(), project.writeFile(String(rel), text))));
+ipcMain.handle('project:deleteFile', projectCall((rel) => (notDuringTest(), project.deleteFile(String(rel)))));
 ipcMain.handle('project:globalExclude', projectCall(() => project.globalExclude()));
 ipcMain.handle('project:loadState', projectCall(() => (project.info() ? project.loadState(project.info().id) : null)));
 ipcMain.handle('project:saveState', projectCall((data) => (project.info() ? project.saveState(project.info().id, data) : false)));
@@ -762,7 +806,14 @@ const REMOTE_REFRESH_MS = 6 * 60 * 60 * 1000;
 /** 원격 셀렉터를 한 번 받아 옵니다. 설정에서 꺼 두었으면 아무것도 하지 않습니다. */
 async function refreshRemote() {
   if (!prefs.remoteSelectors) return remote.getStatus();
+  const prevVersion = remote.getStatus().version;
   const st = await remote.refresh();
+  // 새 셀렉터를 받았으면 자가진단 기록을 지우고 다시 확인한다
+  if (st.source === 'remote' && !st.error && st.version !== prevVersion) {
+    diag.reset();
+    lastProbe.clear();
+    for (const id of panels.keys()) probePanel(id);
+  }
   log('remote', JSON.stringify(st));
   pushState();
   return st;
@@ -859,10 +910,12 @@ if (!app.requestSingleInstanceLock()) {
     setupSession();
     createWindow();
     gitConsole = setupGitConsole({ ipcMain, getWin: () => win, getRoot: () => project.info()?.id || null });
+    devTest = setupDevTest({ ipcMain, getWin: () => win, project, userDataDir: app.getPath('userData') });
   });
   app.on('window-all-closed', () => app.quit());
   app.on('will-quit', () => {
     cleanupTemp();
     gitConsole?.stop();
+    devTest?.stop();
   });
 }

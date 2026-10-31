@@ -19,6 +19,7 @@
     MLA.services;
   const { watchAnswer } = MLA.watch;
   const { createRounds } = MLA.rounds;
+  const { createDiag } = MLA.diag;
   const { createHistory } = MLA.historyCore;
   const remoteCore = MLA.remoteCore;
   const { shortcutList, shortcutFor } = MLA.shortcuts;
@@ -85,6 +86,22 @@
     }
   };
   const sendPanel = (id, patch) => emit('panel:status', { id, ...patch });
+
+  // 셀렉터 자가진단 (shared/diag.js): 패널마다 입력창 · 보내기 버튼 · 답변 영역을 찾았는지 기록 — Windows 앱과 같음
+  const diag = createDiag({ onChange: (id, st) => sendPanel(id, { diag: st }) });
+  const PROBE_GAP_MS = 30 * 1000;
+  const lastProbe = new Map();
+  function probePanel(id) {
+    const now = Date.now();
+    if (now - (lastProbe.get(id) || 0) < PROBE_GAP_MS) return;
+    lastProbe.set(id, now);
+    setTimeout(async () => {
+      if (!panels.has(id)) return;
+      try {
+        diag.fromProbe(id, await callFrame(id, { type: 'mla:probe', cfg: { input: svcOf(id).input || [] } }));
+      } catch {} // 아직 연결 전이거나 페이지가 바뀌는 중
+    }, 2500);
+  }
 
   // ---------- 상태 ----------
 
@@ -214,6 +231,7 @@
       try {
         const out = await callFrame(id, { type: 'mla:loggedOut', cfg: { loggedOut: svcOf(id).loggedOut || {} } });
         sendPanel(id, { login: out ? 'needs-login' : 'ready' });
+        if (!out) probePanel(id); // 로그인된 화면에서 입력창이 보이는지 살펴본다
       } catch {}
     }, LOGIN_CHECK_MS);
   }
@@ -336,6 +354,7 @@
       timeoutChoices: TIMEOUT_CHOICES,
       remoteSelectors: prefs.remoteSelectors,
       remote: remoteStatus,
+      diag: diag.all(SERVICES.map((s) => s.id)),
       services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
       rects,
     });
@@ -387,6 +406,7 @@
     sendSynthStatus: (patch) => emit('synth:status', patch),
     history,
     prefs: () => prefs,
+    diag,
     log,
   });
 
@@ -461,6 +481,12 @@
       if (!clean) throw new Error('형식이 올바르지 않습니다');
       remoteCore.apply(SERVICES, remoteBase, clean.overrides);
       store('remoteSelectors', data);
+      // 새 셀렉터를 받았으면 자가진단 기록을 지우고 다시 확인한다
+      if (clean.version !== remoteStatus.version) {
+        diag.reset();
+        lastProbe.clear();
+        for (const id of panels.keys()) probePanel(id);
+      }
       remoteStatus = {
         source: 'remote',
         version: clean.version,

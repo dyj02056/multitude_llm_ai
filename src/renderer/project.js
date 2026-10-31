@@ -110,6 +110,8 @@
     }
     const known = await loadState();
     await rescan();
+    // 지난번 "테스트 실행" 도중 앱이 꺼져 잠깐 써 둔 수정안이 남아 있었으면 메인이 원래대로 되돌렸다 (Windows 앱)
+    if (info.recovered) notice(`지난번 테스트 중 앱이 꺼져 남아 있던 임시 수정 ${info.recovered}개 파일을 원래대로 되돌렸습니다`);
     // 처음 연 프로젝트면 package.json · README 같은 핵심 파일을 골라 둔다.
     if (fresh || !known) {
       for (const e of project.scan.entries) if (e.depth === 0 && e.kind === 'file' && !e.excluded && KEY_FILES.includes(e.name)) project.checked.add(e.path);
@@ -1011,6 +1013,11 @@
       $('#patchModal').hidden = true;
       $('#patchApply').onclick = null;
       $('#patchAll').onclick = null;
+      $('#patchTest').onclick = null;
+      $('#patchTest').hidden = true;
+      $('#patchTestOut').hidden = true;
+      $('#patchTestOut').replaceChildren();
+      if (testRunning) host.devtest?.stop(); // 창을 닫으면 실행 중인 테스트도 멈춘다 (파일은 메인이 되돌린다)
       const back = modal.view === 'dialog';
       modal.view = null;
       modal.pending = false;
@@ -1049,11 +1056,25 @@
     return pre;
   }
 
-  /** 미리보기·적용 창: 파일마다 바뀌는 줄을 보여 주고, 체크한 파일만 씁니다. 실행에 영향을 주는 파일과 삭제는 기본으로 체크하지 않습니다. */
+  /** 덩어리 하나: 머리줄(@@ …)과 바뀐 줄 */
+  function hunkPre(h) {
+    const pre = document.createElement('pre');
+    pre.append(span('h', `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`));
+    for (const line of h.lines) pre.append(span(line.startsWith('+') ? 'a' : line.startsWith('-') ? 'd' : '', line || ' '));
+    return pre;
+  }
+
+  let testRunning = false;
+
+  /**
+   * 미리보기·적용 창: 파일마다 바뀌는 줄을 보여 주고, 체크한 파일만 씁니다. 실행에 영향을 주는 파일과 삭제는 기본으로 체크하지 않습니다.
+   * 수정하는 파일에 바뀐 곳(덩어리)이 둘 이상이면 덩어리마다 체크 상자가 붙어 골라 적용할 수 있습니다 (v0.12.0).
+   * Windows 앱에는 "테스트 실행"이 있습니다: 적용 전 · 체크한 수정안을 잠깐 쓴 후 npm test를 돌려 결과를 나란히 보여 줍니다.
+   */
   function openPreview(ai) {
     const ok = ai.plans.filter((x) => x.plan.ok);
-    modal.show(`${ai.name} 수정안 적용`, `${project.info.name} — 체크한 파일만 씁니다. 적용 전 원본은 "적용 기록"에서 되돌릴 수 있습니다.`);
-    const boxes = [];
+    modal.show(`${ai.name} 수정안 적용`, `${project.info.name} — 체크한 파일(덩어리)만 씁니다. 적용 전 원본은 "적용 기록"에서 파일 단위로 되돌릴 수 있습니다.`);
+    const items = []; // { box, plan, hunks: [{ index, box }] | null }
     $('#patchBody').replaceChildren(
       ...ok.map(({ plan }) => {
         const pf = document.createElement('div');
@@ -1063,7 +1084,8 @@
         // 저장만 해도 나중에 실행될 수 있는 파일(실행 영향)과 삭제는 기본으로 체크하지 않는다.
         const risk = PX.executionRisk(plan.path, plan.before, plan.after);
         const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !risk && plan.op !== 'delete' });
-        boxes.push({ box, plan });
+        const item = { box, plan, hunks: null };
+        items.push(item);
         head.append(box, span(`op ${plan.op}`, OP_TEXT[plan.op]), span('path', plan.path));
         if (risk) {
           const tag = span('op bad', `⚠ 실행 영향: ${risk}`);
@@ -1071,18 +1093,60 @@
           head.append(tag);
         }
         if (plan.op === 'delete') head.append(span('op delete', '파일을 지웁니다 — 직접 체크해야 적용'));
+        const hunks = plan.op === 'modify' && typeof plan.before === 'string' && typeof plan.after === 'string' ? PX.splitHunks(plan.before, plan.after) : [];
+        if (hunks.length > 1) head.append(span('op hunks', `덩어리 ${hunks.length}개`));
         head.append(span('add', `+${plan.add}`), span('del', `−${plan.del}`));
-        pf.append(head, diffPre(plan.preview));
+        pf.append(head);
+        if (hunks.length > 1) {
+          item.hunks = hunks.map((h) => {
+            const row = document.createElement('div');
+            row.className = 'pf-hunk';
+            const hl = document.createElement('label');
+            hl.className = 'pf-hunk-head';
+            const hb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: box.checked });
+            hl.append(hb, span('muted-label', `덩어리 ${h.index + 1} · ${h.oldStart}번째 줄 근처`));
+            row.append(hl, hunkPre(h));
+            pf.append(row);
+            // 덩어리를 하나라도 고르면 파일도 체크, 모두 빼면 파일도 해제
+            hb.addEventListener('change', () => {
+              box.checked = item.hunks.some((x) => x.box.checked);
+              box.indeterminate = box.checked && !item.hunks.every((x) => x.box.checked);
+            });
+            return { index: h.index, box: hb };
+          });
+          // 파일 체크 상자는 덩어리 전체를 켜고 끈다
+          box.addEventListener('change', () => {
+            box.indeterminate = false;
+            for (const x of item.hunks) x.box.checked = box.checked;
+          });
+        } else pf.append(diffPre(plan.preview));
         return pf;
       }),
     );
+
+    /** 체크한 파일 → 적용할 plan 목록 (덩어리 일부만 고른 파일은 그 덩어리만 반영한 after) */
+    const chosenPlans = () =>
+      items
+        .filter((it) => it.box.checked)
+        .map((it) => {
+          if (!it.hunks || it.hunks.every((x) => x.box.checked)) return it.plan;
+          const picked = it.hunks.filter((x) => x.box.checked).map((x) => x.index);
+          return { ...it.plan, after: PX.applyHunks(it.plan.before, it.plan.after, picked), partial: picked.length, src: it.plan };
+        });
+
     $('#patchApply').hidden = false;
     $('#patchAll').hidden = false;
-    $('#patchAll').onclick = () => boxes.forEach((b) => (b.box.checked = true));
+    $('#patchAll').onclick = () =>
+      items.forEach((it) => {
+        it.box.checked = true;
+        it.box.indeterminate = false;
+        it.hunks?.forEach((x) => (x.box.checked = true));
+      });
     $('#patchApply').textContent = '선택한 파일 적용';
     $('#patchApply').focus(); // Enter(또는 Ctrl+Enter)로 바로 적용
     $('#patchApply').onclick = async () => {
-      const chosen = boxes.filter((b) => b.box.checked).map((b) => b.plan);
+      if (testRunning) return ($('#patchStatus').textContent = '테스트가 끝난 뒤 적용하세요');
+      const chosen = chosenPlans();
       if (!chosen.length) return ($('#patchStatus').textContent = '적용할 파일을 고르세요');
       $('#patchApply').disabled = true;
       try {
@@ -1096,6 +1160,97 @@
         $('#patchApply').disabled = false;
       }
     };
+
+    // 테스트 실행 (Windows 앱 전용: host.devtest)
+    if (host.devtest) {
+      const btn = $('#patchTest');
+      btn.hidden = false;
+      btn.textContent = '테스트 실행';
+      btn.onclick = async () => {
+        if (testRunning) {
+          btn.disabled = true;
+          await host.devtest.stop();
+          return;
+        }
+        const chosen = chosenPlans();
+        if (!chosen.length) return ($('#patchStatus').textContent = '테스트할 파일을 고르세요');
+        testRunning = true;
+        btn.textContent = '테스트 중지';
+        $('#patchApply').disabled = true;
+        const out = $('#patchTestOut');
+        out.hidden = false;
+        out.replaceChildren(span('muted-label', '테스트 실행 중… 적용 전 → 수정안을 잠깐 쓴 후 순서로 두 번 실행하고, 끝나면 원래 파일로 되돌립니다'));
+        try {
+          const r = await host.devtest.trial(chosen.map((p) => ({ path: p.path, after: p.op === 'delete' ? null : p.after })));
+          renderTestResult(out, r);
+        } catch (err) {
+          renderTestResult(out, { ok: false, error: err.message });
+        } finally {
+          testRunning = false;
+          btn.disabled = false;
+          btn.textContent = '테스트 다시 실행';
+          $('#patchApply').disabled = false;
+        }
+      };
+    }
+  }
+
+  const fmtMs = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}분 ${Math.round((ms % 60000) / 1000)}초` : `${(ms / 1000).toFixed(1)}초`);
+
+  /** 테스트 결과: 적용 전 | 적용 후를 나란히 (상태 · 통과/실패 수 · 걸린 시간 · 출력) */
+  function renderTestResult(box, r) {
+    if (!r?.ok) {
+      box.replaceChildren(span(r?.cancelled ? 'muted-label' : 'test-err', r?.error || '테스트를 실행하지 못했습니다'));
+      return;
+    }
+    const col = (title, t) => {
+      const c = document.createElement('div');
+      c.className = 'test-col';
+      const head = document.createElement('div');
+      head.className = 'test-col-head';
+      head.append(span('', title));
+      if (!t) {
+        head.append(span('test-badge skip', '실행 안 함'));
+        c.append(head);
+        return c;
+      }
+      const [cls, label] = t.stopped
+        ? ['skip', '중지함']
+        : t.timedOut
+          ? ['bad', '시간 초과']
+          : t.error
+            ? ['bad', '실행 오류']
+            : t.ok
+              ? ['good', '통과']
+              : ['bad', `실패 (종료 코드 ${t.code})`];
+      head.append(span(`test-badge ${cls}`, label));
+      if (t.summary) head.append(span('muted-label', `통과 ${t.summary.pass} · 실패 ${t.summary.fail}`));
+      if (t.ms) head.append(span('muted-label', fmtMs(t.ms)));
+      c.append(head);
+      if (t.error) c.append(span('test-err', t.error));
+      if (t.restoreFailed?.length) c.append(span('test-err', `원래 파일로 되돌리지 못했습니다: ${t.restoreFailed.join(', ')}`));
+      const pre = document.createElement('pre');
+      pre.className = 'test-output';
+      pre.textContent = t.output || '(출력 없음)';
+      c.append(pre);
+      requestAnimationFrame(() => (pre.scrollTop = pre.scrollHeight)); // 요약이 있는 끝부분부터 보이게
+      return c;
+    };
+    const head = document.createElement('div');
+    head.className = 'test-head';
+    const verdict =
+      r.before?.ok && r.after && !r.after.ok
+        ? ['bad', '⚠ 수정안을 쓰면 테스트가 깨집니다']
+        : !r.before?.ok && r.after?.ok
+          ? ['good', '✓ 수정안이 실패하던 테스트를 고칩니다']
+          : r.after?.ok
+            ? ['good', '✓ 수정안을 써도 테스트가 통과합니다']
+            : ['skip', '적용 전후 모두 통과하지 못했습니다'];
+    head.append(span('muted-label', `npm test (${r.script})`), span(`test-badge ${verdict[0]}`, verdict[1]), span('muted-label', '파일은 원래대로 되돌렸습니다'));
+    const cols = document.createElement('div');
+    cols.className = 'test-cols';
+    cols.append(col('적용 전', r.before), col('적용 후 (체크한 수정안)', r.after));
+    box.replaceChildren(head, cols);
   }
 
   /** 적용: 쓰기 직전에 파일이 바뀌었으면 다시 계산한다. 원본은 적용 기록에 남긴다. { entry(적용 기록 항목, 못 썼으면 null), text } */
@@ -1107,7 +1262,9 @@
         let p = plan;
         const now = await currentText(plan.path);
         if (now !== plan.before) {
-          const change = ai.plans.find((x) => x.plan === plan).change;
+          // 덩어리 일부만 고른 파일은 다시 계산하면 고른 것이 사라지므로 적용하지 않는다
+          if (plan.partial) throw new Error('그사이 파일이 바뀌었습니다. 미리보기를 다시 열어 덩어리를 고르세요');
+          const change = ai.plans.find((x) => x.plan === (plan.src || plan)).change;
           p = PX.planChange(change, now);
           if (!p.ok) throw new Error(`그사이 파일이 바뀌어 적용할 수 없습니다 (${p.error})`);
         }

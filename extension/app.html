@@ -301,8 +301,10 @@
     <div class="modal-box">
       <div class="modal-head"><b id="patchTitle"></b><span id="patchNote" class="muted-label"></span></div>
       <div id="patchBody" class="modal-body"></div>
+      <div id="patchTestOut" class="test-out" hidden></div>
       <div class="modal-foot">
         <span id="patchStatus" class="muted-label"></span>
+        <button id="patchTest" hidden title="package.json의 test를 적용 전 · 체크한 수정안을 잠깐 쓴 후 두 번 실행하고 원래 파일로 되돌립니다 (Windows 앱)">테스트 실행</button>
         <button id="patchAll" title="실행 영향 파일과 삭제까지 모두 체크합니다">모두 선택</button>
         <button id="patchApply" class="primary" title="Ctrl+Enter">선택한 파일 적용</button>
         <button id="patchCancel">닫기</button>
@@ -337,6 +339,10 @@
         <button id="remoteRefresh">지금 확인</button>
       </div>
       <p class="muted small" id="remoteStatus"></p>
+      <h2>서비스 화면 상태</h2>
+      <p class="muted small">패널마다 앱이 입력창 · 보내기 버튼 · 답변 영역을 찾았는지입니다. 페이지가 열린 뒤와 질문을 보내고 답을 받을 때마다 갱신됩니다. ✕가 있으면 그 패널 머리줄에 <b>⚠ 화면이 바뀐 것 같음</b>이 뜹니다.</p>
+      <table id="diagTable" class="diag-table"></table>
+      <p class="muted small" id="diagHint"></p>
       <h2>단축키</h2>
       <p class="muted">서비스 패널 안에 커서가 있어도 동작합니다.</p>
       <table id="helpTable"></table>
@@ -392,6 +398,7 @@
   <script src="lib/shared/project-upload.js"></script>
   <script src="lib/shared/patch.js"></script>
   <script src="lib/shared/analysis.js"></script>
+  <script src="lib/shared/diag.js"></script>
   <script src="lib/shared/prompt-lib.js"></script>
   <script src="lib/shared/services.js"></script>
   <script src="lib/shared/layout.js"></script>

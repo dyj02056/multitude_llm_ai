@@ -32,6 +32,7 @@
    *   sendSynthStatus(patch): 종합 상태를 화면에 알린다
    *   history: { add, setAnswer, addSynth }  (add는 { question, targets, files(이름·크기·종류) })
    *   prefs(): { synthTarget, autoSynth }
+   *   diag: 셀렉터 자가진단 (shared/diag.js createDiag, 없어도 됨) — 보내기 · 답변 결과를 기록
    *   log(tag, ...args)
    */
   function createRounds(a) {
@@ -86,6 +87,7 @@
       const attach = res.ok ? attachResult(sendFiles, skipped, res) : undefined;
       a.log('send', id, JSON.stringify(res), attach ? JSON.stringify(attach) : '');
       res = { ...res, attach };
+      a.diag?.fromSend(id, res);
       a.sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error, attach });
       if (!res.ok) {
         onFinish?.('error');
@@ -97,7 +99,10 @@
           (answer, info) => {
             a.log('answer', id, answer, info ? JSON.stringify(info) : '');
             a.sendPanel(id, { answer, ...info });
-            if (FINISHED.has(answer)) onFinish?.(answer);
+            if (FINISHED.has(answer)) {
+              a.diag?.fromAnswer(id, answer);
+              onFinish?.(answer);
+            }
           },
         );
       }

@@ -241,5 +241,11 @@
     return false;
   }
 
-  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut };
+  /** 셀렉터 자가진단용 살펴보기: 입력창이 보이는지. cfg: { input } → { input: boolean } */
+  function pageProbe(cfg) {
+    const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    return { input: cfg.input.some((s) => [...document.querySelectorAll(s)].some(visible)) };
+  }
+
+  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe };
 });

@@ -42,7 +42,8 @@ async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
   if (offHost()) return OFF_HOST;
 
   const focus = await run(wc, pageFocusInput, cfg);
-  if (!focus.ok) return { ok: false, error: focus.error || '입력창에 포커스를 줄 수 없습니다' };
+  // code 'no-input': 입력창을 못 찾음 — 셀렉터 자가진단(shared/diag.js)이 "화면이 바뀐 것 같음"으로 본다
+  if (!focus.ok) return { ok: false, error: focus.error || '입력창에 포커스를 줄 수 없습니다', code: focus.error ? 'no-input' : undefined };
 
   let attach;
   if (files.length) {
