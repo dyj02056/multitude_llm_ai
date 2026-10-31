@@ -13,7 +13,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services) {
   'use strict';
 
-  const { buildSynthPrompt } = synth || require('./synth');
+  const { buildSynthPrompt, analysisNames } = synth || require('./synth');
   const { uploadOf, fileKind } = services || require('./services');
   const FINISHED = new Set(['done', 'timeout', 'no-answer']);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -173,7 +173,10 @@
       );
     }
 
-    /** 종합 요청. judgeId가 없으면 설정된 종합 담당 AI를 쓴다. mode 'code'는 코드 수정안 합치기. */
+    /**
+     * 종합 요청. judgeId가 없으면 설정된 종합 담당 AI를 쓴다. mode 'code'는 코드 수정안 합치기,
+     * 'analysis'는 답변 일치·이견 분석 (끝나면 round.analysis에 두고 기록에 mode: 'analysis'로 저장, 상태 'done'으로 알림).
+     */
     async function runSynth(judgeId, cause = 'manual', mode = 'text') {
       const judge = judgeId || a.prefs().synthTarget;
       if (!round) return fail('먼저 공통 입력창으로 질문을 보내 주세요');
@@ -190,21 +193,25 @@
       }
       if (!answers.length) return fail('종합할 다른 AI의 답변이 없습니다');
 
-      const text = buildSynthPrompt({
-        question: round.question,
-        answers,
-        judgeAnswered: round.targets.includes(judge),
-        mode,
-      });
       const judgeName = nameOf(judge);
-      a.sendSynthStatus({ state: 'sending', judge: judgeName, count: answers.length, cause });
+      const judgeAnswered = round.targets.includes(judge);
+      const text = buildSynthPrompt({ question: round.question, answers, judgeAnswered, mode, judgeName });
+      const names = mode === 'analysis' ? analysisNames({ answers, judgeAnswered, judgeName }) : undefined;
+      a.sendSynthStatus({ state: 'sending', judge: judgeName, count: answers.length, cause, mode });
       const historyId = round.historyId;
+      const r = round;
       const res = await sendToPanel(judge, text, async (state) => {
         if (state !== 'done') return;
-        a.history.addSynth(historyId, { judge: judgeName, at: Date.now(), ...(await readAnswer(judge)) });
+        const got = await readAnswer(judge);
+        const entry = { judge: judgeName, at: Date.now(), ...got, ...(mode === 'analysis' ? { mode, names } : {}) };
+        a.history.addSynth(historyId, entry);
+        if (mode === 'analysis') {
+          r.analysis = entry;
+          a.sendSynthStatus({ state: 'done', judge: judgeName, count: answers.length, cause, mode });
+        }
       });
       if (!res.ok) return fail(`${judgeName}에 보내지 못했습니다: ${res.error}`);
-      a.sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause });
+      a.sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause, mode });
       return { ok: true, judge: judgeName, count: answers.length };
 
       function fail(error) {
@@ -231,7 +238,7 @@
         if (!a.hasPanel(svc.id)) continue;
         list.push({ id: svc.id, name: svc.name, color: svc.color, ...(await readAnswer(svc.id)) });
       }
-      return { question: round?.question || '', answers: list };
+      return { question: round?.question || '', answers: list, analysis: round?.analysis || null };
     }
 
     /** 패널 하나의 최신 답변 (답변이 끝날 때마다 그 패널만 읽으려고 — 열린 패널을 다 읽는 answers()보다 가볍다) */

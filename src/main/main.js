@@ -593,7 +593,7 @@ ipcMain.handle('prompt:send', async (_e, { text, targets, files, opts }) => {
 });
 
 ipcMain.handle('synth:run', (_e, judgeId, kind) =>
-  rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', kind === 'code' ? 'code' : 'text'),
+  rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', ['code', 'analysis'].includes(kind) ? kind : 'text'),
 );
 
 /** 화면이 넘긴 보내기 옵션 검사: { question, textById, prefixById, fallbackText, plainIds, userFileCount } */

@@ -435,6 +435,85 @@ body[data-view="compare"] #panels { display: none !important; }
 }
 .compare-body.empty { color: var(--muted); font-style: italic; }
 
+/* ---------- 답변 비교: 탭 · 차이 강조 · 분석 (v0.11.0) ----------
+   [쉽게 말하면] 비교 화면 왼쪽 위 "답변 | 분석" 탭, 차이 강조(기준과 다른 문장에 형광 표시),
+   분석 탭의 이견 표 · 공통 의견 · 근거 부족 · 최종 답변 카드입니다. */
+#compare[data-ctab="answers"] .only-ctab-analysis,
+#compare[data-ctab="analysis"] .only-ctab-answers { display: none !important; }
+#compareTabs { flex: none; }
+#compareTabs button { padding: 2px 12px; }
+.diff-tools { display: inline-flex; gap: 6px; align-items: center; }
+#diffToggle.active { border-color: #2dd4bf; color: var(--text); box-shadow: 0 0 12px -2px rgba(45, 212, 191, .45); }
+#diffBase {
+  background: var(--field); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 3px 6px; font-size: 12px;
+}
+.diff-badge {
+  font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  background: rgba(45, 212, 191, .14); border: 1px solid rgba(45, 212, 191, .4); color: #9ff3e4;
+}
+.compare-body mark.diff-add {
+  background: rgba(250, 204, 21, .22); color: inherit; border-radius: 3px;
+  box-shadow: inset 0 -1px 0 rgba(250, 204, 21, .55);
+}
+.compare-col.jump-flash { animation: jump-flash 1.4s var(--ease) 1; }
+@keyframes jump-flash {
+  0%, 100% { box-shadow: var(--shadow); }
+  25% { box-shadow: var(--shadow), 0 0 0 2px var(--svc), 0 0 30px -4px var(--svc); }
+}
+
+.analysis-view { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.analysis-empty {
+  margin: auto; max-width: 560px; display: flex; flex-direction: column; gap: 8px; text-align: center;
+  padding: 26px; border-radius: 16px; background: var(--panel); border: 1px dashed var(--border);
+}
+.analysis-empty-title { font-weight: 700; font-size: 15px; }
+.analysis-note {
+  align-self: flex-start; font-size: 12.5px; padding: 6px 10px; border-radius: var(--r-sm);
+  background: rgba(250, 204, 21, .10); border: 1px solid rgba(250, 204, 21, .35); color: #fde68a;
+}
+.analysis-note.pending { background: rgba(139, 92, 246, .14); border-color: rgba(139, 92, 246, .45); color: #ddd6fe; }
+.analysis { display: flex; flex-direction: column; gap: 10px; }
+#history .analysis { flex: none; max-height: 45%; overflow: auto; }
+.analysis-head { display: flex; align-items: center; gap: 8px; }
+.analysis-head button { padding: 1px 9px; font-size: 12px; }
+.analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.analysis-sec {
+  min-width: 0; padding: 10px 14px 12px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+  animation: bubble-in .45s var(--ease) both;
+}
+.analysis-sec.an-disagree, .analysis-sec.an-final { grid-column: 1 / -1; }
+.analysis-sec h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13.5px; }
+.analysis-sec h3 button { margin-left: auto; padding: 1px 9px; font-size: 12px; }
+.an-count {
+  font-size: 11px; min-width: 20px; text-align: center; padding: 0 6px; border-radius: 999px;
+  background: rgba(139, 92, 246, .22); border: 1px solid rgba(139, 92, 246, .45); font-variant-numeric: tabular-nums;
+}
+.analysis-sec ul { margin: 0; padding-left: 18px; line-height: 1.65; font-size: 13.5px; user-select: text; }
+.an-agree { color: #86efac; font-size: 13.5px; }
+.an-table-wrap { overflow-x: auto; }
+.an-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.55; user-select: text; }
+.an-table th, .an-table td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--border); }
+.an-table th { font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.an-table .an-topic { font-weight: 600; min-width: 140px; }
+.an-table .an-verdict { color: #9ff3e4; }
+.an-table .an-blank { color: var(--muted); }
+.an-table td.an-jump { cursor: pointer; border-radius: 6px; }
+.an-table td.an-jump:hover { background: var(--field-hover); }
+.an-chip {
+  padding: 0 8px; font-size: 12px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--svc) 55%, transparent);
+  background: color-mix(in srgb, var(--svc) 16%, transparent); color: var(--text);
+}
+.an-chip:disabled { cursor: default; opacity: .85; transform: none; box-shadow: none; }
+.analysis-raw { white-space: pre-wrap; word-break: break-word; line-height: 1.7; font-size: 13.5px; user-select: text; }
+.analysis > .analysis-raw { padding: 12px 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); }
+@media (max-width: 1100px) { .analysis-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) {
+  .compare-col.jump-flash, .analysis-sec { animation: none; }
+}
+
 /* ---------- 질문 템플릿 ---------- */
 .tpl { display: flex; flex-direction: column; gap: 4px; width: 150px; flex: none; }
 #tplSelect {

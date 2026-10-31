@@ -112,14 +112,24 @@
   </aside>
 
   <!-- 답변 비교 화면 -->
-  <section id="compare" class="only-compare">
+  <section id="compare" class="only-compare" data-ctab="answers">
     <div class="compare-head">
+      <div id="compareTabs" class="seg" role="tablist" aria-label="답변 비교 보기">
+        <button data-ctab="answers" role="tab" title="AI마다 최신 답변을 나란히 봅니다">답변</button>
+        <button data-ctab="analysis" role="tab" title="판정 AI가 답변의 공통 의견 · 이견 · 근거 부족 · 최종 답변을 표로 정리합니다">분석</button>
+      </div>
       <span class="muted-label">질문</span>
       <span id="compareQuestion" class="compare-question"></span>
+      <span class="diff-tools only-ctab-answers">
+        <button id="diffToggle" aria-pressed="false" title="기준 답변과 다른 문장만 강조합니다">차이 강조</button>
+        <select id="diffBase" aria-label="기준 답변" title="이 답변과 비교합니다" hidden></select>
+      </span>
+      <button id="analysisRun" class="only-ctab-analysis" title="종합 담당 AI에게 답변 일치 · 이견 분석을 요청합니다">분석 요청</button>
       <button id="compareRefresh" title="답변을 다시 읽어 옵니다">새로고침</button>
       <button id="compareClose">패널로 돌아가기</button>
     </div>
-    <div id="compareCols" class="compare-cols"></div>
+    <div id="compareCols" class="compare-cols only-ctab-answers"></div>
+    <div id="analysisView" class="analysis-view only-ctab-analysis"></div>
   </section>
 
   <!-- 변경 제안 화면: AI별 코드 수정안 비교 (project.js) -->
@@ -378,6 +388,7 @@
   <script src="../shared/project-context.js"></script>
   <script src="../shared/project-upload.js"></script>
   <script src="../shared/patch.js"></script>
+  <script src="../shared/analysis.js"></script>
   <script src="../shared/prompt-lib.js"></script>
   <script src="templates.js"></script>
   <script src="renderer.js"></script>
