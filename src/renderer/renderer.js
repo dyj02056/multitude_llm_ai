@@ -360,16 +360,266 @@ function renderTargets() {
 
 // ---------- 답변 비교 ----------
 
-/** 답변 비교 화면: 마지막 질문과 각 AI의 최신 답변을 칸마다 나란히 보여 줍니다. */
+// 답변 비교 화면에는 탭이 두 개 있습니다.
+//   답변: AI마다 최신 답변을 나란히 (차이 강조를 켜면 기준 답변과 다른 문장만 표시)
+//   분석: 판정 AI(종합 담당)가 공통 의견 · 이견 표 · 근거 부족 · 최종 답변으로 정리한 결과 (shared/analysis.js가 읽음)
+const AN = MLA.analysis;
+const COMPARE_PREFS_KEY = 'mla-compare-view';
+const compareView = { tab: 'answers', diff: false, base: null, answers: [], analysis: null, pending: null };
+try {
+  const saved = JSON.parse(localStorage.getItem(COMPARE_PREFS_KEY) || '{}');
+  if (saved.tab === 'analysis') compareView.tab = 'analysis';
+  compareView.diff = saved.diff === true;
+} catch {}
+const saveCompareView = () => {
+  try {
+    localStorage.setItem(COMPARE_PREFS_KEY, JSON.stringify({ tab: compareView.tab, diff: compareView.diff }));
+  } catch {}
+};
+
+/** 답변 비교 화면: 마지막 질문과 각 AI의 최신 답변(또는 분석 결과)을 보여 줍니다. */
 async function renderCompare() {
-  const { question, answers } = await host.getAnswers();
+  const { question, answers, analysis } = await host.getAnswers();
   $('#compareQuestion').textContent = question || '(아직 공통 입력창으로 보낸 질문이 없습니다)';
-  const cols = $('#compareCols');
-  cols.style.gridTemplateColumns = `repeat(${Math.max(answers.length, 1)}, minmax(0, 1fr))`;
-  cols.replaceChildren(...answers.map(answerColumn));
+  compareView.answers = answers;
+  compareView.analysis = analysis || null;
+  compareView.question = question;
+  renderCompareTabs();
+  renderCompareAnswers();
+  renderCompareAnalysis();
 }
 
-/** 답변 한 칸 (비교 화면·기록 화면 공용). a: { name, color, text, md?, note?, emptyText? } */
+function renderCompareTabs() {
+  $('#compare').dataset.ctab = compareView.tab;
+  for (const b of document.querySelectorAll('#compareTabs [data-ctab]')) {
+    const on = b.dataset.ctab === compareView.tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  }
+  const n = compareView.analysis ? AN.parseAnalysis(compareView.analysis.md || compareView.analysis.text, { names: compareView.analysis.names }) : null;
+  const tab = document.querySelector('#compareTabs [data-ctab="analysis"]');
+  tab.textContent = n?.ok ? `분석 · 이견 ${n.disagreements.length}` : '분석';
+}
+
+/** 답변 탭: 칸마다 답변. 차이 강조를 켜면 기준 답변(diffBase)과 다른 문장을 표시합니다. */
+function renderCompareAnswers() {
+  const answers = compareView.answers;
+  const withText = answers.filter((a) => a.text);
+  if (!withText.some((a) => a.id === compareView.base)) compareView.base = withText[0]?.id || null;
+  const select = $('#diffBase');
+  select.replaceChildren(
+    ...withText.map((a) => {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = `기준: ${a.name}`;
+      return opt;
+    }),
+  );
+  select.value = compareView.base || '';
+  select.hidden = !compareView.diff || withText.length < 2;
+  const toggle = $('#diffToggle');
+  toggle.classList.toggle('active', compareView.diff);
+  toggle.setAttribute('aria-pressed', String(compareView.diff));
+  toggle.disabled = withText.length < 2;
+
+  const base = compareView.diff && withText.length >= 2 ? answers.find((a) => a.id === compareView.base) : null;
+  const cols = $('#compareCols');
+  cols.style.gridTemplateColumns = `repeat(${Math.max(answers.length, 1)}, minmax(0, 1fr))`;
+  cols.replaceChildren(
+    ...answers.map((a) => {
+      if (!base || !a.text) return answerColumn(a);
+      if (a.id === base.id) return answerColumn({ ...a, badge: '기준' });
+      const marks = AN.diffMarks(base.text, a.text);
+      return answerColumn({ ...a, marks, badge: `다름 ${Math.round(AN.changedRatio(marks) * 100)}%` });
+    }),
+  );
+}
+
+/** 분석 탭: 분석 결과(없으면 안내와 분석 요청 버튼) */
+function renderCompareAnalysis() {
+  const box = $('#analysisView');
+  const run = $('#analysisRun');
+  run.disabled = !!compareView.pending || compareView.answers.filter((a) => a.text).length < 2;
+  run.textContent = compareView.analysis ? '다시 분석' : '분석 요청';
+  const pending = compareView.pending ? [span('analysis-note pending', `${compareView.pending}이(가) 분석하는 중입니다… 끝나면 여기에 표로 나옵니다`)] : [];
+  if (!compareView.analysis) {
+    const empty = document.createElement('div');
+    empty.className = 'analysis-empty';
+    const judge = state.services.find((s) => s.id === $('#synthTarget').value)?.name || '종합 담당 AI';
+    empty.append(
+      span('analysis-empty-title', '아직 분석 결과가 없습니다'),
+      span('muted-label', `분석 요청을 누르면 ${judge}에게 답변들의 공통 의견 · 이견 · 근거 부족 · 최종 답변을 정해진 형식으로 정리해 달라고 보냅니다. 판정 AI는 입력창 아래 종합 담당에서 고릅니다.`),
+    );
+    return box.replaceChildren(...pending, empty);
+  }
+  box.replaceChildren(...pending, analysisBlock(compareView.analysis, { onJump: jumpToAnswer }));
+}
+
+/** 이견 표에서 AI 이름을 누르면: 답변 탭으로 가서 그 AI 칸으로 이동하고 잠깐 빛나게 */
+function jumpToAnswer(name) {
+  const svc = state.services.find((s) => s.name === name);
+  if (!svc) return;
+  compareView.tab = 'answers';
+  saveCompareView();
+  renderCompareTabs();
+  const idx = compareView.answers.findIndex((a) => a.id === svc.id);
+  const col = $('#compareCols').children[idx];
+  if (!col) return;
+  col.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  col.classList.remove('jump-flash');
+  void col.offsetWidth; // 애니메이션을 다시 시작하려고
+  col.classList.add('jump-flash');
+}
+
+/**
+ * 분석 결과 하나를 그립니다 (비교 화면 · 기록 화면 공용).
+ * entry: { judge, at, md, text, names }, onJump(name): 이견 · 근거 부족의 AI 이름을 눌렀을 때
+ */
+function analysisBlock(entry, { onJump } = {}) {
+  const wrap = document.createElement('div');
+  wrap.className = 'analysis';
+  const raw = entry.md || entry.text || '';
+  const names = entry.names || [];
+  const res = AN.parseAnalysis(raw, { names });
+
+  const head = document.createElement('div');
+  head.className = 'analysis-head';
+  const meta = span('muted-label', `판정 ${entry.judge} · ${fmtTime(entry.at)}`);
+  head.append(
+    meta,
+    button('분석 복사', '분석 답변을 Markdown 그대로 복사', async () => {
+      await host.copyText(raw);
+      flash(meta, '복사했습니다');
+    }),
+  );
+  wrap.append(head);
+
+  if (!res.ok) {
+    const note = span('analysis-note', `정해진 형식이 아니라서 글 그대로 보여 줍니다 (${res.reason})`);
+    const body = document.createElement('div');
+    body.className = 'analysis-raw';
+    body.textContent = raw || '(빈 답변)';
+    wrap.append(note, body);
+    return wrap;
+  }
+
+  const colorOf = (name) => state.services.find((s) => s.name === name)?.color || 'var(--muted)';
+  const nameChip = (name) => {
+    const b = button(name, `${name} 답변으로 이동`, () => onJump?.(name));
+    b.className = 'an-chip';
+    b.style.setProperty('--svc', colorOf(name));
+    b.disabled = !onJump || !state.services.some((s) => s.name === name);
+    return b;
+  };
+  const section = (title, count) => {
+    const sec = document.createElement('section');
+    sec.className = 'analysis-sec';
+    const h = document.createElement('h3');
+    h.append(span('', title));
+    if (count !== undefined) h.append(span('an-count', String(count)));
+    sec.append(h);
+    return sec;
+  };
+  const list = (items, render) => {
+    const ul = document.createElement('ul');
+    for (const it of items) {
+      const li = document.createElement('li');
+      render(li, it);
+      ul.append(li);
+    }
+    return ul;
+  };
+
+  // 공통 의견
+  const common = section('공통 의견', res.common.length);
+  common.append(res.common.length ? list(res.common, (li, t) => (li.textContent = t)) : span('muted-label', '정리된 공통 의견이 없습니다'));
+
+  // 이견 표: 쟁점 | AI별 입장 | 판단
+  const dis = section('이견', res.disagreements.length);
+  dis.classList.add('an-disagree');
+  if (!res.disagreements.length) dis.append(span('an-agree', '이견이 없습니다 — 답변들이 같은 방향입니다'));
+  else {
+    const cols = [...new Set([...names, ...res.disagreements.flatMap((d) => d.positions.map((p) => p.name))])];
+    const hasText = res.disagreements.some((d) => d.positions.some((p) => p.text));
+    const table = document.createElement('table');
+    table.className = 'an-table';
+    const tr = document.createElement('tr');
+    for (const label of ['쟁점', ...(hasText ? cols : ['언급한 AI']), '판단']) {
+      const th = document.createElement('th');
+      if (hasText && cols.includes(label)) th.append(nameChip(label));
+      else th.textContent = label;
+      tr.append(th);
+    }
+    const thead = document.createElement('thead');
+    thead.append(tr);
+    const tbody = document.createElement('tbody');
+    for (const d of res.disagreements) {
+      const row = document.createElement('tr');
+      const td = (text, cls) => {
+        const c = document.createElement('td');
+        if (cls) c.className = cls;
+        c.textContent = text;
+        return c;
+      };
+      row.append(td(d.topic, 'an-topic'));
+      if (hasText) {
+        for (const name of cols) {
+          const p = d.positions.find((x) => x.name === name);
+          const c = td(p?.text && p.text !== '-' ? p.text : '—', p?.text && p.text !== '-' ? '' : 'an-blank');
+          if (p && onJump && state.services.some((s) => s.name === name)) {
+            c.classList.add('an-jump');
+            c.title = `${name} 답변으로 이동`;
+            c.addEventListener('click', () => onJump(name));
+          }
+          row.append(c);
+        }
+      } else {
+        const c = document.createElement('td');
+        c.append(...d.positions.map((p) => nameChip(p.name)));
+        row.append(c);
+      }
+      row.append(td(d.verdict || '—', d.verdict ? 'an-verdict' : 'an-blank'));
+      tbody.append(row);
+    }
+    table.append(thead, tbody);
+    const scroller = document.createElement('div');
+    scroller.className = 'an-table-wrap';
+    scroller.append(table);
+    dis.append(scroller);
+  }
+
+  // 근거 부족
+  const weak = section('근거 부족', res.unsupported.length);
+  weak.append(
+    res.unsupported.length
+      ? list(res.unsupported, (li, u) => {
+          if (u.name) li.append(nameChip(u.name), ' ');
+          li.append(u.text);
+        })
+      : span('muted-label', '근거가 부족하다고 짚은 내용이 없습니다'),
+  );
+
+  // 최종 답변
+  const fin = section('최종 답변');
+  fin.classList.add('an-final');
+  const finBody = document.createElement('div');
+  finBody.className = 'analysis-raw';
+  finBody.textContent = res.final;
+  const copyFinal = button('복사', '최종 답변 복사', async () => {
+    await host.copyText(res.final);
+    flash(meta, '최종 답변을 복사했습니다');
+  });
+  fin.querySelector('h3').append(copyFinal);
+  fin.append(finBody);
+
+  const grid = document.createElement('div');
+  grid.className = 'analysis-grid';
+  grid.append(dis, common, weak, fin);
+  wrap.append(grid);
+  return wrap;
+}
+
+/** 답변 한 칸 (비교 화면·기록 화면 공용). a: { name, color, text, md?, note?, emptyText?, marks?, badge? } */
 function answerColumn(a) {
   const col = document.createElement('article');
   col.className = 'compare-col';
@@ -382,14 +632,53 @@ function answerColumn(a) {
     flash(count, '복사했습니다');
   });
   copy.disabled = !a.text;
-  head.append(span('dot ready'), span('name', a.name), count, copy);
+  head.append(span('dot ready'), span('name', a.name));
+  if (a.badge) head.append(span('diff-badge', a.badge));
+  head.append(count, copy);
   const body = document.createElement('div');
   body.className = 'compare-body';
-  body.textContent = a.text || a.emptyText || '이 패널에는 아직 답변이 없습니다.';
+  if (a.marks) {
+    // 차이 강조: 기준 답변에 없는 문장만 <mark>로 표시 (글자는 textContent로만 넣는다)
+    body.classList.add('diffing');
+    for (const m of a.marks) {
+      if (!m.changed) body.append(document.createTextNode(m.text));
+      else {
+        const mark = document.createElement('mark');
+        mark.className = 'diff-add';
+        mark.textContent = m.text;
+        body.append(mark);
+      }
+    }
+  } else body.textContent = a.text || a.emptyText || '이 패널에는 아직 답변이 없습니다.';
   body.classList.toggle('empty', !a.text);
   col.append(head, body);
   return col;
 }
+
+$('#compareTabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-ctab]')?.dataset.ctab;
+  if (!tab || tab === compareView.tab) return;
+  compareView.tab = tab;
+  saveCompareView();
+  renderCompareTabs();
+});
+$('#diffToggle').addEventListener('click', () => {
+  compareView.diff = !compareView.diff;
+  saveCompareView();
+  renderCompareAnswers();
+});
+$('#diffBase').addEventListener('change', (e) => {
+  compareView.base = e.target.value;
+  renderCompareAnswers();
+});
+$('#analysisRun').addEventListener('click', async () => {
+  $('#analysisRun').disabled = true;
+  const r = await host.runSynth($('#synthTarget').value || state.synthTarget, 'analysis');
+  if (!r?.ok) {
+    renderCompareAnalysis();
+    $('#analysisView').prepend(span('analysis-note', r?.error || '분석을 요청하지 못했습니다'));
+  }
+});
 
 $('#compareBtn').addEventListener('click', () => host.setView(state.chatView === 'compare' ? 'panels' : 'compare'));
 $('#changesBtn').addEventListener('click', () => host.setView(state.chatView === 'changes' ? 'panels' : 'changes'));
@@ -424,7 +713,7 @@ async function renderHistoryList() {
       row.classList.toggle('active', it.id === historySelected);
       const meta =
         `${fmtTime(it.at)} · 답변 ${it.answered}/${it.targets}` +
-        `${it.files ? ` · 첨부 ${it.files}` : ''}${it.synth ? ` · 종합 ${it.synth}` : ''}`;
+        `${it.files ? ` · 첨부 ${it.files}` : ''}${it.synth ? ` · 종합 ${it.synth}` : ''}${it.analysis ? ` · 분석 ${it.analysis}` : ''}`;
       row.append(span('history-q', it.question || NO_TEXT), span('history-meta', meta));
       row.addEventListener('click', () => {
         historySelected = it.id;
@@ -448,7 +737,7 @@ function recordToMarkdown(rec) {
     const a = rec.answers[id];
     if (a?.text) parts.push('', `## ${a.name}`, '', a.md || a.text);
   }
-  for (const sy of rec.synth) parts.push('', `## 종합 (${sy.judge})`, '', sy.md || sy.text);
+  for (const sy of rec.synth) parts.push('', `## ${sy.mode === 'analysis' ? '분석' : '종합'} (${sy.judge})`, '', sy.md || sy.text);
   return parts.join('\n');
 }
 
@@ -498,10 +787,24 @@ async function renderHistoryDetail() {
       emptyText: a ? '저장된 답변이 없습니다.' : '답변을 기다리는 중이거나, 앱이 닫혀 저장되지 않았습니다.',
     };
   });
-  for (const sy of rec.synth) columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text, md: sy.md });
+  for (const sy of rec.synth) {
+    if (sy.mode !== 'analysis') columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text, md: sy.md });
+  }
   cols.style.gridTemplateColumns = `repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))`;
   cols.replaceChildren(...columns.map(answerColumn));
-  box.replaceChildren(head, question, cols);
+  // 분석 결과(최신 것)는 답변 칸 위에 표로. AI 이름을 누르면 그 답변 칸으로 이동
+  const analyses = rec.synth.filter((sy) => sy.mode === 'analysis');
+  const jump = (name) => {
+    const idx = columns.findIndex((c) => c.name === name);
+    const col = cols.children[idx];
+    if (!col) return;
+    col.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    col.classList.remove('jump-flash');
+    void col.offsetWidth;
+    col.classList.add('jump-flash');
+  };
+  const extra = analyses.length ? [analysisBlock(analyses[analyses.length - 1], { onJump: jump })] : [];
+  box.replaceChildren(head, question, ...extra, cols);
 }
 
 let searchTimer = null;
@@ -611,14 +914,24 @@ $('#autoSynth').addEventListener('change', (e) => host.setSynth({ auto: e.target
 $('#synthBtn').addEventListener('click', () => host.runSynth($('#synthTarget').value));
 
 // 종합 요청 진행 상황(보내는 중·보냄·실패)을 입력창 아래 안내 글로 보여 줍니다.
-host.on('synth:status', ({ state: st, judge, count, error, cause }) => {
+host.on('synth:status', ({ state: st, judge, count, error, cause, mode }) => {
   const prefix = cause === 'auto' ? '자동 종합: ' : '';
+  const what = mode === 'analysis' ? '일치 · 이견 분석' : '종합';
   $('#sendHint').textContent =
     st === 'error'
       ? `${prefix}${error}`
       : st === 'sending'
-        ? `${prefix}${judge}에게 답변 ${count}개 종합을 요청하는 중…`
-        : `${prefix}${judge}에게 답변 ${count}개 종합을 요청했습니다`;
+        ? `${prefix}${judge}에게 답변 ${count}개 ${what}을 요청하는 중…`
+        : st === 'done'
+          ? `${judge}의 ${what}이 끝났습니다${mode === 'analysis' ? ' — 답변 비교 › 분석 탭에서 봅니다' : ''}`
+          : `${prefix}${judge}에게 답변 ${count}개 ${what}을 요청했습니다`;
+  // 분석 진행 표시: 보내는 중·기다리는 중이면 분석 탭에 안내, 끝나거나 실패하면 지움
+  if (mode === 'analysis' && (st === 'sending' || st === 'sent')) compareView.pending = judge;
+  else if (st === 'done' || st === 'error') compareView.pending = null;
+  if (state?.chatView === 'compare') {
+    if (st === 'done' && mode === 'analysis') renderCompare(); // 끝나면 결과를 바로 그린다
+    else renderCompareAnalysis();
+  }
 });
 
 // ---------- 질문 템플릿 ----------

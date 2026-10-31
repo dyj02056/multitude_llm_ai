@@ -584,7 +584,7 @@
     copyText: (text) => typeof text === 'string' && copyText(text),
     shortcuts: async () => shortcutList({ browser: true }),
     runSynth: (judgeId, kind) =>
-      rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', kind === 'code' ? 'code' : 'text'),
+      rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', ['code', 'analysis'].includes(kind) ? kind : 'text'),
     setSynth: ({ target, auto }) => {
       if (typeof target === 'string' && SERVICES.some((s) => s.id === target)) prefs.synthTarget = target;
       if (typeof auto === 'boolean') prefs.autoSynth = auto;

@@ -1,7 +1,7 @@
 // 질문·답변 기록. 최근 것부터 담는다. 저장 방법(파일 / chrome.storage)은 쓰는 쪽이 save로 넘긴다.
 // 기록 하나 = 공통 입력창으로 보낸 질문 한 번(라운드):
 //   { id, at, question, targets: [id], files: [{ name, size, type }], answers: { [svcId]: { name, state, text, md } },
-//     synth: [{ judge, at, text, md }] }   (첨부 파일은 이름·크기·종류만 남기고 내용은 저장하지 않는다)
+//     synth: [{ judge, at, text, md, mode?: 'analysis', names? }] }  (mode 'analysis' = 답변 일치·이견 분석, names = 비교한 AI 이름)   (첨부 파일은 이름·크기·종류만 남기고 내용은 저장하지 않는다)
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.historyCore)이 같이 쓴다.
 //
 // [쉽게 말하면] 질문·답변 기록장(최근 500개)을 다루는 공통 부품입니다: 새 기록 추가, 답변 채우기, 검색, 지우기.
@@ -77,7 +77,8 @@
         question: r.question.slice(0, 200),
         answered: Object.values(r.answers).filter((a) => a.text).length,
         targets: r.targets.length,
-        synth: r.synth.length,
+        synth: r.synth.filter((s) => s.mode !== 'analysis').length,
+        analysis: r.synth.filter((s) => s.mode === 'analysis').length,
         files: (r.files || []).length,
       }));
     }
