@@ -15,7 +15,7 @@
 //   - 각 iframe 안의 content.js와 메시지를 주고받아 입력·보내기·답변 읽기를 시킴
 // 덕분에 화면 코드(renderer.js 등)는 Windows 앱과 확장에서 똑같은 파일을 씁니다.
 (() => {
-  const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, serviceForHost, uploadOf } =
+  const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, serviceForHost, uploadOf, fileBytesOf } =
     MLA.services;
   const { watchAnswer } = MLA.watch;
   const { createRounds } = MLA.rounds;
@@ -336,7 +336,7 @@
       timeoutChoices: TIMEOUT_CHOICES,
       remoteSelectors: prefs.remoteSelectors,
       remote: remoteStatus,
-      services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept })),
+      services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
       rects,
     });
   }
@@ -453,7 +453,8 @@
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch(remoteCore.DEFAULT_URL, { cache: 'no-store', signal: ctrl.signal });
+      // 리다이렉트는 따라가지 않는다 (정해 둔 주소의 파일만 받는다)
+      const res = await fetch(remoteCore.DEFAULT_URL, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const clean = remoteCore.sanitize(data, SERVICES);

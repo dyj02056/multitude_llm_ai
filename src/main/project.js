@@ -115,14 +115,32 @@ function refuseGitInternal(rel) {
   if (isGitInternal(rel)) throw new Error(`git 내부 파일은 바꿀 수 없습니다: ${rel}`);
 }
 
-/** 파일 쓰기 (없으면 새로 만들고, 필요한 상위 폴더도 만듦). 쓰기 전후로 프로젝트 안쪽인지 다시 확인합니다. */
+/**
+ * 쓰기·지우기 바로 직전 검사: 상위 폴더의 실제 위치가 프로젝트 안인지, 대상이 바로가기(링크)가 아닌지 다시 본다.
+ * resolveSafe 뒤에 다른 프로그램이 폴더를 링크로 바꿔 치기하는 경우를 줄이기 위해서다.
+ */
+async function recheckTarget(abs, rel) {
+  const parentReal = await fsp.realpath(path.dirname(abs));
+  if (!inside(parentReal)) throw new Error(`프로젝트 밖을 가리키는 경로입니다: ${rel}`);
+  try {
+    const st = await fsp.lstat(abs);
+    if (st.isSymbolicLink()) throw new Error(`바로가기(링크) 파일은 바꿀 수 없습니다: ${rel}`);
+    if (st.isDirectory()) throw new Error(`폴더입니다: ${rel}`);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  return path.join(parentReal, path.basename(abs));
+}
+
+/** 파일 쓰기 (없으면 새로 만들고, 필요한 상위 폴더도 만듦). 쓰기 직전에 실제 경로가 프로젝트 안쪽인지 다시 확인합니다. */
 async function writeFile(rel, text) {
   if (typeof text !== 'string') throw new Error('쓸 내용이 없습니다');
   refuseGitInternal(rel);
   const abs = await resolveSafe(rel);
   await fsp.mkdir(path.dirname(abs), { recursive: true });
   await resolveSafe(rel); // 폴더를 만든 뒤에도 안쪽인지 다시 본다
-  await fsp.writeFile(abs, text, 'utf8');
+  const target = await recheckTarget(abs, rel); // 쓰기 바로 직전: 실제 상위 폴더 기준 경로
+  await fsp.writeFile(target, text, 'utf8');
   return true;
 }
 
@@ -130,7 +148,8 @@ async function writeFile(rel, text) {
 async function deleteFile(rel) {
   refuseGitInternal(rel);
   const abs = await resolveSafe(rel);
-  await fsp.unlink(abs);
+  const target = await recheckTarget(abs, rel);
+  await fsp.unlink(target);
   return true;
 }
 
