@@ -264,13 +264,21 @@
     return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined };
   }
 
-  /** diff가 맞지 않은 파일의 현재 내용을 주고 전체 파일로 다시 받기 */
-  function packRefetch({ path, text: content, mode = DEFAULT_MODE }) {
+  /**
+   * 적용하지 못한 파일의 현재 내용을 주고 다시 받기.
+   * reason: 'diff'(diff · 찾기/바꾸기가 지금 내용과 맞지 않음) | 'truncated'(답이 잘림, v0.16.1)
+   * 긴 파일(EDIT_LINES줄 넘음)은 전체 대신 찾기/바꾸기로 달라고 한다 — 다시 받다가 또 잘리지 않게 (v0.17.0)
+   */
+  function packRefetch({ path, text: content, mode = DEFAULT_MODE, reason = 'diff' }) {
     const inlineText = cutInline(PC.buildRefetch(path, content));
+    const long = String(content).split('\n').length > PC.EDIT_LINES;
+    const why = reason === 'truncated' ? '네 답변이 길어서 중간에 잘려 적용하지 못했어' : '네가 준 수정안이 현재 내용과 맞지 않아 적용하지 못했어';
     const ask = (where) =>
       [
-        `${where} 파일(${path})은 네가 준 diff가 현재 내용과 맞지 않아 적용하지 못했어. 첨부한 것이 지금 내용이야.`,
-        `수정한 "전체" 파일 내용을 "파일: ${path}" 줄 다음에 코드 블록 하나로 다시 줘.`,
+        `${where} 파일(${path})은 ${why}. 첨부한 것이 지금 내용이야.`,
+        long
+          ? `이 파일은 길어서 전체를 다시 쓰지 말고, "파일: ${path}" 줄 다음 코드 블록 하나에 바꿀 곳만 찾기/바꾸기(<<<<<<< 찾기 / ======= / >>>>>>> 바꾸기)로 줘. 찾을 부분은 지금 내용 그대로, 파일 안에서 한 곳만 맞게.`
+          : `수정한 "전체" 파일 내용을 "파일: ${path}" 줄 다음에 코드 블록 하나로 다시 줘.`,
       ].join('\n');
     if (mode === 'files') {
       const name = uploadName(path);

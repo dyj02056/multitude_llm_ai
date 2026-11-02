@@ -850,7 +850,7 @@ body.project-open[data-mode="chat"][data-view="editor"] .project-side { display:
 .pf.collect .op.create { color: #8fe0b0; border-color: #2a6a4a; }
 .pf.collect .op.modify { color: var(--accent-text); border-color: #2a4a6a; }
 .pf.collect .op.delete { color: #f0a0a0; border-color: #5a2a2a; }
-.pf.collect .op.diff, .pf.collect .op.full { color: #e0a23b; border-color: #5a4a22; }
+.pf.collect .op.diff, .pf.collect .op.full, .pf.collect .op.edit { color: #e0a23b; border-color: #5a4a22; }
 .pf.collect .collect-del { display: block; padding: 8px 10px; }
 .log-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 12.5px; }
 .log-row .files { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }

@@ -794,7 +794,7 @@
   const bars = new Map(); // 패널 id -> { ai: { id, name, color, plans }, applied: 적용 기록 항목 | null }
 
   /** 확인 없이 바로 써도 되는 수정안인지 (미리보기 창의 기본 체크와 같은 기준) */
-  const isQuick = ({ plan }) => plan.ok && plan.op !== 'delete' && !PX.executionRisk(plan.path, plan.before, plan.after);
+  const isQuick = ({ plan }) => plan.ok && plan.op !== 'delete' && !plan.suspect && !PX.executionRisk(plan.path, plan.before, plan.after);
 
   function clearBars() {
     for (const id of bars.keys()) setChangeBar(id, false);
@@ -866,14 +866,16 @@
     if (live.length) text.append(span('add', ` +${add}`), span('del', ` −${del}`), span('cb-files', ` · ${live.map((x) => x.plan.path).join(', ')}`));
     text.title = [
       sumLine(live),
-      look.length ? `\n확인 후 적용 (실행 영향·삭제):\n${sumLine(look)}` : '',
+      look.length ? `\n확인 후 적용 (실행 영향 · 삭제 · 잘림/생략 의심):\n${sumLine(look)}${look.filter((x) => x.plan.suspect).map((x) => `\n  ${x.plan.path}: ${x.plan.suspect}`).join('')}` : '',
       bad.length ? `\n적용 불가:\n${bad.map(({ plan }) => `${plan.path}: ${plan.error}`).join('\n')}` : '',
     ]
       .filter(Boolean)
       .join('\n');
     const notes = [];
     if (look.length) notes.push(span('cb-warn', `⚠ ${look.length}개 확인 필요`));
-    if (bad.length) notes.push(span('cb-bad', `${bad.length}개 적용 불가`));
+    const cut = bad.filter(({ plan }) => plan.truncated);
+    if (cut.length) notes.push(span('cb-bad', `✂ 답변이 잘림 ${cut.length}개`)); // 출력 한도로 끊긴 파일 (v0.16.1) — 적용하지 않음
+    if (bad.length > cut.length) notes.push(span('cb-bad', `${bad.length - cut.length}개 적용 불가`));
 
     const collect = button('📋', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다 (파일에는 쓰지 않음)`, () => window.onCollectClick(id));
     const view = live.length
@@ -950,13 +952,18 @@
         tag.title = `${risk} — 적용 창에서 기본으로 체크하지 않습니다`;
         row.append(tag);
       }
+      if (plan.ok && plan.suspect) {
+        const tag = span('op bad', '⚠ 잘림 · 생략?');
+        tag.title = `${plan.suspect} — 적용 창에서 기본으로 체크하지 않습니다`;
+        row.append(tag);
+      }
       if (plan.ok) row.append(span('add', `+${plan.add}`), span('del', `−${plan.del}`));
       else {
         const err = span('err', plan.error);
         row.title = plan.error;
         row.append(err);
-        if (change.type === 'diff' && !change.isNew && !change.isDelete && !writeBlocked(change.path)) {
-          row.append(button('전체 파일 다시 요청', '현재 내용을 주고 수정한 전체 파일로 다시 달라고 합니다', () => refetch(ai, change.path)));
+        if ((change.type === 'diff' || change.type === 'edit' || plan.truncated) && !change.isNew && !change.isDelete && !writeBlocked(change.path)) {
+          row.append(button('다시 요청', '현재 내용을 주고 다시 달라고 합니다 (긴 파일은 바꿀 곳만 찾기/바꾸기로)', () => refetch(ai, change.path)));
         }
       }
       list.append(row);
@@ -986,7 +993,8 @@
       if (text === null) return alert('파일이 없습니다');
       const hits = scanSecrets(text);
       if (hits.length && !confirm(`${path}에 비밀 정보로 보이는 문자열이 있습니다:\n${describeSecrets(hits)}\n\n그래도 현재 내용을 ${ai.name}에게 보낼까요?`)) return;
-      const res = await sendProjectFollowUp(ai.id, PU.packRefetch({ path, text, mode: project.uploadMode }));
+      const truncated = ai.plans.some((x) => x.plan.path === path && x.plan.truncated);
+      const res = await sendProjectFollowUp(ai.id, PU.packRefetch({ path, text, mode: project.uploadMode, reason: truncated ? 'truncated' : 'diff' }));
       if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error}`);
       remember(ai.id, [{ path, text }]);
       host.setView('panels');
@@ -1099,13 +1107,19 @@
         head.className = 'pf-head';
         // 저장만 해도 나중에 실행될 수 있는 파일(실행 영향)과 삭제는 기본으로 체크하지 않는다.
         const risk = PX.executionRisk(plan.path, plan.before, plan.after);
-        const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !risk && plan.op !== 'delete' });
+        const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !risk && !plan.suspect && plan.op !== 'delete' });
         const item = { box, plan, hunks: null };
         items.push(item);
         head.append(box, span(`op ${plan.op}`, OP_TEXT[plan.op]), span('path', plan.path));
         if (risk) {
           const tag = span('op bad', `⚠ 실행 영향: ${risk}`);
           tag.title = '저장하면 나중에 자동으로 실행될 수 있는 파일입니다. 내용을 확인한 뒤 직접 체크하세요.';
+          head.append(tag);
+        }
+        if (plan.suspect) {
+          // 답이 잘렸거나 AI가 코드를 줄였을 수 있다 — 그대로 쓰면 그 부분이 지워진다 (v0.16.1)
+          const tag = span('op bad', `⚠ ${plan.suspect}`);
+          tag.title = '전체 파일 교체인데 코드가 빠졌을 수 있습니다. −줄을 확인한 뒤 직접 체크하세요.';
           head.append(tag);
         }
         if (plan.op === 'delete') head.append(span('op delete', '파일을 지웁니다 — 직접 체크해야 적용'));
@@ -1319,7 +1333,7 @@
   // 답변에서 찾은 파일 수정안을 "경로 + 전체 코드"로 모아, 직접 복사해 붙여 넣기 좋게 보여 준다. 파일은 쓰지 않는다.
   // 프로젝트를 열지 않아도 쓴다. 그때는 새 파일·수정을 구분하지 못하고, diff는 전체 코드로 바꾸지 못해 diff 그대로 보여 준다.
 
-  const COLLECT_OP = { create: '새 파일', modify: '수정', full: '전체 코드', diff: '바뀐 부분(diff)', same: '변경 없음', delete: '삭제' };
+  const COLLECT_OP = { create: '새 파일', modify: '수정', full: '전체 코드', diff: '바뀐 부분(diff)', edit: '바꿀 곳(찾기/바꾸기)', same: '변경 없음', delete: '삭제' };
 
   const hunkText = (change) => change.hunks.map((h) => [`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`, ...h.lines].join('\n')).join('\n');
 
@@ -1336,7 +1350,9 @@
       if (has()) before = await currentText(path).catch(() => undefined);
       if (change.type === 'full') {
         const same = typeof before === 'string' && before.replace(/\r\n/g, '\n').trimEnd() === change.content.replace(/\r\n/g, '\n').trimEnd();
-        items.push({ path, op: before === undefined ? 'full' : before === null ? 'create' : same ? 'same' : 'modify', code: change.content });
+        // 잘린 답변이면 코드는 보여 주되 뒷부분이 없다고 알린다 (그대로 붙여 넣으면 나머지가 사라짐)
+        const note = change.truncated ? '⚠ 답변이 중간에 잘려 이 파일의 뒷부분이 없습니다 — 그대로 붙여 넣지 마세요' : undefined;
+        items.push({ path, op: before === undefined ? 'full' : before === null ? 'create' : same ? 'same' : 'modify', code: change.content, note });
         continue;
       }
       let note = '프로젝트를 열면 지금 파일과 합친 전체 코드로 보여 줍니다';
@@ -1347,6 +1363,12 @@
           continue;
         }
         note = `전체 코드로 바꾸지 못했습니다: ${plan.error}`;
+      }
+      if (change.type === 'edit') {
+        // 찾기/바꾸기 블록 (v0.17.0): 프로젝트가 없으면 전체 코드로 합칠 수 없어 블록 그대로 보여 준다
+        const code = change.edits.map((e) => `<<<<<<< 찾기\n${e.search}\n=======\n${e.replace}\n>>>>>>> 바꾸기`).join('\n\n');
+        items.push({ path, op: 'edit', code, note: change.truncated ? '⚠ 답변이 중간에 잘려 마지막 찾기/바꾸기가 없을 수 있습니다' : note });
+        continue;
       }
       items.push({ path, op: 'diff', code: hunkText(change), note });
     }

@@ -48,7 +48,10 @@
 
   // ---------- 코드 블록 찾기 ----------
 
-  /** Markdown의 울타리 코드 블록: [{ lang, body, before: 블록 바로 앞 두 줄 }] */
+  /**
+   * Markdown의 울타리 코드 블록: [{ lang, body, before: 블록 바로 앞 두 줄, closed }]
+   * closed: 닫는 울타리가 있었는지. 답변이 출력 한도로 중간에 끊기면 마지막 블록이 닫히지 않는다 (v0.16.1).
+   */
   // 답변에서 ``` 로 감싼 코드 상자를 모두 찾습니다. 각 상자 바로 앞 두 줄도 함께 기억합니다 ("파일: 경로"를 찾으려고).
   // 바깥 울타리가 ```` (백틱 4개)면 안쪽의 ``` 에서 끊기지 않습니다 (.md 파일을 한 상자로 받기 위해).
   function fencedBlocks(md) {
@@ -68,7 +71,7 @@
       }
       const before = [];
       for (let k = i - 1; k >= 0 && before.length < 2; k--) if (lines[k].trim()) before.unshift(lines[k].trim());
-      blocks.push({ lang: open[2].toLowerCase(), body: body.join('\n'), before });
+      blocks.push({ lang: open[2].toLowerCase(), body: body.join('\n'), before, closed: j < lines.length });
       i = j;
     }
     return blocks;
@@ -90,6 +93,85 @@
       }
     }
     return null;
+  }
+
+  // ---------- 찾기/바꾸기 블록 (v0.17.0) ----------
+  // 긴 파일은 전체를 다시 쓰지 않고 바꿀 곳만 받는다 (출력 한도로 답이 잘리지 않게):
+  //   <<<<<<< 찾기      (지금 파일의 그 부분 그대로)
+  //   =======
+  //   >>>>>>> 바꾸기    (바꾼 내용)
+  // 영어 표시(<<<<<<< SEARCH · >>>>>>> REPLACE)도 받는다. 한 코드 블록에 여러 번 써도 된다.
+  // 한글 뒤에서는 \b(단어 경계)가 맞지 않으므로 "뒤에 영문 글자가 이어지지 않음"으로 끝을 본다
+  const EDIT_START = /^\s*<{7}\s*(?:찾기|search|find)(?![a-z]).*$/i;
+  const EDIT_MID = /^\s*={7}\s*$/;
+  const EDIT_END = /^\s*>{7}\s*(?:바꾸기|replace)(?![a-z]).*$/i;
+  const looksLikeEdits = (body) => body.split(/\r?\n/).some((l) => EDIT_START.test(l));
+
+  /** 블록 글 → { edits: [{ search, replace }], complete: 마지막 블록까지 닫혔는지 } */
+  function parseEdits(body) {
+    const lines = String(body).replace(/\r\n/g, '\n').split('\n');
+    const edits = [];
+    let i = 0;
+    let complete = true;
+    while (i < lines.length) {
+      if (!EDIT_START.test(lines[i])) {
+        i++;
+        continue;
+      }
+      const search = [];
+      const replace = [];
+      i++;
+      while (i < lines.length && !EDIT_MID.test(lines[i])) search.push(lines[i++]);
+      if (i >= lines.length) {
+        complete = false;
+        break;
+      }
+      i++;
+      while (i < lines.length && !EDIT_END.test(lines[i])) replace.push(lines[i++]);
+      if (i >= lines.length) {
+        complete = false;
+        break;
+      }
+      i++;
+      edits.push({ search: search.join('\n'), replace: replace.join('\n') });
+    }
+    return { edits, complete };
+  }
+
+  /**
+   * 찾기/바꾸기를 차례로 적용한다. 찾을 부분이 지금 파일에 딱 한 곳 있을 때만 바꾼다 (줄 끝 공백 · 앞뒤 공백 차이는 한 번 더 너그럽게 찾음).
+   * → { text } | { error }
+   */
+  function applyEdits(text, edits) {
+    let lines = text.split('\n');
+    const variants = [(s) => s, (s) => s.replace(/\s+$/, ''), (s) => s.trim()];
+    for (let n = 0; n < edits.length; n++) {
+      const { search, replace } = edits[n];
+      const want = search.split('\n');
+      while (want.length && !want[want.length - 1].trim()) want.pop(); // 끝 빈 줄은 무시
+      while (want.length && !want[0].trim()) want.shift();
+      if (!want.length) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분이 비어 있습니다` };
+      let hits = [];
+      for (const norm of variants) {
+        const w = want.map(norm);
+        hits = [];
+        for (let i = 0; i + w.length <= lines.length; i++) {
+          let ok = true;
+          for (let k = 0; k < w.length && ok; k++) ok = norm(lines[i + k]) === w[k];
+          if (ok) hits.push(i);
+        }
+        if (hits.length) break;
+      }
+      if (!hits.length) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분을 지금 파일에서 찾지 못했습니다` };
+      if (hits.length > 1) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분이 파일에 ${hits.length}곳 있어 어디를 바꿀지 모릅니다 (앞뒤 줄을 더 넣어 달라고 하세요)` };
+      // 바꿀 내용도 찾을 부분처럼 앞뒤 빈 줄은 뺀다 (AI가 표시 줄 옆에 붙이는 빈 줄). 비어 있으면 찾은 부분을 지운다.
+      const rep = replace.split('\n');
+      while (rep.length && !rep[rep.length - 1].trim()) rep.pop();
+      while (rep.length && !rep[0].trim()) rep.shift();
+      const at = hits[0];
+      lines = [...lines.slice(0, at), ...rep, ...lines.slice(at + want.length)];
+    }
+    return { text: lines.join('\n') };
   }
 
   const looksLikeDiff = (b) => ['diff', 'patch', 'udiff'].includes(b.lang) || (/^--- /m.test(b.body) && /^\+\+\+ /m.test(b.body)) || /^@@/m.test(b.body);
@@ -185,7 +267,11 @@
     const changes = [];
     for (const b of fencedBlocks(md)) {
       const label = labelPath(b.before);
-      if (looksLikeDiff(b)) {
+      if (label && looksLikeEdits(b.body)) {
+        // 찾기/바꾸기 블록 (v0.17.0). 블록이 닫히지 않았거나 마지막 찾기/바꾸기가 끝나지 않았으면 잘린 답변
+        const { edits, complete } = parseEdits(b.body);
+        changes.push({ path: label, type: 'edit', edits, ...(b.closed && complete ? {} : { truncated: true }) });
+      } else if (looksLikeDiff(b)) {
         let parsed = [];
         try {
           parsed = Diff.parsePatch(normalizeDiff(b.body, label));
@@ -197,10 +283,11 @@
           const isDelete = String(p.newFileName || '').trim() === '/dev/null';
           const path = (isDelete ? stripPrefix(p.oldFileName) : stripPrefix(p.newFileName)) || label;
           if (!path || !p.hunks.length && !isDelete) continue;
-          changes.push({ path, type: 'diff', hunks: p.hunks, isNew, isDelete });
+          changes.push({ path, type: 'diff', hunks: p.hunks, isNew, isDelete, ...(b.closed ? {} : { truncated: true }) });
         }
       } else if (label) {
-        changes.push({ path: label, type: 'full', content: b.body });
+        // 닫히지 않은 블록 = 답변이 중간에 끊겨 파일 뒷부분이 없다. 그대로 쓰면 나머지 코드가 지워지므로 적용하지 않는다.
+        changes.push({ path: label, type: 'full', content: b.body, ...(b.closed ? {} : { truncated: true }) });
       }
     }
     for (const path of deleteRequests(md)) changes.push({ path, type: 'diff', hunks: [], isNew: false, isDelete: true });
@@ -242,6 +329,69 @@
     return lines.join('\n');
   }
 
+  // ---------- 잘린 답변 · 생략한 코드 알아채기 (v0.16.1) ----------
+  // 출력 한도로 답이 끊기거나 AI가 "... 기존과 같음"처럼 줄이면, 전체 파일 교체로 쓸 때 나머지 코드가 사라진다.
+  const TRUNCATED_TEXT = '답변이 중간에 잘렸습니다 (코드 블록이 닫히지 않음) — 파일 뒷부분이 없어 적용하지 않습니다';
+  // 코드를 줄였다는 표시 줄. 둘 중 하나:
+  //   ① 주석 · 줄 처음에 "..."(…)이 있고 "기존 · 나머지 · 생략 · 동일 · unchanged · rest · existing · same · omitted"가 붙은 줄 ("// ... 기존 코드 ...", "# ... (생략)")
+  //   ② 그 자체로 생략을 뜻하는 말만 있는 주석 줄 ("<!-- 이하 동일 -->", "/* rest of the file unchanged */", "// 기존과 같음")
+  // "// 나머지 값을 더한다"처럼 평범한 주석은 걸리지 않게, ①은 말줄임표가, ②는 정해진 문구가 있어야 한다.
+  const OMIT_RE = new RegExp(
+    [
+      String.raw`^\s*(?:\/\/|#|\/\*+|\*|<!--|--|;)?\s*(?:\.{3,}|…)\s*[([]?\s*(?:기존|나머지|생략|동일|이전과|unchanged|rest|existing|same|omitted|remaining)`,
+      String.raw`^\s*(?:\/\/|#|\/\*+|\*|<!--|--|;)\s*[([]?\s*(?:기존(?:과|\s*코드|\s*내용)?(?:와)?\s*(?:같음|동일|유지)|이하\s*(?:생략|동일)|(?:코드\s*)?생략(?:됨|함)?|변경\s*없음|rest of (?:the )?(?:file|code)(?: (?:is )?unchanged)?|(?:the )?rest (?:is )?unchanged|unchanged code|same as before|code omitted)\s*[)\]]?\s*(?:\*\/|-->)?\s*$`,
+    ].join('|'),
+    'i',
+  );
+
+  // 괄호를 세어 볼 코드 파일 (문자열 · 주석을 대충 빼고 { ( [ 와 } ) ] 수를 비교한다)
+  const BRACE_EXT = /\.(?:[cm]?[jt]sx?|json|css|scss|less|java|kt|cs|c|cc|cpp|h|hpp|go|rs|swift|php|dart|scala)$/i;
+  /** 열린 괄호가 닫힌 괄호보다 얼마나 많은지 (문자열 · 주석 · 정규식처럼 보이는 곳은 대충 뺀다) */
+  function braceDebt(text) {
+    const code = String(text)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:\\])\/\/.*$/gm, '$1')
+      .replace(/`(?:\\[\s\S]|[^`\\])*`/g, '``')
+      .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+      .replace(/'(?:\\.|[^'\\\n])*'/g, "''");
+    let debt = 0;
+    for (const ch of code) {
+      if (ch === '{' || ch === '(' || ch === '[') debt++;
+      else if (ch === '}' || ch === ')' || ch === ']') debt--;
+    }
+    return debt;
+  }
+
+  /**
+   * 출력 한도로 잘린 코드 같은지 (웹 채팅은 잘린 답도 코드 상자를 닫아서 보여 주므로 울타리만으로는 모른다):
+   * 코드 파일인데 끝에서 괄호가 닫히지 않았고, 원본(있으면)은 닫혀 있었다 → 이유 글 | null
+   */
+  function suspectCutCode(path, before, after) {
+    if (!BRACE_EXT.test(path) || typeof after !== 'string') return null;
+    const a = braceDebt(after);
+    const b = typeof before === 'string' ? braceDebt(before) : 0;
+    return a > 0 && a > b ? `끝이 잘린 것 같습니다 (괄호 ${a - b}개가 닫히지 않음)` : null;
+  }
+
+  /**
+   * 전체 파일 교체가 수상한지: 생략 표시가 있거나, 원본의 끝부분이 통째로 사라졌는지 → 이유 글 | null
+   * before · after: LF 줄바꿈 글
+   */
+  function suspectFullReplace(before, after) {
+    if (typeof before !== 'string' || typeof after !== 'string') return null;
+    const aLines = after.split('\n');
+    const omit = aLines.find((l) => OMIT_RE.test(l) && !before.split('\n').some((b) => b.trim() === l.trim()));
+    if (omit) return `코드를 줄인 표시가 있습니다 ("${omit.trim().slice(0, 40)}")`;
+    const bLines = before.split('\n');
+    const bCount = bLines.filter((l) => l.trim()).length;
+    const aCount = aLines.filter((l) => l.trim()).length;
+    if (bCount < 30 || aCount >= bCount * 0.6) return null;
+    const tail = bLines.map((l) => l.trim()).filter((l) => l.length > 2).slice(-3);
+    const kept = new Set(aLines.map((l) => l.trim()));
+    if (tail.length && tail.every((l) => !kept.has(l))) return `끝이 잘린 것 같습니다 (원본 ${bCount}줄 → ${aCount}줄, 원래 끝부분이 없음)`;
+    return null;
+  }
+
   /**
    * 수정안 하나를 현재 내용에 적용한 결과.
    * before: 지금 파일 내용(없으면 null)
@@ -254,9 +404,22 @@
     const crlf = typeof before === 'string' && before.includes('\r\n');
     const lf = typeof before === 'string' ? before.replace(/\r\n/g, '\n') : null;
 
+    if (change.truncated) return { ...base, op: before === null ? 'create' : 'modify', error: TRUNCATED_TEXT, truncated: true };
     let after;
     let op;
-    if (change.type === 'full') {
+    if (change.type === 'edit') {
+      // 찾기/바꾸기: 있는 파일에만. 새 파일이면 찾을 부분이 모두 빈 블록일 때 바꿀 내용을 그대로 새 파일로
+      if (before === null) {
+        if (!change.edits.every((e) => !e.search.trim())) return { ...base, op: 'modify', error: '파일이 없습니다 (새 파일은 전체 내용으로 받아야 합니다)' };
+        op = 'create';
+        after = `${change.edits.map((e) => e.replace).join('\n')}\n`;
+      } else {
+        op = 'modify';
+        const r = applyEdits(lf, change.edits);
+        if (r.error) return { ...base, op, error: r.error };
+        after = r.text;
+      }
+    } else if (change.type === 'full') {
       op = before === null ? 'create' : 'modify';
       after = change.content.replace(/\r\n/g, '\n');
       if (!after.endsWith('\n')) after += '\n';
@@ -282,8 +445,14 @@
     const preview = previewDiff(change.path, lf, after);
     const add = preview.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).length;
     const del = preview.split('\n').filter((l) => l.startsWith('-') && !l.startsWith('---')).length;
+    // 전체 파일 교체가 수상하면 적용은 되지만 바로 쓰지 않는다 (미리보기에서 기본 체크 해제 · 바의 "확인 필요")
+    // 새 파일 · 찾기/바꾸기 결과도 괄호가 닫히지 않았으면 잘린 것으로 의심한다
+    const suspect =
+      after === null
+        ? null
+        : (change.type === 'full' && op === 'modify' ? suspectFullReplace(lf, after) : null) || suspectCutCode(change.path, lf, after);
     if (after !== null && crlf) after = after.replace(/\n/g, '\r\n'); // 원래 줄바꿈(CRLF)을 지킨다
-    return { ...base, op, after, ok: true, add, del, preview };
+    return { ...base, op, after, ok: true, add, del, preview, ...(suspect ? { suspect } : {}) };
   }
 
   // ---------- 덩어리(hunk) 단위 적용 ----------
@@ -417,5 +586,5 @@
       .join('\n');
   }
 
-  return { safeRelPath, isGitInternal, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch, executionRisk, splitHunks, applyHunks };
+  return { TRUNCATED_TEXT, suspectFullReplace, suspectCutCode, braceDebt, parseEdits, applyEdits, safeRelPath, isGitInternal, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch, executionRisk, splitHunks, applyHunks };
 });
