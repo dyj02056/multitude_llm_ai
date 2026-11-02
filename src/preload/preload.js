@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('host', {
     clear: () => ipcRenderer.invoke('history:clear'),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
+  // 내보내기: { name, text, kind: 'md' | 'html' } → 저장 창 → { ok, path } | { ok: false, cancelled }
+  saveFile: (file) => ipcRenderer.invoke('file:save', file),
   shortcuts: () => ipcRenderer.invoke('shortcuts:list'),
   runSynth: (judgeId, kind) => ipcRenderer.invoke('synth:run', judgeId, kind),
   setSynth: (opts) => ipcRenderer.send('synth:set', opts),

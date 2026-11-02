@@ -614,6 +614,18 @@
       clear: async () => history.clear(),
     },
     copyText: (text) => typeof text === 'string' && copyText(text),
+    // 내보내기 (v0.14.0): 다운로드 권한 없이, 이 탭에서 파일 링크를 눌러 크롬의 다운로드로 저장한다
+    saveFile: async ({ name, text, kind } = {}) => {
+      const types = { md: 'text/markdown', html: 'text/html' };
+      if (!types[kind] || typeof text !== 'string') return { ok: false, error: '저장할 내용이 올바르지 않습니다' };
+      const url = URL.createObjectURL(new Blob([text], { type: `${types[kind]};charset=utf-8` }));
+      const a = Object.assign(document.createElement('a'), { href: url, download: String(name || `답변.${kind}`) });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      return { ok: true, path: a.download };
+    },
     shortcuts: async () => shortcutList({ browser: true }),
     runSynth: (judgeId, kind) =>
       rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', ['code', 'analysis'].includes(kind) ? kind : 'text'),

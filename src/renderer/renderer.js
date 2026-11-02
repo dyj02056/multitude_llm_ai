@@ -736,6 +736,11 @@ function answerColumn(a) {
   return col;
 }
 
+// 내보내기: 지금 비교 화면의 질문 · 답변 · 이번 질문의 분석
+const compareDoc = () => EX.docFromCompare({ question: compareView.question, answers: compareView.answers, analysis: compareView.analysis });
+$('#compareExportMd').addEventListener('click', () => exportDoc(compareDoc(), 'md', $('#compareQuestion')));
+$('#compareExportHtml').addEventListener('click', () => exportDoc(compareDoc(), 'html', $('#compareQuestion')));
+
 $('#compareTabs').addEventListener('click', (e) => {
   const tab = e.target.closest('[data-ctab]')?.dataset.ctab;
   if (!tab || tab === compareView.tab) return;
@@ -809,17 +814,16 @@ async function renderHistoryList() {
 const NO_TEXT = '(글 없이 첨부 파일만 보냄)';
 const filesLine = (files) => files.map((f) => `${f.name} (${fmtSize(f.size)})`).join(' · ');
 
-// 기록 하나(질문 + 각 AI 답변 + 종합)를 Markdown 글 하나로 엮습니다 (복사용).
-function recordToMarkdown(rec) {
-  const question = rec.question || NO_TEXT;
-  const parts = [`# ${question.split('\n')[0]}`, '', `> ${fmtTime(rec.at)}`, '', '## 질문', '', question];
-  if (rec.files?.length) parts.push('', `첨부: ${filesLine(rec.files)}`);
-  for (const id of rec.targets) {
-    const a = rec.answers[id];
-    if (a?.text) parts.push('', `## ${a.name}`, '', a.md || a.text);
-  }
-  for (const sy of rec.synth) parts.push('', `## ${sy.mode === 'analysis' ? '분석' : '종합'} (${sy.judge})`, '', sy.md || sy.text);
-  return parts.join('\n');
+// 기록 하나(질문 + 각 AI 답변 + 종합 · 분석)를 Markdown 글 하나로 엮습니다 (복사 · 내보내기 — shared/export.js).
+const EX = MLA.exporter;
+const recordToMarkdown = (rec) => EX.toMarkdown(EX.docFromRecord(rec));
+
+/** 내보내기: 문서를 Markdown 또는 HTML 파일로 저장 (앱은 저장 창, 크롬 확장은 다운로드) → 결과를 el에 잠깐 보여 준다 */
+async function exportDoc(doc, kind, el) {
+  const text = kind === 'html' ? EX.toHtml(doc) : EX.toMarkdown(doc);
+  const r = await host.saveFile({ name: EX.fileName(doc, kind), text, kind }).catch((err) => ({ ok: false, error: err.message }));
+  if (r?.ok) flash(el, `저장했습니다: ${String(r.path).split(/[\\/]/).pop()}`);
+  else if (!r?.cancelled) flash(el, r?.error || '저장하지 못했습니다');
 }
 
 /** 기록 화면 오른쪽: 고른 기록의 질문과 답변 전체 */
@@ -842,6 +846,8 @@ async function renderHistoryDetail() {
       await host.copyText(recordToMarkdown(rec));
       flash(time, '복사했습니다');
     }),
+    button('MD 저장', '이 기록(질문 · 답변 · 종합 · 분석)을 Markdown 파일로 저장합니다', () => exportDoc(EX.docFromRecord(rec), 'md', time)),
+    button('HTML 저장', '이 기록을 밝은 문서 모양 HTML 파일로 저장합니다 (브라우저에서 인쇄하면 PDF)', () => exportDoc(EX.docFromRecord(rec), 'html', time)),
     button('삭제', '이 기록을 지웁니다', async () => {
       await host.history.remove(rec.id);
       historySelected = null;

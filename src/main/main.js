@@ -23,7 +23,7 @@
 // require는 다른 파일이나 라이브러리의 기능을 가져오는 명령입니다.
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard, dialog } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl, limitTextOf } = require('../shared/services');
 const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
 const { normalizeLibrary } = require('../shared/prompt-lib');
@@ -787,6 +787,22 @@ ipcMain.handle('history:delete', (_e, id) => history.remove(id));
 ipcMain.handle('history:clear', () => history.clear());
 ipcMain.handle('clipboard:write', (_e, text) => {
   if (typeof text === 'string') clipboard.writeText(text);
+});
+
+// 내보내기 (v0.14.0): 저장 창에서 고른 곳에 Markdown · HTML 글을 씁니다. 이름은 화면이 정한 기본값, 종류는 md · html만.
+const SAVE_KINDS = { md: { name: 'Markdown', ext: 'md' }, html: { name: 'HTML 문서', ext: 'html' } };
+ipcMain.handle('file:save', async (_e, { name, text, kind } = {}) => {
+  const k = SAVE_KINDS[kind];
+  if (!k || typeof text !== 'string' || text.length > 20 * 1024 * 1024) return { ok: false, error: '저장할 내용이 올바르지 않습니다' };
+  const base = (typeof name === 'string' ? name : '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 120) || `답변.${k.ext}`;
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: '내보내기',
+    defaultPath: path.join(app.getPath('downloads'), base.endsWith(`.${k.ext}`) ? base : `${base}.${k.ext}`),
+    filters: [{ name: k.name, extensions: [k.ext] }],
+  });
+  if (canceled || !filePath) return { ok: false, cancelled: true };
+  await fs.promises.writeFile(filePath, text, 'utf8');
+  return { ok: true, path: filePath };
 });
 
 // 답변 비교 화면용: 열린 패널마다 최신 답변 글과 마지막 공통 질문
