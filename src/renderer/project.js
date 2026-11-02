@@ -37,6 +37,7 @@
     open: false, // 사이드바를 보이는지
     include: true, // 다음 질문에 맥락을 붙일지
     uploadMode: PU.DEFAULT_MODE, // 올리는 방식: 'bundle'(묶음 파일) | 'files'(개별 파일)
+    split: false, // 큰 작업: 계획 먼저 받고 파일별로 차례로 받기 (v0.18.0)
     l3Enabled: [],
     checked: new Set(), // 내용을 보낼 파일
     allowSecret: new Set(), // 비밀 정보 경고를 보고도 보내기로 한 파일
@@ -70,6 +71,7 @@
         allowSecret: [...project.allowSecret],
         include: project.include,
         uploadMode: project.uploadMode,
+        split: project.split,
         blocked: [...project.blocked],
         uploadOk: [...project.uploadOk],
         log: project.log.slice(0, MAX_LOG),
@@ -84,6 +86,7 @@
     project.allowSecret = new Set(Array.isArray(s.allowSecret) ? s.allowSecret : []);
     project.include = s.include !== false;
     project.uploadMode = PU.normalizeMode(s.uploadMode);
+    project.split = s.split === true;
     project.blocked = new Set(Array.isArray(s.blocked) ? s.blocked : []);
     project.uploadOk = new Set(Array.isArray(s.uploadOk) ? s.uploadOk : []);
     project.log = Array.isArray(s.log) ? s.log : [];
@@ -177,6 +180,11 @@
     saveState();
     render();
   });
+  $('#psSplit').addEventListener('change', (e) => {
+    project.split = e.target.checked;
+    saveState();
+    notice(project.split ? '큰 작업: 다음 질문은 계획(고칠 파일 목록)만 받고, 파일별로 차례로 받습니다' : '큰 작업을 껐습니다');
+  });
   $('#projectInclude').addEventListener('change', (e) => {
     project.include = e.target.checked;
     saveState();
@@ -208,6 +216,7 @@
     $('#psGit').hidden = !has() || !host.git; // git 콘솔은 Windows 앱에만 있다
     $('#projectInclude').checked = project.include;
     for (const b of document.querySelectorAll('#psUploadMode [data-umode]')) b.classList.toggle('active', b.dataset.umode === project.uploadMode);
+    $('#psSplit').checked = project.split;
     if (!has()) {
       $('#psTree').replaceChildren();
       $('#psRulesBody').replaceChildren();
@@ -498,7 +507,14 @@
     if (!confirmUpload(withProject, project.checked.size)) return null;
     const { files } = await readChosen([...project.checked]);
     const budget = budgetAfter(payload.files, withProject.filter(acceptsDocs));
-    const pack = PU.packContext({ project: { name: project.info.name, paths: sendablePaths() }, files, request: payload.text, mode: project.uploadMode, budget });
+    // 큰 작업(v0.18.0): 이번 답은 계획(PLAN_FILES)만 받는다. 꺼져 있는데 고른 파일이 많거나 길면 한 번 권한다.
+    const lineCount = files.reduce((n, f) => n + String(f.text).split('\n').length, 0);
+    if (!project.split && !splitSuggested && PC.suggestSplit({ files: files.length, lines: lineCount })) {
+      splitSuggested = true;
+      notice(`고른 파일이 ${files.length}개 · ${lineCount.toLocaleString()}줄입니다 — 답이 끊기면 사이드바의 "큰 작업"을 켜 보세요`);
+    }
+    const request = project.split ? `${payload.text || '(요청 없음)'}\n\n${PC.PLAN_FIRST}` : payload.text;
+    const pack = PU.packContext({ project: { name: project.info.name, paths: sendablePaths() }, files, request, mode: project.uploadMode, budget });
     const ups = pack.attachments.map(toAttachment);
     const room = ups.length <= budget.files && ups.reduce((n, f) => n + f.data.byteLength, 0) <= budget.bytes;
     // 직접 올린 파일 때문에 자리가 없으면 프로젝트 내용은 본문으로 보낸다
@@ -560,6 +576,7 @@
   // 새 대화를 열면 그 AI는 이전 내용을 모른다.
   window.onPanelCleared = (id) => {
     continuing.delete(id); // 새 대화에서는 이어 받을 앞부분이 없다
+    runs.delete(id); // 파일별로 받던 것도 멈춘다 (새 대화의 AI는 계획을 모른다)
     project.sent.delete(id);
     project.stale = project.stale.filter((s) => s.id !== id);
     renderSync();
@@ -657,6 +674,8 @@
   window.onPanelAnswerDone = async (id) => {
     const md = await answerMd(id).catch(() => '');
     if (continuing.has(id) && has()) return finishContinue(id, md); // "이어서 받기"로 보낸 부탁의 답 (v0.17.1)
+    if (runs.get(id)?.status === 'running' && has()) return runAnswer(id, md); // 파일별로 받는 중 (v0.18.0)
+    if (has() && offerRun(id, md)) return; // 계획(PLAN_FILES)만 온 답 → 파일별로 받기 제안
     // 프로젝트가 열려 있으면 수정안을 패널 아래 변경 바로 보여 준다 (📋 모아보기도 바 안에). 바를 띄우지 않으면 머리줄 버튼.
     const barred = has() && (await refreshBar(id, md).catch(() => false));
     if (!barred) showCollectBtn(id, md).catch(() => {});
@@ -814,6 +833,98 @@
     return renderBar(id);
   }
 
+  // ---------- 큰 작업: 파일별로 받기 (v0.18.0) ----------
+  // 계획 답(PLAN_FILES)이 오면 바에 "파일별로 받기 시작"을 띄운다. 시작하면 "1/5: a.js만"을 보내고,
+  // 그 답이 끝날 때마다(onPanelAnswerDone) 수정안을 모으고 다음 파일을 보낸다. 다 받거나 멈추면 한 묶음으로 바를 그린다.
+  // 답이 시간 초과 · 답변 없음으로 끝나면 다음으로 넘어가지 않는다 — 바의 "건너뛰기"나 "멈추기"를 누른다.
+  const runs = new Map(); // 패널 id -> { status: 'offer' | 'running', files: [{ path, note }], index, changes: Map(경로 -> 수정안), skip }
+  let splitSuggested = false; // "큰 작업"을 한 번만 권한다
+
+  /** 계획만 온 답이면 파일별로 받기를 제안한다 → 제안했으면 true */
+  function offerRun(id, md) {
+    const planned = PC.parsePlanFiles(md)
+      .map((f) => ({ ...f, path: PX.safeRelPath(f.path) }))
+      .filter((f) => f.path && !writeBlocked(f.path) && !PX.isGitInternal(f.path));
+    const changes = PX.extractChanges(md);
+    if (!planned.length || changes.some((c) => !c.isDelete)) return false; // 코드가 함께 왔으면 평소대로
+    runs.set(id, { status: 'offer', files: planned, index: 0, changes: new Map(changes.map((c) => [c.path, c])), skip: false });
+    renderBar(id);
+    return true;
+  }
+
+  async function sendStep(id) {
+    const run = runs.get(id);
+    if (!run) return;
+    if (run.index >= run.files.length) return finishRun(id);
+    const res = await host.sendFollowUp(id, PC.stepPrompt(run.files[run.index], run.index, run.files.length));
+    if (!res?.ok) {
+      notice(`보내지 못해 파일별로 받기를 멈춥니다: ${res?.error || '알 수 없는 오류'}`);
+      return finishRun(id);
+    }
+    renderBar(id);
+  }
+
+  async function runAnswer(id, md) {
+    const run = runs.get(id);
+    if (run.skip) run.skip = false;
+    else for (const c of PX.extractChanges(md)) run.changes.set(c.path, c); // 같은 경로는 새것 (잘렸으면 끝나고 이어서 받기)
+    run.index++;
+    renderBar(id);
+    setTimeout(() => sendStep(id), 600); // 사이트가 다음 질문을 받을 준비가 되도록 잠깐 둔다
+  }
+
+  async function finishRun(id) {
+    const run = runs.get(id);
+    if (!run) return;
+    runs.delete(id);
+    const svc = state.services.find((s) => s.id === id);
+    const plans = await planChanges([...run.changes.values()]);
+    const got = run.files.filter((f) => run.changes.has(f.path)).length;
+    bars.set(id, { ai: { id, name: svc?.name || id, color: svc?.color, plans }, applied: null, split: { got, total: run.files.length } });
+    renderBar(id);
+    notice(`파일별로 받기 끝: ${got}/${run.files.length}개 받음 — 바에서 미리 보고 적용하세요`);
+  }
+
+  /** 제안 · 진행 중 바 */
+  function renderRunBar(id) {
+    const p = panels.get(id);
+    const run = runs.get(id);
+    if (!p || !run) return false;
+    const bar = p.changeBar;
+    bar.className = 'change-bar run';
+    const total = run.files.length;
+    const list = run.files.map((f, i) => `${i + 1}. ${f.path}${f.note ? ` — ${f.note}` : ''}`).join('\n');
+    if (run.status === 'offer') {
+      const text = span('cb-text', '');
+      text.append(span('cb-count', `계획: 파일 ${total}개`), span('cb-files', ` · ${run.files.map((f) => f.path).join(', ')}`));
+      text.title = `AI가 고칠 파일 목록(계획)을 보냈습니다:\n${list}\n\n"파일별로 받기 시작"을 누르면 한 파일씩 차례로 물어 모읍니다.`;
+      const start = button('▶ 파일별로 받기 시작', `${total}개 파일을 한 파일씩 차례로 받습니다`, () => {
+        run.status = 'running';
+        sendStep(id);
+      });
+      start.className = 'cb-apply';
+      const drop = button('✕', '계획을 버립니다 (파일별로 받지 않음)', () => {
+        runs.delete(id);
+        setChangeBar(id, false);
+      });
+      drop.className = 'cb-close';
+      bar.replaceChildren(span('cb-icon', '🗂'), text, start, drop);
+    } else {
+      const cur = run.files[Math.min(run.index, total - 1)];
+      const text = span('cb-text', '');
+      text.append(span('cb-count', `파일별로 받는 중 ${Math.min(run.index + 1, total)}/${total}`), span('cb-files', ` · ${cur.path}${run.skip ? ' (건너뜀 — 답이 끝나면 다음으로)' : ''}`));
+      text.title = `${list}\n\n받은 파일: ${[...run.changes.keys()].join(', ') || '없음'}`;
+      const skip = button('건너뛰기', '이 파일은 받지 않고, 지금 답이 끝나면 다음 파일로 넘어갑니다 (답이 오지 않으면 멈추기)', () => {
+        run.skip = true;
+        renderBar(id);
+      });
+      const stop = button('멈추기', '여기까지 받은 수정안으로 바를 그립니다', () => finishRun(id));
+      bar.replaceChildren(span('cb-icon', '⏳'), text, skip, stop);
+    }
+    setChangeBar(id, true);
+    return true;
+  }
+
   // ---------- 이어서 받기 (v0.17.1) ----------
   // 끊긴 파일을 버리지 않고 같은 AI에게 "끊긴 곳부터 나머지만" 부탁한다 (shared/patch.js continuationOf · continuePrompt).
   // 답이 끝나면(onPanelAnswerDone) 앞부분과 겹치는지 보고 이어 붙여, 원래 답의 다른 수정안과 함께 바를 다시 그린다.
@@ -858,6 +969,7 @@
 
   /** 바 그리기. 보여 줄 것이 없으면 내리고 false */
   function renderBar(id) {
+    if (runs.has(id)) return renderRunBar(id); // 파일별로 받기 제안 · 진행 중 (v0.18.0)
     const p = panels.get(id);
     const b = bars.get(id);
     if (!p || !b) {
@@ -915,6 +1027,7 @@
     const cut = bad.filter(({ plan }) => plan.truncated);
     if (cut.length) notes.push(span('cb-bad', `✂ 답변이 잘림 ${cut.length}개`)); // 출력 한도로 끊긴 파일 (v0.16.1) — 적용하지 않음
     if (bad.length > cut.length) notes.push(span('cb-bad', `${bad.length - cut.length}개 적용 불가`));
+    if (b.split) notes.push(span('cb-warn', `🗂 파일별로 받음 ${b.split.got}/${b.split.total}`));
     if (b.continued) notes.push(span(b.continued.error ? 'cb-bad' : 'cb-warn', b.continued.error ? '이어 붙이지 못함' : `↪ 이어 받음 ${b.continued.rounds}번`));
 
     const collect = button('📋', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다 (파일에는 쓰지 않음)`, () => window.onCollectClick(id));

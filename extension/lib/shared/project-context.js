@@ -160,5 +160,75 @@
     return out;
   }
 
-  return { INLINE_LIMIT, CONTEXT_FILE, EDIT_LINES, RULES, buildTree, buildContext, buildFollowUp, buildRefetch, parseNeedFiles, fileBlock };
+  // ---------- 큰 작업: 계획 먼저, 파일별로 받기 (v0.18.0) ----------
+  // 고칠 파일이 많거나 길면 한 답에 다 쓰다가 출력 한도로 끊긴다. 그래서 먼저 "고칠 파일 목록과 할 일"만 받고,
+  // 앱이 "1/5: a.js만"처럼 한 파일씩 차례로 물어 모은다. 답 하나의 길이가 파일 하나로 줄어 끝까지 받을 수 있다.
+  const MAX_PLAN_FILES = 30;
+  const SPLIT_SUGGEST = { files: 4, lines: 600 }; // 이보다 많이 고르면 "큰 작업"을 권한다
+
+  // 질문 뒤에 붙여, 이번 답에서는 코드 없이 계획만 받는다
+  const PLAN_FIRST = [
+    '[큰 작업 — 이번 답은 계획만]',
+    '이번 답에서는 코드를 쓰지 마. 고칠 파일이 많아서, 먼저 계획만 받고 파일마다 따로 물어볼게.',
+    '1) 무엇을 어떻게 바꿀지 5줄 이내로 설명해 줘.',
+    '2) 바꾸거나 새로 만들 파일을 고치는 순서대로, 한 줄에 하나씩 "- 경로: 그 파일에서 할 일 한 줄"로 적어 줘.',
+    '3) 맨 끝에 같은 파일들을 한 줄로 적어 줘: PLAN_FILES: 경로1, 경로2, 경로3',
+    '4) 지울 파일은 DELETE_FILES: 경로 로 적어 줘. 내용을 더 봐야 하는 파일은 NEED_FILES: 경로 로 적어 줘.',
+    '아래 답변 규칙(코드 형식)은 내가 파일별로 물어볼 때 지켜 줘.',
+  ].join('\n');
+
+  /**
+   * 계획 답에서 고칠 파일 목록을 읽는다: "PLAN_FILES: a.js, b.js" 줄 + 그 앞의 "- 경로: 할 일" 목록(할 일 글을 붙이려고)
+   * → [{ path, note }] (순서 유지, 중복 없음, 최대 MAX_PLAN_FILES개). PLAN_FILES 줄이 없으면 [].
+   */
+  function parsePlanFiles(text) {
+    const lines = String(text || '').split(/\r?\n/);
+    const clean = (p) => p.replace(/^[`'"*(\[]+|[`'"*)\].,;:]+$/g, '').replace(/\\/g, '/').replace(/^\.\//, '');
+    const notes = new Map();
+    for (const line of lines) {
+      const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+[`*]*([^\s`*:：]+)[`*]*\s*[:：—-]+\s*(.+)$/);
+      if (m && /[\w-]\.[\w]+$|\//.test(clean(m[1]))) notes.set(clean(m[1]), m[2].trim().slice(0, 200));
+    }
+    const out = [];
+    for (const line of lines) {
+      const m = line.match(/^\s*[*_`>-]*\s*PLAN_FILES\s*[*_`]*\s*[:：]\s*(.*)$/i);
+      if (!m) continue;
+      for (const item of m[1].split(/[,\s]+/)) {
+        const p = clean(item);
+        if (p && /[\w-]/.test(p) && !out.some((x) => x.path === p)) out.push({ path: p, note: notes.get(p) || '' });
+      }
+    }
+    return out.slice(0, MAX_PLAN_FILES);
+  }
+
+  /** 파일 하나를 부탁하는 글 (index는 0부터) */
+  function stepPrompt({ path, note }, index, total) {
+    return [
+      `계획대로 ${index + 1}/${total}번째 파일만 줘: ${path}${note ? ` — ${note}` : ''}`,
+      `"파일: ${path}" 줄 다음 코드 블록 하나로, 처음 답변 규칙대로 줘 (${EDIT_LINES}줄 이하 · 새 파일은 전체 내용, 그보다 긴 기존 파일은 찾기/바꾸기).`,
+      '이번 답에는 이 파일만 쓰고 다른 파일은 쓰지 마. 설명은 2줄 이내로. 다음 파일은 내가 따로 물어볼게.',
+    ].join('\n');
+  }
+
+  /** 고른 파일 수 · 줄 수가 크면 "큰 작업"을 권할지 */
+  const suggestSplit = ({ files, lines }) => files > SPLIT_SUGGEST.files || lines > SPLIT_SUGGEST.lines;
+
+  return {
+    INLINE_LIMIT,
+    CONTEXT_FILE,
+    EDIT_LINES,
+    RULES,
+    PLAN_FIRST,
+    MAX_PLAN_FILES,
+    SPLIT_SUGGEST,
+    buildTree,
+    buildContext,
+    buildFollowUp,
+    buildRefetch,
+    parseNeedFiles,
+    parsePlanFiles,
+    stepPrompt,
+    suggestSplit,
+    fileBlock,
+  };
 });

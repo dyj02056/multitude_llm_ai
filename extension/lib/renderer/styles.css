@@ -736,6 +736,10 @@ body.project-open[data-mode="chat"][data-view="dialog"] .project-side { display:
 }
 .change-bar[hidden] { display: none; }
 .change-bar.applied { border-top-color: #2f9e5b; background: #13261b; }
+/* 큰 작업: 파일별로 받기 제안 · 진행 중 (v0.18.0) — 보라 */
+.change-bar.run { border-top-color: #8b5cf6; background: #1c1730; }
+.change-bar.run .cb-icon { color: #c4b5fd; }
+.ps-split { margin: 2px 0; }
 .change-bar .cb-icon { flex: none; font-weight: 700; color: #ffd27a; }
 .change-bar.applied .cb-icon { color: #8fe0b0; }
 .change-bar .cb-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; cursor: help; }
