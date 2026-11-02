@@ -236,6 +236,12 @@
     }, LOGIN_CHECK_MS);
   }
 
+  // 이 확장의 background.js에서 오는 알림: 오른쪽 클릭 메뉴 "Multitude LLM에 묻기" (v0.15.0) — 화면(renderer.js)이 요청을 가져간다
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    if (msg?.type !== 'mla:ask' || sender.id !== chrome.runtime.id || sender.tab) return;
+    window.dispatchEvent(new Event('mla:web-ask'));
+  });
+
   // 서비스 페이지(content.js)에서 오는 메시지
   chrome.runtime.onMessage.addListener((msg, sender) => {
     if (!msg || typeof msg.type !== 'string' || sender.tab?.id !== tabId) return;
@@ -680,6 +686,17 @@
     },
     panelAction,
     on: (channel, fn) => listeners[channel]?.push(fn),
+    // 보고 있는 웹페이지로 질문 (v0.15.0): 오른쪽 클릭 메뉴가 storage.session에 남긴 요청을 한 번 가져가고 지운다
+    takeWebAsk: async () => {
+      try {
+        const got = await chrome.storage.session.get('mla:ask');
+        if (!got['mla:ask']) return null;
+        await chrome.storage.session.remove('mla:ask');
+        return got['mla:ask'];
+      } catch {
+        return null;
+      }
+    },
   };
 
   // ---------- 시작 ----------

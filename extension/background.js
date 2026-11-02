@@ -35,19 +35,68 @@ const PARTITION = { topLevelSite: `chrome-extension://${chrome.runtime.id}` };
 //   - 앱 탭 안에서만 AI 사이트를 iframe으로 띄울 수 있게 규칙을 걸고, 탭을 떠나면 바로 지움 (다른 사이트가 악용하지 못하게)
 //   - 로그인 쿠키가 필요한 곳에 붙도록 도움
 
-// 확장 아이콘 클릭: 이미 열린 앱 탭이 있으면 그 탭으로, 없으면 새로 엽니다.
-chrome.action.onClicked.addListener(async () => {
+// 확장 아이콘 클릭: 이미 열린 앱 탭이 있으면 그 탭으로, 없으면 새로 엽니다. → 앱 탭이 이미 열려 있었는지
+async function openApp() {
   try {
     const [ctx] = await chrome.runtime.getContexts({ contextTypes: ['TAB'] });
     if (ctx && ctx.tabId >= 0 && ctx.documentUrl?.startsWith(APP_URL)) {
       await chrome.tabs.update(ctx.tabId, { active: true });
       await chrome.windows.update(ctx.windowId, { focused: true });
-      return;
+      return true;
     }
   } catch (err) {
     console.warn('[background] 열린 탭을 찾지 못했습니다:', err.message);
   }
-  chrome.tabs.create({ url: APP_URL });
+  await chrome.tabs.create({ url: APP_URL });
+  return false;
+}
+chrome.action.onClicked.addListener(() => openApp());
+
+// ---------- 보고 있는 웹페이지로 질문 (v0.15.0) ----------
+// 오른쪽 클릭 메뉴 두 개: 선택한 글 · 이 페이지 본문. 모든 사이트 권한은 받지 않는다 —
+//   - 선택한 글은 메뉴가 넘겨주는 값(info.selectionText)을 그대로 쓴다 (페이지에 아무것도 넣지 않음)
+//   - 페이지 본문은 "이 페이지 본문"을 고른 그때만, 메뉴 클릭으로 생긴 그 탭 한 번 권한(activeTab)으로 글을 읽는다
+// 읽은 글은 브라우저를 닫으면 사라지는 저장소(storage.session)에 잠깐 두고 앱 탭을 열거나 앞으로 가져온다. 앱(host.js)이 받아서 지운다.
+const ASK_KEY = 'mla:ask';
+const ASK_MENUS = [
+  { id: 'mla-ask-selection', title: 'Multitude LLM에 묻기 — 선택한 글', contexts: ['selection'] },
+  { id: 'mla-ask-page', title: 'Multitude LLM에 묻기 — 이 페이지 본문', contexts: ['page', 'selection'] },
+];
+function setupAskMenus() {
+  chrome.contextMenus.removeAll(() => {
+    for (const m of ASK_MENUS) chrome.contextMenus.create({ ...m, documentUrlPatterns: ['http://*/*', 'https://*/*'] }, () => void chrome.runtime.lastError);
+  });
+}
+chrome.runtime.onInstalled.addListener(setupAskMenus);
+chrome.runtime.onStartup.addListener(setupAskMenus);
+
+/** 그 탭의 본문 글 (메뉴 클릭으로 받은 한 번 권한으로). 앱 탭 · 확장 페이지는 읽지 않는다 */
+async function readPageText(tabId) {
+  const [res] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => ({ title: document.title, url: location.href, text: (document.body?.innerText || '').slice(0, 400000) }),
+  });
+  return res?.result || null;
+}
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!ASK_MENUS.some((m) => m.id === info.menuItemId) || !tab || tab.id < 0) return;
+  if (!/^https?:/i.test(tab.url || '')) return;
+  try {
+    let ask;
+    if (info.menuItemId === 'mla-ask-selection') {
+      ask = { kind: 'selection', title: tab.title || '', url: tab.url, text: String(info.selectionText || '') };
+    } else {
+      const page = await readPageText(tab.id);
+      if (!page) throw new Error('페이지 글을 읽지 못했습니다');
+      ask = { kind: 'page', title: page.title || tab.title || '', url: page.url || tab.url, text: page.text };
+    }
+    await chrome.storage.session.set({ [ASK_KEY]: { ...ask, at: Date.now() } });
+    const wasOpen = await openApp();
+    if (wasOpen) chrome.runtime.sendMessage({ type: 'mla:ask' }).catch(() => {}); // 열려 있던 앱 탭에 바로 알림 (새 탭이면 켜질 때 읽음)
+  } catch (err) {
+    console.warn('[background] 웹페이지 질문 실패:', err.message);
+  }
 });
 
 // ---------- iframe 허용 규칙 ----------

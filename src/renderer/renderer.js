@@ -1121,6 +1121,51 @@ function addFiles(list) {
   $('#prompt').focus();
 }
 
+// ---------- 보고 있는 웹페이지로 질문 (v0.15.0, 크롬 확장) ----------
+// 오른쪽 클릭 메뉴(background.js)가 남긴 요청을 받아 공통 입력창에 넣는다.
+//   선택한 글 → 입력창에 그대로, 페이지 본문 → 비밀 정보 검사 후 page.md로 첨부. 채팅 화면이 아니면 들어갈 때까지 기다린다.
+let pendingWebAsk = null;
+
+async function checkWebAsk() {
+  if (!host.takeWebAsk) return; // Windows 앱에는 이 메뉴가 없다
+  const raw = pendingWebAsk || (await host.takeWebAsk());
+  pendingWebAsk = null;
+  const ask = raw && MLA.webAsk.normalize(raw);
+  if (!ask) return;
+  if (state?.mode !== 'chat') {
+    pendingWebAsk = raw; // 모델을 고른 뒤 채팅 화면에서 넣는다
+    return;
+  }
+  applyWebAsk(ask);
+}
+
+function applyWebAsk(ask) {
+  const W = MLA.webAsk;
+  const { scanSecrets, describeSecrets } = MLA.secretScan;
+  const hits = scanSecrets(ask.text);
+  if (hits.length && !confirm(`${ask.kind === 'page' ? '페이지 본문' : '선택한 글'}에 비밀 정보로 보이는 것이 있습니다:\n${describeSecrets(hits)}\n\n그래도 넣을까요? (AI 서비스로 보내기 전에 입력창 · 첨부에서 지울 수 있습니다)`)) {
+    attachHint('웹페이지 글을 넣지 않았습니다 (비밀 정보 확인에서 취소)', 'warn');
+    return;
+  }
+  host.setView('panels');
+  const prompt = $('#prompt');
+  if (ask.kind === 'selection') {
+    prompt.value = W.selectionPrompt(ask) + (prompt.value ? `\n\n${prompt.value}` : '');
+  } else {
+    const f = W.pageFile(ask);
+    addFiles([new File([f.text], f.name, { type: f.type })]);
+    prompt.value = W.pagePrompt(ask) + (prompt.value ? `\n\n${prompt.value}` : '');
+  }
+  prompt.focus();
+  const end = ask.kind === 'selection' ? W.selectionPrompt(ask).length : W.pagePrompt(ask).length;
+  prompt.setSelectionRange(end, end); // "질문: " 바로 뒤에 이어 쓰게
+  prompt.scrollTop = prompt.scrollHeight; // 입력칸이 작아서, 글쓴이가 쓸 "질문: " 줄이 보이게
+  attachHint(`웹페이지 ${ask.kind === 'page' ? '본문을 page.md로 첨부했습니다' : '선택한 글을 넣었습니다'} — 질문을 쓰고 보내세요${ask.truncated ? ' (길어서 앞부분만)' : ''}`);
+}
+
+window.addEventListener('focus', checkWebAsk); // 열려 있던 앱 탭을 메뉴가 앞으로 가져왔을 때
+window.addEventListener('mla:web-ask', checkWebAsk);
+
 function removeAttachment(i) {
   const [a] = attachments.splice(i, 1);
   if (a?.url) URL.revokeObjectURL(a.url);
@@ -1301,6 +1346,7 @@ $('#prompt').addEventListener('keydown', (e) => {
 // 새로 들어온 화면이면 내용을 새로 그립니다 (예: 비교 화면에 처음 들어오면 답변을 다시 읽음).
 host.on('state', (next) => {
   const modeChanged = !state || state.mode !== next.mode;
+  if (modeChanged) setTimeout(checkWebAsk, 300); // 웹페이지 질문(크롬 확장): 채팅 화면에 들어오면 기다리던 요청을 넣는다
   const enteredCompare = next.chatView === 'compare' && (modeChanged || state.chatView !== 'compare');
   const enteredHistory = next.chatView === 'history' && (modeChanged || state.chatView !== 'history');
   const enteredHelp = next.chatView === 'help' && (modeChanged || state.chatView !== 'help');

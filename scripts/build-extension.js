@@ -121,7 +121,9 @@ function buildManifest() {
     background: { service_worker: 'background.js' },
     // browsingData: 패널을 막는 서비스 워커 등록만 지운다 (host.js clearServiceWorkers)
     // cookies: 앱 탭 iframe의 WebSocket 연결에 그 사이트 쿠키를 붙이려고 읽는다 (background.js syncWsCookies)
-    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData', 'cookies'],
+    // contextMenus · activeTab · scripting: 오른쪽 클릭 메뉴 "Multitude LLM에 묻기" (background.js) — 메뉴를 누른 그 탭의 글만, 누른 그때만 읽는다.
+    //   셋 다 설치 · 업데이트 때 새 권한 확인 창을 띄우지 않는다. 모든 사이트 권한(<all_urls>)은 받지 않는다.
+    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData', 'cookies', 'contextMenus', 'activeTab', 'scripting'],
     // wss://는 WebSocket 요청 헤더(쿠키)를 바꾸는 규칙에 필요하다 (background.js syncWsCookies)
     host_permissions: [...matches, ...hosts.map((h) => `wss://${h}/*`)],
     content_scripts: [
