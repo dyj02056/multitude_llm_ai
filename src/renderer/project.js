@@ -559,6 +559,7 @@
 
   // 새 대화를 열면 그 AI는 이전 내용을 모른다.
   window.onPanelCleared = (id) => {
+    continuing.delete(id); // 새 대화에서는 이어 받을 앞부분이 없다
     project.sent.delete(id);
     project.stale = project.stale.filter((s) => s.id !== id);
     renderSync();
@@ -655,6 +656,7 @@
 
   window.onPanelAnswerDone = async (id) => {
     const md = await answerMd(id).catch(() => '');
+    if (continuing.has(id) && has()) return finishContinue(id, md); // "이어서 받기"로 보낸 부탁의 답 (v0.17.1)
     // 프로젝트가 열려 있으면 수정안을 패널 아래 변경 바로 보여 준다 (📋 모아보기도 바 안에). 바를 띄우지 않으면 머리줄 버튼.
     const barred = has() && (await refreshBar(id, md).catch(() => false));
     if (!barred) showCollectBtn(id, md).catch(() => {});
@@ -759,9 +761,12 @@
   };
 
   /** 답변 하나의 수정안을 찾고, 지금 파일에 적용하면 어떻게 되는지 미리 계산합니다. [{ change, plan }] */
-  async function planAnswer(md) {
+  const planAnswer = (md) => planChanges(PX.extractChanges(md || ''));
+
+  /** 수정안 목록을 지금 파일에 적용하면 어떻게 되는지 미리 계산합니다 (이어 받아 합친 수정안에도 씀). [{ change, plan }] */
+  async function planChanges(changes) {
     const plans = [];
-    for (const change of PX.extractChanges(md || '')) {
+    for (const change of changes) {
       const block = writeBlocked(change.path);
       let plan;
       try {
@@ -807,6 +812,41 @@
     const plans = await planAnswer(md ?? (await answerMd(id)));
     bars.set(id, { ai: { id, name: svc.name, color: svc.color, plans }, applied: null });
     return renderBar(id);
+  }
+
+  // ---------- 이어서 받기 (v0.17.1) ----------
+  // 끊긴 파일을 버리지 않고 같은 AI에게 "끊긴 곳부터 나머지만" 부탁한다 (shared/patch.js continuationOf · continuePrompt).
+  // 답이 끝나면(onPanelAnswerDone) 앞부분과 겹치는지 보고 이어 붙여, 원래 답의 다른 수정안과 함께 바를 다시 그린다.
+  const continuing = new Map(); // 패널 id -> { path, cont, changes: 원래 답의 수정안들, rounds }
+
+  async function continueFile(id, path) {
+    const b = bars.get(id);
+    const item = b?.ai.plans.find((x) => x.change.path === path);
+    const cont = item && PX.continuationOf(item.change);
+    if (!cont) return notice('이 수정안은 이어 받을 수 없습니다 — 변경 제안에서 다시 요청하세요');
+    const rounds = (b.continued?.path === path ? b.continued.rounds : 0) + 1;
+    if (rounds > PX.MAX_CONTINUE) return alert(`${path}은(는) 이미 ${PX.MAX_CONTINUE}번 이어 받았습니다. 변경 제안에서 "다시 요청"으로 받으세요 (긴 파일은 바꿀 곳만 찾기/바꾸기로).`);
+    if (!allowedFor(id)) return;
+    const res = await host.sendFollowUp(id, PX.continuePrompt(cont));
+    if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
+    continuing.set(id, { path, cont, changes: b.ai.plans.map((x) => x.change), rounds });
+    notice(`${b.ai.name}에게 ${path}의 나머지를 부탁했습니다 (${rounds}/${PX.MAX_CONTINUE}) — 답이 끝나면 이어 붙입니다`);
+  }
+
+  async function finishContinue(id, md) {
+    const st = continuing.get(id);
+    continuing.delete(id);
+    const svc = state.services.find((s) => s.id === id);
+    const got = PX.extractChanges(md);
+    const r = PX.stitchContinuation(st.cont, got.find((c) => c.path === st.path));
+    // 원래 답의 수정안 목록에서 끊긴 파일을 합친 것으로 바꾸고, 이어 받은 답에 다른 파일이 더 있으면 더한다 (같은 경로는 새것)
+    const byPath = new Map(st.changes.map((c) => [c.path, c]));
+    if (r.change) byPath.set(st.path, r.change);
+    for (const c of got) if (c.path !== st.path) byPath.set(c.path, c);
+    const plans = await planChanges([...byPath.values()]);
+    bars.set(id, { ai: { id, name: svc?.name || id, color: svc?.color, plans }, applied: null, continued: { path: st.path, rounds: st.rounds, error: r.error || null } });
+    renderBar(id);
+    notice(r.error ? `이어 붙이지 못했습니다: ${r.error}` : `${st.path}을(를) 이어 붙였습니다${r.change.truncated ? ' — 아직 끝나지 않아 한 번 더 이어 받을 수 있습니다' : ''}`);
   }
 
   /** 적용하거나 되돌린 뒤: 아직 적용하지 않은 다른 패널의 바를 지금 파일 기준으로 다시 계산한다 */
@@ -875,12 +915,20 @@
     const cut = bad.filter(({ plan }) => plan.truncated);
     if (cut.length) notes.push(span('cb-bad', `✂ 답변이 잘림 ${cut.length}개`)); // 출력 한도로 끊긴 파일 (v0.16.1) — 적용하지 않음
     if (bad.length > cut.length) notes.push(span('cb-bad', `${bad.length - cut.length}개 적용 불가`));
+    if (b.continued) notes.push(span(b.continued.error ? 'cb-bad' : 'cb-warn', b.continued.error ? '이어 붙이지 못함' : `↪ 이어 받음 ${b.continued.rounds}번`));
 
     const collect = button('📋', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다 (파일에는 쓰지 않음)`, () => window.onCollectClick(id));
     const view = live.length
       ? button('변경 보기', '파일마다 바뀌는 줄을 보고 골라서 적용합니다', () => openPreview(ai))
       : button('변경 제안에서 보기', '변경 제안 화면에서 전체 파일 다시 요청 등을 할 수 있습니다', () => host.setView('changes'));
     const btns = [collect, view];
+    // 이어서 받기 (v0.17.1): 잘렸거나 끝이 잘린 것 같은 파일 — 같은 AI에게 끊긴 곳부터 나머지만 받아 이어 붙인다
+    const contTarget = [...ai.plans].reverse().find(PX.wantsContinue);
+    if (contTarget) {
+      const cont = button('↪ 이어서 받기', `${contTarget.plan.path}이(가) 끊겼습니다. ${ai.name}에게 끊긴 곳부터 나머지만 달라고 해서 이어 붙입니다`, () => continueFile(id, contTarget.change.path));
+      cont.className = 'cb-continue';
+      btns.unshift(cont);
+    }
     if (live.length) {
       const apply = button(
         quick.length ? `적용 (${quick.length})` : '골라서 적용',

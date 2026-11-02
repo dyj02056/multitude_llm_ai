@@ -586,5 +586,113 @@
       .join('\n');
   }
 
-  return { TRUNCATED_TEXT, suspectFullReplace, suspectCutCode, braceDebt, parseEdits, applyEdits, safeRelPath, isGitInternal, fencedBlocks, normalizeDiff, extractChanges, planChange, previewDiff, applyBySearch, executionRisk, splitHunks, applyHunks };
+  // ---------- 이어서 받기 (v0.17.1) ----------
+  // 출력 한도로 끊긴 파일을 버리지 않고, 같은 AI에게 "끊긴 곳부터 나머지만" 달라고 해서 이어 붙인다.
+  //   전체 내용: 받은 글의 마지막 줄은 중간에 잘렸을 수 있어 버리고, 그 앞 줄(기준 줄)을 AI가 한 번 더 쓰게 한 뒤 겹치는지 보고 붙인다.
+  //   찾기/바꾸기: 끝까지 받은 블록은 그대로 두고, 그 다음 블록부터 받는다.
+  // 겹치는 곳이 맞지 않으면 붙이지 않는다 (엉뚱한 곳에 이어 붙여 코드를 망가뜨리지 않게).
+  const MAX_CONTINUE = 3; // 한 파일을 이어 받는 최대 횟수
+  // 끊긴 파일 뒤에 주려던 다른 파일도 끊겨서 못 받았을 수 있다 — 이 파일을 다 쓴 뒤 이어서 달라고 한다
+  const AFTER_NOTE = '이 파일 다음에 주려던 다른 파일이 있었다면, 이 파일을 다 쓴 뒤 처음 답변 규칙 그대로("파일: 경로" + 코드 블록) 이어서 줘.';
+
+  /** 이어 받을 수 있는 수정안이면 이어 받기 정보, 아니면 null (diff · 삭제는 다시 요청으로) */
+  function continuationOf(change) {
+    if (!change || change.isDelete) return null;
+    if (change.type === 'edit') return { path: change.path, kind: 'edit', edits: change.edits.slice() };
+    if (change.type !== 'full') return null;
+    const lines = String(change.content).replace(/\r\n/g, '\n').split('\n');
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    const dropped = lines.pop() ?? ''; // 중간에 잘렸을 수 있는 마지막 줄
+    let anchor = null;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (lines[i].trim()) {
+        anchor = lines[i];
+        break;
+      }
+    }
+    return { path: change.path, kind: 'full', head: lines, anchor, dropped };
+  }
+
+  /** 이어 받기를 부탁하는 글 */
+  function continuePrompt(cont) {
+    const label = `파일: ${cont.path} (이어서)`;
+    if (cont.kind === 'edit') {
+      return [
+        `직전 답의 "파일: ${cont.path}" 찾기/바꾸기가 출력 한도로 중간에 끊겼어. 끝까지 받은 찾기/바꾸기는 ${cont.edits.length}개야.`,
+        `${cont.edits.length + 1}번째부터 남은 찾기/바꾸기만, 앞에서와 같은 형식(<<<<<<< 찾기 / ======= / >>>>>>> 바꾸기)으로 "${label}" 줄 다음 코드 블록 하나에 줘.`,
+        '이미 받은 찾기/바꾸기는 다시 쓰지 말고, 다른 설명은 쓰지 마. 이번에도 다 못 쓰면 끝난 블록까지만 쓰고 멈춰 줘.',
+        AFTER_NOTE,
+      ].join('\n');
+    }
+    if (!cont.anchor) {
+      return [`직전 답의 "파일: ${cont.path}" 코드가 출력 한도로 끊겼어. 그 파일의 전체 내용을 "${label}" 줄 다음 코드 블록 하나로 처음부터 다시 줘.`].join('\n');
+    }
+    const fence = cont.anchor.includes('```') ? '````' : '```';
+    return [
+      `직전 답의 "파일: ${cont.path}" 코드가 출력 한도로 중간에 끊겼어. 아래 줄까지는 받았어:`,
+      fence,
+      cont.anchor,
+      fence,
+      `이 줄을 첫 줄로 한 번 더 그대로 쓰고, 그 다음 줄부터 파일 끝까지 나머지만 "${label}" 줄 다음 코드 블록 하나로 줘.`,
+      '앞부분은 다시 쓰지 말고, 다른 설명은 쓰지 마. 이번에도 다 못 쓰면 줄이 끝나는 곳에서 멈춰 줘.',
+      AFTER_NOTE,
+    ].join('\n');
+  }
+
+  /**
+   * 이어 받은 답(next: 같은 경로의 수정안)을 앞부분에 붙인다.
+   * → { change: 합친 수정안(또 잘렸으면 truncated) } | { error }
+   */
+  function stitchContinuation(cont, next) {
+    if (!next) return { error: `이어 받은 답에서 "${cont.path}" 코드를 찾지 못했습니다` };
+    if (cont.kind === 'edit') {
+      if (next.type !== 'edit') return { error: '이어 받은 답이 찾기/바꾸기 형식이 아닙니다' };
+      return { change: { path: cont.path, type: 'edit', edits: [...cont.edits, ...next.edits], ...(next.truncated ? { truncated: true } : {}) } };
+    }
+    if (next.type !== 'full') return { error: '이어 받은 답이 코드 블록 형식이 아닙니다' };
+    const tail = String(next.content).replace(/\r\n/g, '\n').split('\n');
+    while (tail.length && !tail[0].trim()) tail.shift();
+    const same = (a, b) => String(a).trimEnd() === String(b).trimEnd();
+    let merged;
+    if (!cont.anchor) merged = tail; // 처음부터 다시 받음
+    else if (same(tail[0], cont.anchor)) merged = [...cont.head, ...tail.slice(1)]; // 기준 줄을 한 번 더 씀 (부탁한 대로)
+    else if (cont.dropped.trim() && tail[0].trimEnd().startsWith(cont.dropped.trimEnd())) merged = [...cont.head, ...tail]; // 잘린 줄을 마저 씀
+    else if (cont.dropped.trim() && same(tail[0], cont.dropped)) merged = [...cont.head, ...tail];
+    else {
+      // 기준 줄이 둘째 줄 이후에 있으면 (앞부분을 조금 더 다시 씀) 거기서부터 붙인다
+      const at = tail.findIndex((l) => same(l, cont.anchor));
+      if (at < 0 || at > 20) return { error: '이어 받은 코드의 첫 줄이 끊긴 곳과 맞지 않아 붙이지 않았습니다 (다시 요청하세요)' };
+      merged = [...cont.head, ...tail.slice(at + 1)];
+    }
+    return { change: { path: cont.path, type: 'full', content: merged.join('\n'), ...(next.truncated ? { truncated: true } : {}) } };
+  }
+
+  /** 잘렸거나 끝이 잘린 것으로 의심되어 이어 받을 만한 수정안인지 */
+  const wantsContinue = ({ change, plan }) =>
+    !!continuationOf(change) && (plan.truncated || /끝이 잘린 것 같습니다/.test(plan.suspect || ''));
+
+  return {
+    TRUNCATED_TEXT,
+    MAX_CONTINUE,
+    suspectFullReplace,
+    suspectCutCode,
+    braceDebt,
+    parseEdits,
+    applyEdits,
+    continuationOf,
+    continuePrompt,
+    stitchContinuation,
+    wantsContinue,
+    safeRelPath,
+    isGitInternal,
+    fencedBlocks,
+    normalizeDiff,
+    extractChanges,
+    planChange,
+    previewDiff,
+    applyBySearch,
+    executionRisk,
+    splitHunks,
+    applyHunks,
+  };
 });

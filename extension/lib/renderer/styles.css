@@ -750,6 +750,9 @@ body.project-open[data-mode="chat"][data-view="dialog"] .project-side { display:
 .change-bar .cb-apply:hover { background: var(--grad-hover); box-shadow: 0 4px 18px var(--accent-glow); }
 .change-bar .cb-apply:disabled { opacity: .7; cursor: default; }
 .change-bar .cb-close { background: none; border-color: transparent; color: var(--muted); padding: 2px 5px; }
+/* 이어서 받기 (v0.17.1): 잘린 파일의 나머지를 같은 AI에게 부탁 — 청록 테두리로 눈에 띄게 */
+.change-bar .cb-continue { border-color: rgba(34, 211, 238, .6); color: #a5f3fc; background: rgba(34, 211, 238, .10); font-weight: 600; }
+.change-bar .cb-continue:hover { border-color: rgba(34, 211, 238, .95); color: #fff; box-shadow: 0 0 12px rgba(34, 211, 238, .35); }
 @keyframes bar-in { from { transform: translateY(100%); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .change-bar { animation: none; } }
 .ps-row .tag.touched.M { border-color: #2a4a6a; color: var(--accent-text); }
