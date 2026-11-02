@@ -338,6 +338,20 @@
         <button id="remoteRefresh">지금 확인</button>
       </div>
       <p class="muted small" id="remoteStatus"></p>
+      <h2>로컬 LLM (선택 기능)</h2>
+      <div class="setting-row">
+        <label class="check-label"><input type="checkbox" id="localEnabled" /> 로컬 LLM 패널 쓰기</label>
+      </div>
+      <p class="muted small">켜면 모델 고르기에 <b>로컬 LLM</b>이 생겨, 이 PC에서 돌아가는 Ollama · LM Studio · llama.cpp 같은 OpenAI 호환 서버에 웹 패널과 함께 질문합니다. 주소는 이 PC(localhost · 127.0.0.1)만 받고, API 키 · 바깥 주소는 쓰지 않습니다 — 질문과 프로젝트 코드가 PC 밖으로 나가지 않습니다. 첨부는 이미지만(비전 모델일 때) 보냅니다.</p>
+      <div id="localBody" class="local-settings" hidden>
+        <label class="setting-row">주소 <input id="localBase" spellcheck="false" placeholder="http://localhost:11434" /></label>
+        <div class="setting-row">
+          <label for="localModel">모델</label>
+          <select id="localModel"></select>
+          <button id="localCheck">연결 확인</button>
+        </div>
+        <p class="muted small" id="localStatus">Ollama는 http://localhost:11434, LM Studio는 http://localhost:1234 (서버 켜기 필요). 크롬 확장은 Ollama를 <code>OLLAMA_ORIGINS=chrome-extension://*</code>로 켜야 합니다.</p>
+      </div>
       <h2>서비스 화면 상태</h2>
       <p class="muted small">패널마다 앱이 입력창 · 보내기 버튼 · 답변 영역을 찾았는지입니다. 페이지가 열린 뒤와 질문을 보내고 답을 받을 때마다 갱신됩니다. ✕가 있으면 그 패널 머리줄에 <b>⚠ 화면이 바뀐 것 같음</b>이 뜹니다.</p>
       <table id="diagTable" class="diag-table"></table>

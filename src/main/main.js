@@ -23,7 +23,7 @@
 // require는 다른 파일이나 라이브러리의 기능을 가져오는 명령입니다.
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard, dialog, net } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl, limitTextOf } = require('../shared/services');
 const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
 const { normalizeLibrary } = require('../shared/prompt-lib');
@@ -33,6 +33,8 @@ const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
 const { createRounds } = require('../shared/rounds');
 const { createDiag } = require('../shared/diag');
+const L = require('../shared/local-llm');
+const watchCore = require('../shared/watch');
 const { pageProbe, pageLimitCheck } = require('../shared/page');
 const history = require('./history');
 const remote = require('./remote');
@@ -101,6 +103,7 @@ let prefs = {
   answerTimeoutMin: 20,
   remoteSelectors: true, // 사이트 셀렉터 원격 갱신
   projectRoot: null, // 마지막으로 연 프로젝트 폴더
+  local: { enabled: false, baseUrl: L.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
 };
 
 /**
@@ -113,9 +116,42 @@ function loadPrefs() {
     prefs = { ...prefs, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) };
   } catch {}
   // 예전 설정(Groq 등 없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
+  prefs.local = normalizeLocalPrefs(prefs.local);
+  const hadLocal = Array.isArray(prefs.selected) && prefs.selected.includes(L.LOCAL_ID);
   prefs.selected = normalizeSelected(prefs.selected);
+  // 로컬 LLM은 웹 서비스 목록(SERVICES) 밖이라 normalizeSelected가 뺀다 — 켜 둔 동안은 다시 넣는다
+  if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(L.LOCAL_ID);
   prefs.layout = normalizeLayout(prefs.layout);
-  if (!SERVICES.some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
+  if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
+}
+
+// ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
+// 웹 서비스 목록(SERVICES)과 따로 둔다: 켜 두었을 때만 모델 목록 · 패널 · 종합 대상에 "로컬 LLM"이 붙는다.
+// 패널은 웹페이지가 아니라 앱이 대화를 들고 이 PC의 OpenAI 호환 서버(localhost만)에 묻는다 (shared/local-llm.js).
+function normalizeLocalPrefs(v) {
+  const o = v && typeof v === 'object' ? v : {};
+  return { enabled: o.enabled === true, baseUrl: L.normalizeBaseUrl(o.baseUrl) || L.DEFAULT_BASE, model: L.cleanModel(o.model) };
+}
+const localSvc = () => L.localService(prefs.local);
+/** 지금 쓸 수 있는 서비스 전체: 웹 서비스 + (켰으면) 로컬 LLM */
+const allServices = () => (prefs.local?.enabled ? [...SERVICES, localSvc()] : SERVICES);
+const svcById = (id) => allServices().find((s) => s.id === id);
+let localChat = null; // 로컬 LLM 대화 (패널이 열려 있을 때만)
+const isLocal = (id) => id === L.LOCAL_ID;
+const hasPanelId = (id) => (isLocal(id) ? !!localChat : panels.has(id));
+
+function openLocalPanel() {
+  if (localChat) return;
+  localChat = L.createLocalChat({
+    fetchFn: (url, opts) => net.fetch(url, opts),
+    getConfig: () => prefs.local,
+    onUpdate: (view) => sendPanel(L.LOCAL_ID, { local: view }),
+  });
+  sendPanel(L.LOCAL_ID, { login: 'ready', local: localChat.view() });
+}
+function closeLocalPanel() {
+  localChat?.stop();
+  localChat = null;
 }
 
 /** 지금 설정(prefs)을 파일에 씁니다. 실패해도 앱은 계속 돌아가고, 터미널에 이유만 남깁니다. */
@@ -355,7 +391,7 @@ function showPick() {
  * 고르지 않은 패널은 닫고, 새로 고른 패널은 열고, 이미 있던 패널은 그대로 다시 붙입니다.
  */
 function showChat(selected) {
-  const ids = SERVICES.map((s) => s.id).filter((id) => selected.includes(id)).slice(0, MAX_SELECTED);
+  const ids = allServices().map((s) => s.id).filter((id) => selected.includes(id)).slice(0, MAX_SELECTED);
   if (!ids.length) return;
   prefs.selected = ids;
   savePrefs();
@@ -373,6 +409,8 @@ function showChat(selected) {
     if (p) win.contentView.addChildView(p.view);
     else openPanel(svc);
   }
+  if (ids.includes(L.LOCAL_ID)) openLocalPanel();
+  else closeLocalPanel();
   mode = 'chat';
   chatView = 'panels';
   pushState();
@@ -404,7 +442,7 @@ function computeRects() {
   if (mode === 'login') return { login: area, panels: [] };
   if (mode !== 'chat') return { panels: [] };
 
-  const ids = SERVICES.map((s) => s.id).filter((id) => panels.has(id));
+  const ids = allServices().map((s) => s.id).filter(hasPanelId);
   if (focusId && !ids.includes(focusId)) focusId = null;
   const box = { ...area, height: area.height - COMPOSER_H };
   const cells = placeCells(prefs.layout, ids.length, box, GAP);
@@ -461,7 +499,8 @@ function pushState() {
     remoteSelectors: prefs.remoteSelectors,
     remote: remote.getStatus(),
     diag: diag.all(SERVICES.map((s) => s.id)),
-    services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
+    services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
+    local: { ...prefs.local },
     rects: rects.panels,
   });
 }
@@ -568,7 +607,7 @@ ipcMain.on('layout:bar', (_e, { id, on } = {}) => {
 
 // 패널 하나 크게 보기 / 돌아오기 (id가 null이거나 이미 크게 보는 패널이면 돌아온다)
 ipcMain.on('layout:focus', (_e, id) => {
-  focusId = typeof id === 'string' && panels.has(id) && focusId !== id ? id : null;
+  focusId = typeof id === 'string' && hasPanelId(id) && focusId !== id ? id : null;
   pushState();
 });
 
@@ -583,20 +622,37 @@ function sendSynthStatus(patch) {
 // rounds = 질문 보내기·답변 기다리기·종합을 맡는 공통 부품입니다 (src/shared/rounds.js).
 // 크롬 확장 프로그램과 같은 코드를 쓰기 때문에, "패널을 다루는 방법"만 Windows 앱 식으로 넘겨줍니다.
 const rounds = createRounds({
-  services: SERVICES,
-  hasPanel: (id) => panels.has(id),
-  sendPrompt: (id, text, files, extra) =>
-    panels.has(id)
+  get services() {
+    return allServices(); // 로컬 LLM을 켜고 끌 때마다 바뀐다
+  },
+  hasPanel: hasPanelId,
+  sendPrompt: (id, text, files, extra) => {
+    if (isLocal(id)) {
+      if (!localChat) return { ok: false, error: '패널이 닫혔습니다' };
+      const images = files.map((f) => L.imageDataUrl(f, (d) => Buffer.from(d).toString('base64'))).filter(Boolean);
+      return localChat.send(text, images);
+    }
+    return panels.has(id)
       ? sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text, files, extra)
-      : { ok: false, error: '패널이 닫혔습니다' },
-  snapshot: (id, opts) =>
-    panels.has(id) ? snapshot(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), opts) : null,
+      : { ok: false, error: '패널이 닫혔습니다' };
+  },
+  snapshot: (id, opts) => {
+    if (isLocal(id)) return localChat ? localChat.snapshot() : null;
+    return panels.has(id) ? snapshot(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), opts) : null;
+  },
   watch: (id, before, isCurrent, onState) => {
     if (dev.drySend) return;
     const opts = {
       maxMs: dev.answerTimeoutMs || prefs.answerTimeoutMin * 60 * 1000,
       startMs: dev.answerStartMs || undefined,
     };
+    if (isLocal(id)) {
+      // 로컬 LLM: 웹 패널과 같은 규칙으로, 앱이 들고 있는 대화의 "사진"을 지켜본다
+      if (!localChat) return;
+      const chat = localChat;
+      watchCore.watchAnswer(async () => chat.snapshot(), before, () => isCurrent() && localChat === chat, onState, opts);
+      return;
+    }
     const p = panels.get(id);
     if (!p) return; // 보내는 사이 패널을 닫았다
     watchAnswer(p.view.webContents, SERVICES.find((s) => s.id === id), before, isCurrent, onState, opts);
@@ -608,6 +664,7 @@ const rounds = createRounds({
   diag,
   // 사용 한도 안내 찾기 (shared/page.js pageLimitCheck) — 답변이 끝나지 않았거나 아주 짧을 때만 rounds가 부른다
   checkLimit: async (id, { scope, answer } = {}) => {
+    if (isLocal(id)) return null; // 로컬 LLM에는 사용 한도가 없다
     const wc = panels.get(id)?.view.webContents;
     const svc = SERVICES.find((s) => s.id === id);
     if (!wc || wc.isDestroyed() || !svc) return null;
@@ -758,7 +815,7 @@ ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors }) => {
 
 // 종합 담당 AI와 "완료 후 자동 종합" 켜기/끄기 저장
 ipcMain.on('synth:set', (_e, { target, auto }) => {
-  if (typeof target === 'string' && SERVICES.some((s) => s.id === target)) prefs.synthTarget = target;
+  if (typeof target === 'string' && allServices().some((s) => s.id === target)) prefs.synthTarget = target;
   if (typeof auto === 'boolean') prefs.autoSynth = auto;
   savePrefs();
   pushState();
@@ -813,6 +870,15 @@ ipcMain.handle('answer:get', (_e, id) => (typeof id === 'string' ? rounds.answer
 // 패널 머리줄 버튼: 새로고침 · 처음 주소 · 뒤로 · 개발자 도구 · 로그인 다시 시도 · 새 대화
 // id가 '*'이면 열린 패널 전부에 같은 동작을 합니다 (모두 새 대화 등).
 ipcMain.on('panel:action', (_e, { id, action }) => {
+  // 로컬 LLM 패널: 새 대화 · 처음 주소 = 대화 지우기, 중지 = 답 그만 받기 (웹페이지 동작은 없음)
+  if (localChat && (id === '*' || isLocal(id)) && ['newchat', 'home', 'stop'].includes(action)) {
+    rounds.cancelWatch(L.LOCAL_ID);
+    if (action === 'stop') localChat.stop();
+    else {
+      localChat.reset();
+      sendPanel(L.LOCAL_ID, { answer: 'clear' });
+    }
+  }
   const targets = id === '*' ? [...panels.entries()] : [[id, panels.get(id)]].filter(([, p]) => p);
   for (const [pid, p] of targets) {
     const wc = p.view.webContents;
@@ -831,6 +897,42 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
       sendPanel(pid, { answer: 'clear' });
       wc.loadURL(SERVICES.find((s) => s.id === pid).newChatUrl);
     }
+  }
+});
+
+// ---------- 로컬 LLM 설정 (설정 화면) ----------
+// 켜기 · 끄기, 주소(localhost만), 모델. 끄면 열린 로컬 패널을 닫고 고른 목록에서도 뺀다.
+ipcMain.handle('local:setPrefs', (_e, next = {}) => {
+  const cur = prefs.local;
+  const baseUrl = next.baseUrl === undefined ? cur.baseUrl : L.normalizeBaseUrl(next.baseUrl);
+  if (!baseUrl) return { ok: false, error: '주소는 이 PC(localhost · 127.0.0.1 · [::1])의 http(s) 주소만 쓸 수 있습니다' };
+  prefs.local = {
+    enabled: typeof next.enabled === 'boolean' ? next.enabled : cur.enabled,
+    baseUrl,
+    model: next.model === undefined ? cur.model : L.cleanModel(next.model),
+  };
+  if (!prefs.local.enabled) {
+    prefs.selected = prefs.selected.filter((x) => !isLocal(x));
+    if (isLocal(prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
+    if (localChat) {
+      closeLocalPanel();
+      if (focusId && isLocal(focusId)) focusId = null;
+    }
+  }
+  savePrefs();
+  pushState();
+  return { ok: true, local: { ...prefs.local } };
+});
+// 연결 확인: 그 주소의 모델 목록 (/v1/models)
+ipcMain.handle('local:models', async (_e, baseUrl) => {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    return { ok: true, models: await L.listModels((u, o) => net.fetch(u, o), typeof baseUrl === 'string' ? baseUrl : prefs.local.baseUrl, { signal: ctrl.signal }) };
+  } catch (err) {
+    return { ok: false, error: err.name === 'AbortError' ? '5초 안에 답이 없습니다 (서버가 켜져 있는지 확인하세요)' : err.message };
+  } finally {
+    clearTimeout(timer);
   }
 });
 

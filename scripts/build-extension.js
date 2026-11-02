@@ -32,7 +32,7 @@ const GENERATED = '자동 생성 파일 — 직접 고치지 말고 원본을 �
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 
 // 앱 탭(app.html)이 읽는 공통 모듈. 순서가 중요하다 (rounds.js는 synth.js를 쓴다).
-const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'remote-core', 'rounds'];
+const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'remote-core', 'rounds', 'local-llm'];
 // 서비스 페이지(content script)가 읽는 공통 모듈
 const CONTENT_SHARED = ['page', 'markdown', 'shortcuts'];
 const ICON_SIZES = [16, 32, 48, 128];
@@ -126,6 +126,8 @@ function buildManifest() {
     permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData', 'cookies', 'contextMenus', 'activeTab', 'scripting'],
     // wss://는 WebSocket 요청 헤더(쿠키)를 바꾸는 규칙에 필요하다 (background.js syncWsCookies)
     host_permissions: [...matches, ...hosts.map((h) => `wss://${h}/*`)],
+    // 로컬 LLM 패널(v0.16.0, 선택 기능): 설정에서 켤 때만 묻는 이 PC 주소 권한 — 설치 · 업데이트 때 확인 창을 띄우지 않는다
+    optional_host_permissions: ['http://localhost/*', 'http://127.0.0.1/*'],
     content_scripts: [
       {
         matches,

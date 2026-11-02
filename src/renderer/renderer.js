@@ -181,23 +181,41 @@ function createPanel(svc) {
     }),
     focusBtn,
     button('＋', '새 대화', () => host.panelAction(svc.id, 'newchat')),
-    button('←', '뒤로', () => host.panelAction(svc.id, 'back')),
-    button('⌂', '처음 주소로', () => host.panelAction(svc.id, 'home')),
-    button('↻', '새로고침', () => host.panelAction(svc.id, 'reload')),
   );
-  if (UI.devtools) head.append(button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')));
+  // 웹페이지 패널에만: 뒤로 · 처음 주소 · 새로고침 · 개발자 도구. 로컬 LLM 패널은 대신 ■ 답 그만 받기.
+  const isLocalPanel = svc.kind === 'local';
+  if (isLocalPanel) head.append(button('■', '답 그만 받기', () => host.panelAction(svc.id, 'stop')));
+  else {
+    head.append(
+      button('←', '뒤로', () => host.panelAction(svc.id, 'back')),
+      button('⌂', '처음 주소로', () => host.panelAction(svc.id, 'home')),
+      button('↻', '새로고침', () => host.panelAction(svc.id, 'reload')),
+    );
+    if (UI.devtools) head.append(button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')));
+  }
   // 프로젝트 모드: 답변에 수정안이 있으면 project.js가 패널 아래에 이 바를 채워 띄운다 (setChangeBar)
   const changeBar = document.createElement('div');
   changeBar.className = 'change-bar';
   changeBar.hidden = true;
   el.append(head, changeBar);
+  // 로컬 LLM 패널 (v0.16.0): 웹페이지가 얹히지 않으므로 이 화면이 대화(말풍선)와 모델 고르기를 직접 그린다
+  let localBox = null;
+  if (isLocalPanel) {
+    el.classList.add('local-panel');
+    dot.classList.add('ready'); // 로그인이 없는 패널 — 열리면 바로 쓸 수 있다
+    localBox = document.createElement('div');
+    localBox.className = 'local-chat';
+    el.append(localBox);
+    url.textContent = state.local?.baseUrl || svc.url;
+  }
   panelsEl.append(el);
   head.addEventListener('dblclick', (e) => {
     if (!e.target.closest('button')) host.setFocus(svc.id); // 머리줄 빈 곳을 두 번 누르면 크게 보기 / 돌아오기
   });
-  const p = { el, dot, url, status, loginBtn, attachBadge, diagBadge, needBtn, collectBtn, focusBtn, changeBar };
+  const p = { el, dot, url, status, loginBtn, attachBadge, diagBadge, needBtn, collectBtn, focusBtn, changeBar, localBox };
   panels.set(svc.id, p);
   renderDiagBadge(svc.id);
+  if (localBox) renderLocalChat(svc.id, localViews[svc.id] || { messages: [], streaming: false, model: state.local?.model || '', error: '' });
   return p;
 }
 
@@ -224,10 +242,86 @@ function renderDiagBadge(id) {
   p.diagBadge.title = [d.message, ...d.notes, '', d.hint, '', '누르면 설정의 서비스별 상태 표를 엽니다'].join('\n');
 }
 
-/** 설정 화면: 서비스별 입력창 · 보내기 버튼 · 답변 영역 상태 표 (열어 둔 패널만) */
+// ---------- 로컬 LLM 패널 (v0.16.0) ----------
+// 본체(main · host.js)가 대화가 바뀔 때마다 { messages, streaming, model, error }를 보내 준다. 말풍선으로 그린다.
+// 글은 shared/export.js의 mdToHtml로 (모든 글을 이스케이프한 뒤 제목 · 목록 · 표 · 코드 블록만 태그로) 넣는다.
+const localViews = {};
+let localModels = []; // 연결 확인으로 받은 모델 목록 (본체 상태가 새로 와도 남긴다)
+
+function renderLocalChat(id, view) {
+  localViews[id] = view;
+  const p = panels.get(id);
+  if (!p?.localBox) return;
+  const box = p.localBox;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const head = document.createElement('div');
+  head.className = 'local-head';
+  const models = localModels;
+  const sel = document.createElement('select');
+  sel.title = '로컬 LLM 모델 (설정 › 로컬 LLM › 연결 확인으로 목록을 받습니다)';
+  const cur = view.model || state.local?.model || '';
+  const names = [...new Set([cur, ...models].filter(Boolean))];
+  sel.replaceChildren(...(names.length ? names : ['(모델을 고르세요)']).map((n) => Object.assign(document.createElement('option'), { value: names.length ? n : '', textContent: n })));
+  sel.value = cur;
+  sel.addEventListener('change', () => host.local.setPrefs({ model: sel.value }));
+  const conn = button('모델 목록', '이 PC의 로컬 LLM 서버에서 모델 목록을 받아 옵니다', () => refreshLocalModels(conn));
+  head.append(span('muted-label', '모델'), sel, conn);
+  const list = document.createElement('div');
+  list.className = 'local-messages';
+  if (!view.messages.length) {
+    list.append(
+      span('local-empty', view.error ? `⚠ ${view.error}` : '공통 입력창으로 질문하면 이 PC의 로컬 LLM이 답합니다. 대화는 앱을 닫으면 사라지고, 질문 · 답변은 기록에 남습니다.'),
+    );
+  }
+  for (const m of view.messages) {
+    const b = document.createElement('div');
+    b.className = `local-msg ${m.role === 'user' ? 'user' : 'bot'}`;
+    if (m.role === 'user') {
+      b.textContent = m.text;
+      if (m.images) b.append(span('local-img', ` 🖼 이미지 ${m.images}개`));
+    } else {
+      b.innerHTML = MLA.exporter.mdToHtml(m.text || (view.streaming ? '…' : '')); // mdToHtml은 모든 글을 이스케이프한다
+    }
+    list.append(b);
+  }
+  if (view.streaming) list.append(span('local-typing', '답하는 중…'));
+  else if (view.error && view.messages.length) list.append(span('local-error', `⚠ ${view.error}`));
+  box.replaceChildren(head, list);
+  if (atBottom || view.streaming) list.scrollTop = list.scrollHeight;
+}
+
+async function refreshLocalModels(el) {
+  const r = await host.local.models($('#localBase')?.value || state.local?.baseUrl);
+  if (!r?.ok) {
+    if (el) flash(el, '연결 실패');
+    $('#localStatus') && ($('#localStatus').textContent = `연결하지 못했습니다: ${r?.error || '알 수 없는 오류'}`);
+    return null;
+  }
+  localModels = r.models;
+  if (!state.local?.model && r.models[0]) await host.local.setPrefs({ model: r.models[0] });
+  $('#localStatus') && ($('#localStatus').textContent = r.models.length ? `연결됨 · 모델 ${r.models.length}개` : '연결됐지만 모델이 없습니다 (ollama pull 모델이름 으로 받으세요)');
+  renderLocalSettings();
+  for (const id of Object.keys(localViews)) renderLocalChat(id, localViews[id]);
+  return r.models;
+}
+
+/** 설정 화면의 로컬 LLM 칸 */
+function renderLocalSettings() {
+  const L = state.local || {};
+  if (!$('#localEnabled')) return;
+  $('#localEnabled').checked = !!L.enabled;
+  if (document.activeElement !== $('#localBase')) $('#localBase').value = L.baseUrl || '';
+  const sel = $('#localModel');
+  const names = [...new Set([L.model, ...localModels].filter(Boolean))];
+  sel.replaceChildren(...(names.length ? names : ['']).map((n) => Object.assign(document.createElement('option'), { value: n, textContent: n || '(연결 확인으로 목록 받기)' })));
+  sel.value = L.model || '';
+  $('#localBody').hidden = !L.enabled;
+}
+
+/** 설정 화면: 서비스별 입력창 · 보내기 버튼 · 답변 영역 상태 표 (열어 둔 패널만, 로컬 LLM 패널은 셀렉터를 쓰지 않으므로 뺀다) */
 function renderDiagTable() {
   const D = MLA.diag;
-  const ids = state.rects.map((r) => r.id);
+  const ids = state.rects.map((r) => r.id).filter((id) => state.services.find((s) => s.id === id)?.kind !== 'local');
   const table = $('#diagTable');
   const head = document.createElement('tr');
   for (const t of ['서비스', ...D.PARTS.map((p) => D.PART_TEXT[p]), '사용 한도', '상태']) head.append(Object.assign(document.createElement('th'), { textContent: t }));
@@ -317,7 +411,7 @@ setInterval(tickAnswerTimers, 1000);
 // 본체가 "이 패널 상태가 바뀌었어"라고 알려 올 때마다 실행됩니다.
 // 알림 종류: 불러오는 중(loading) · 주소(url) · 오류(error) · 로그인 상태(login) · 보내기 결과(send) · 답변 상태(answer)
 // 답변 완료('done')면 다른 파일들(project.js 등)에게도 알려 📋 파일 모아보기·📂 요청 파일 버튼을 띄우게 합니다.
-host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching, diag, notice }) => {
+host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, late, attach, attaching, diag, notice, local }) => {
   if (diag) {
     // 셀렉터 자가진단 결과는 따로 온다 (다른 상태와 섞이지 않음)
     diagById[id] = diag;
@@ -325,9 +419,11 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     if (state?.chatView === 'help') renderDiagTable();
     return;
   }
+  if (local) renderLocalChat(id, local); // 로컬 LLM 패널의 대화 (v0.16.0)
   const p = panels.get(id);
   if (!p) return;
-  if (notice) return flash(p.status, notice); // 잠깐 보여 주는 안내 (예: 로그인 창이 허용 밖 주소로 감)
+  if (notice) return flash(p.status, notice);
+  if (local && login === undefined && send === undefined && answer === undefined) return; // 잠깐 보여 주는 안내 (예: 로그인 창이 허용 밖 주소로 감)
   window.onLibPanelStatus?.(id, { send, answer, error }); // 스킬 압축 요청의 답변을 기다리는 중이면 library.js가 본다
   if (answer === 'clear') {
     p.attachBadge.hidden = true;
@@ -940,6 +1036,24 @@ function renderRemoteStatus() {
 }
 
 $('#remoteToggle').addEventListener('change', (e) => host.setSettings({ remoteSelectors: e.target.checked }));
+// 로컬 LLM 설정 (v0.16.0). 크롬 확장은 켤 때 이 PC 주소 권한(localhost)을 그때 묻는다 (host.local.setPrefs가 처리)
+$('#localEnabled').addEventListener('change', async (e) => {
+  const r = await host.local.setPrefs({ enabled: e.target.checked });
+  if (!r?.ok) {
+    e.target.checked = false;
+    $('#localStatus').textContent = r?.error || '켜지 못했습니다';
+  }
+  renderLocalSettings();
+  if (r?.ok && r.local.enabled) refreshLocalModels();
+});
+$('#localBase').addEventListener('change', async (e) => {
+  const r = await host.local.setPrefs({ baseUrl: e.target.value });
+  $('#localStatus').textContent = r?.ok ? '주소를 저장했습니다 — 연결 확인을 누르세요' : r?.error || '저장하지 못했습니다';
+  if (!r?.ok) e.target.value = state.local?.baseUrl || '';
+});
+$('#localModel').addEventListener('change', (e) => host.local.setPrefs({ model: e.target.value }));
+$('#localCheck').addEventListener('click', () => refreshLocalModels($('#localCheck')));
+
 $('#remoteRefresh').addEventListener('click', async () => {
   $('#remoteRefresh').disabled = true;
   await host.refreshRemote();
@@ -1000,6 +1114,7 @@ function renderSettings() {
   renderRemoteStatus();
   renderDiagTable();
   renderStatsTable();
+  renderLocalSettings();
   const select = $('#timeoutSelect');
   select.replaceChildren(
     ...state.timeoutChoices.map((m) => Object.assign(document.createElement('option'), { value: m, textContent: `${m}분` })),

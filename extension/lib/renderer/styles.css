@@ -1031,3 +1031,28 @@ body[data-mode="chat"] #composer { animation: rise-in .5s var(--ease) both; }
   }
   button:hover, .model:hover, .feature:hover, .history-item:hover { transform: none; }
 }
+
+/* ---------- 로컬 LLM 패널 (v0.16.0) ----------
+   [쉽게 말하면] 웹페이지가 얹히지 않는 패널이라, 머리줄 아래에 이 화면이 직접 대화 말풍선을 그립니다.
+   내 질문은 오른쪽 보라 말풍선, 로컬 LLM의 답은 왼쪽 카드. 위쪽 줄에서 모델을 고릅니다. */
+.panel.local-panel { background: linear-gradient(180deg, rgba(22, 25, 38, .96), rgba(12, 14, 24, .98)); }
+.local-chat { position: absolute; left: 0; right: 0; top: 28px; bottom: 0; display: flex; flex-direction: column; min-height: 0; }
+.local-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); flex: none; }
+.local-head select { background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; font: inherit; font-size: 12px; max-width: 60%; }
+.local-head button { padding: 1px 8px; font-size: 12px; }
+.local-messages { flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; user-select: text; }
+.local-msg { max-width: 88%; padding: 8px 12px; border-radius: 14px; line-height: 1.6; font-size: 13.5px; word-break: break-word; animation: bubble-in .35s var(--ease) both; }
+.local-msg.user { align-self: flex-end; white-space: pre-wrap; color: #fff; border-radius: 14px 14px 4px 14px; background: linear-gradient(135deg, rgba(139, 92, 246, .38), rgba(59, 140, 255, .30)); border: 1px solid rgba(255, 255, 255, .14); }
+.local-msg.bot { align-self: flex-start; border-radius: 14px 14px 14px 4px; background: var(--panel); border: 1px solid color-mix(in srgb, var(--svc) 35%, transparent); }
+.local-msg.bot p, .local-msg.bot ul, .local-msg.bot ol { margin: 4px 0; }
+.local-msg.bot pre { background: rgba(0, 0, 0, .35); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; overflow: auto; font: 12px/1.5 var(--mono); white-space: pre-wrap; }
+.local-msg.bot code { font-family: var(--mono); font-size: .92em; }
+.local-msg.bot table { border-collapse: collapse; font-size: 12.5px; margin: 6px 0; }
+.local-msg.bot th, .local-msg.bot td { border: 1px solid var(--border-strong); padding: 4px 7px; }
+.local-empty { margin: auto; max-width: 340px; text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.local-typing { align-self: flex-start; color: var(--svc); font-size: 12px; animation: soft-blink 1.4s ease-in-out infinite; }
+.local-error { align-self: flex-start; color: #fca5a5; font-size: 12px; }
+.local-img { color: var(--text-2); font-size: 11.5px; }
+.local-settings input { flex: 1; margin-left: 10px; background: var(--field); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: 4px 8px; font: inherit; font-weight: 400; user-select: text; }
+.local-settings select { flex: 1; }
+.local-settings[hidden] { display: none; }

@@ -257,7 +257,9 @@
    */
   // 프로젝트 파일을 어떤 서비스에 처음 올릴 때 한 번 확인합니다 (각 회사 서버에 저장되고 학습에 쓰일 수 있으므로).
   function confirmUpload(ids, fileCount) {
-    const fresh = ids.filter((id) => !project.uploadOk.has(id));
+    // 로컬 LLM(이 PC의 서버, v0.16.0)은 회사 서버로 올리는 것이 아니므로 묻지 않는다
+    const isLocalSvc = (id) => state.services.find((s) => s.id === id)?.kind === 'local';
+    const fresh = ids.filter((id) => !project.uploadOk.has(id) && !isLocalSvc(id));
     if (!fresh.length) return true;
     const ok = confirm(
       [

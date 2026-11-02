@@ -68,8 +68,35 @@
     autoSynth: false,
     answerTimeoutMin: 20,
     remoteSelectors: true, // 사이트 셀렉터 원격 갱신
+    local: { enabled: false, baseUrl: MLA.localLLM.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
   };
   const savePrefs = () => store('prefs', prefs);
+
+  // ---------- 로컬 LLM (v0.16.0, 선택 기능) — Windows 앱(main.js)과 같은 규칙 ----------
+  // 웹 서비스 목록(SERVICES)과 따로 두고, 켜 두었을 때만 붙인다. 이 PC 주소(localhost · 127.0.0.1) 권한은 켤 때 그때 묻는다.
+  const LL = MLA.localLLM;
+  const LOCAL_ORIGINS = ['http://localhost/*', 'http://127.0.0.1/*'];
+  const normalizeLocalPrefs = (v) => {
+    const o = v && typeof v === 'object' ? v : {};
+    return { enabled: o.enabled === true, baseUrl: LL.normalizeBaseUrl(o.baseUrl) || LL.DEFAULT_BASE, model: LL.cleanModel(o.model) };
+  };
+  const allServices = () => (prefs.local?.enabled ? [...SERVICES, LL.localService(prefs.local)] : SERVICES);
+  const isLocal = (id) => id === LL.LOCAL_ID;
+  let localChat = null;
+  const hasPanelId = (id) => (isLocal(id) ? !!localChat : panels.has(id));
+  function openLocalPanel() {
+    if (localChat) return;
+    localChat = LL.createLocalChat({
+      fetchFn: (url, opts) => fetch(url, opts),
+      getConfig: () => prefs.local,
+      onUpdate: (view) => sendPanel(LL.LOCAL_ID, { local: view }),
+    });
+    sendPanel(LL.LOCAL_ID, { login: 'ready', local: localChat.view() });
+  }
+  function closeLocalPanel() {
+    localChat?.stop();
+    localChat = null;
+  }
 
   const history = createHistory((records) => store('history', records));
 
@@ -289,12 +316,14 @@
   }
 
   function showChat(selected) {
-    const ids = SERVICES.map((s) => s.id).filter((id) => selected.includes(id)).slice(0, MAX_SELECTED);
+    const ids = allServices().map((s) => s.id).filter((id) => selected.includes(id)).slice(0, MAX_SELECTED);
     if (!ids.length) return;
     prefs.selected = ids;
     savePrefs();
     for (const id of [...panels.keys()]) if (!ids.includes(id)) closePanel(id);
-    for (const id of ids) if (!panels.has(id)) openPanel(svcOf(id));
+    for (const id of ids) if (!isLocal(id) && !panels.has(id)) openPanel(svcOf(id));
+    if (ids.includes(LL.LOCAL_ID)) openLocalPanel();
+    else closeLocalPanel();
     mode = 'chat';
     chatView = 'panels';
     pushState();
@@ -307,7 +336,7 @@
     if (mode !== 'chat') return [];
     const side = sidebarOpen ? SIDEBAR_W : 0;
     const box = { x: side, y: TOOLBAR_H, width: window.innerWidth - side, height: window.innerHeight - TOOLBAR_H - COMPOSER_H };
-    const ids = SERVICES.map((s) => s.id).filter((id) => panels.has(id));
+    const ids = allServices().map((s) => s.id).filter(hasPanelId);
     if (focusId && !ids.includes(focusId)) focusId = null;
     const cells = MLA.layout.placeCells(prefs.layout, ids.length, box, GAP);
     const [big] = MLA.layout.placeCells('grid', 1, box, GAP);
@@ -361,7 +390,8 @@
       remoteSelectors: prefs.remoteSelectors,
       remote: remoteStatus,
       diag: diag.all(SERVICES.map((s) => s.id)),
-      services: SERVICES.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
+      services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
+      local: { ...prefs.local },
       rects,
     });
   }
@@ -388,9 +418,21 @@
   }
 
   const rounds = createRounds({
-    services: SERVICES,
-    hasPanel: (id) => panels.has(id),
+    get services() {
+      return allServices();
+    },
+    hasPanel: hasPanelId,
     sendPrompt: async (id, text, files, { fallbackText } = {}) => {
+      if (isLocal(id)) {
+        if (!localChat) return { ok: false, error: '패널이 닫혔습니다' };
+        const b64 = (d) => {
+          const bytes = new Uint8Array(d);
+          let s = '';
+          for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+          return btoa(s);
+        };
+        return localChat.send(text, files.map((f) => LL.imageDataUrl(f, b64)).filter(Boolean));
+      }
       const svc = svcOf(id);
       let upload = null;
       if (files.length) {
@@ -405,16 +447,22 @@
       const res = await callFrame(id, { type: 'mla:send', cfg: sendCfg(svc), text, upload, fallbackText });
       return res || { ok: false, error: '패널 페이지가 응답하지 않았습니다' };
     },
-    snapshot,
-    watch: (id, before, isCurrent, onState) =>
-      watchAnswer(() => snapshot(id), before, isCurrent, onState, { maxMs: prefs.answerTimeoutMin * 60 * 1000 }),
+    snapshot: (id, opts) => (isLocal(id) ? (localChat ? localChat.snapshot() : null) : snapshot(id, opts)),
+    watch: (id, before, isCurrent, onState) => {
+      if (isLocal(id)) {
+        const chat = localChat;
+        if (!chat) return;
+        return watchAnswer(async () => chat.snapshot(), before, () => isCurrent() && localChat === chat, onState, { maxMs: prefs.answerTimeoutMin * 60 * 1000 });
+      }
+      return watchAnswer(() => snapshot(id), before, isCurrent, onState, { maxMs: prefs.answerTimeoutMin * 60 * 1000 });
+    },
     sendPanel,
     sendSynthStatus: (patch) => emit('synth:status', patch),
     history,
     prefs: () => prefs,
     diag,
     checkLimit: async (id, { scope, answer } = {}) => {
-      if (!panels.has(id)) return null;
+      if (isLocal(id) || !panels.has(id)) return null;
       const cfg = { limitText: limitTextOf(svcOf(id)), scope: scope === 'answer' ? 'answer' : 'page', answer: typeof answer === 'string' ? answer : '' };
       return callFrame(id, { type: 'mla:limit', cfg }).catch(() => null);
     },
@@ -448,6 +496,15 @@
 
   // 패널 머리줄 버튼 처리: 새로고침 · 처음 주소 · 뒤로 · 새 대화 · 로그인 탭 열기
   function panelAction(id, action) {
+    // 로컬 LLM 패널: 새 대화 · 처음 주소 = 대화 지우기, 중지 = 답 그만 받기
+    if (localChat && (id === '*' || isLocal(id)) && ['newchat', 'home', 'stop'].includes(action)) {
+      rounds.cancelWatch(LL.LOCAL_ID);
+      if (action === 'stop') localChat.stop();
+      else {
+        localChat.reset();
+        sendPanel(LL.LOCAL_ID, { answer: 'clear' });
+      }
+    }
     const ids = id === '*' ? [...panels.keys()] : [id].filter((x) => panels.has(x));
     for (const pid of ids) {
       const svc = svcOf(pid);
@@ -620,6 +677,42 @@
       clear: async () => history.clear(),
     },
     copyText: (text) => typeof text === 'string' && copyText(text),
+    // 로컬 LLM 설정 (v0.16.0): 켤 때 이 PC 주소(localhost · 127.0.0.1) 접근 권한을 묻는다 (선택 권한 — 설치 · 업데이트 때는 묻지 않음)
+    local: {
+      setPrefs: async (next = {}) => {
+        const cur = prefs.local;
+        const baseUrl = next.baseUrl === undefined ? cur.baseUrl : LL.normalizeBaseUrl(next.baseUrl);
+        if (!baseUrl) return { ok: false, error: '주소는 이 PC(localhost · 127.0.0.1)의 http(s) 주소만 쓸 수 있습니다' };
+        const enabled = typeof next.enabled === 'boolean' ? next.enabled : cur.enabled;
+        if (enabled && !cur.enabled) {
+          const granted = await chrome.permissions.request({ origins: LOCAL_ORIGINS }).catch(() => false);
+          if (!granted) return { ok: false, error: '이 PC 주소 접근을 허용하지 않아 켜지 못했습니다' };
+        }
+        prefs.local = { enabled, baseUrl, model: next.model === undefined ? cur.model : LL.cleanModel(next.model) };
+        if (!enabled) {
+          prefs.selected = prefs.selected.filter((x) => !isLocal(x));
+          if (isLocal(prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
+          closeLocalPanel();
+        }
+        savePrefs();
+        pushState();
+        return { ok: true, local: { ...prefs.local } };
+      },
+      models: async (baseUrl) => {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5000);
+        try {
+          return { ok: true, models: await LL.listModels((u, o) => fetch(u, o), typeof baseUrl === 'string' ? baseUrl : prefs.local.baseUrl, { signal: ctrl.signal }) };
+        } catch (err) {
+          return {
+            ok: false,
+            error: err.name === 'AbortError' ? '5초 안에 답이 없습니다' : `${err.message} (Ollama는 OLLAMA_ORIGINS=chrome-extension://* 로 켜야 확장에서 쓸 수 있습니다)`,
+          };
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+    },
     // 내보내기 (v0.14.0): 다운로드 권한 없이, 이 탭에서 파일 링크를 눌러 크롬의 다운로드로 저장한다
     saveFile: async ({ name, text, kind } = {}) => {
       const types = { md: 'text/markdown', html: 'text/html' };
@@ -636,7 +729,7 @@
     runSynth: (judgeId, kind) =>
       rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', ['code', 'analysis'].includes(kind) ? kind : 'text'),
     setSynth: ({ target, auto }) => {
-      if (typeof target === 'string' && SERVICES.some((s) => s.id === target)) prefs.synthTarget = target;
+      if (typeof target === 'string' && allServices().some((s) => s.id === target)) prefs.synthTarget = target;
       if (typeof auto === 'boolean') prefs.autoSynth = auto;
       savePrefs();
       pushState();
@@ -681,7 +774,7 @@
       }
     },
     setFocus: (id) => {
-      focusId = typeof id === 'string' && panels.has(id) && focusId !== id ? id : null;
+      focusId = typeof id === 'string' && hasPanelId(id) && focusId !== id ? id : null;
       pushState();
     },
     panelAction,
@@ -707,8 +800,11 @@
     prefs = { ...prefs, ...(await load('prefs', {})) };
     prefs.layout = MLA.layout.normalizeLayout(prefs.layout);
     // 예전 설정(없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
+    prefs.local = normalizeLocalPrefs(prefs.local);
+    const hadLocal = Array.isArray(prefs.selected) && prefs.selected.includes(LL.LOCAL_ID);
     prefs.selected = normalizeSelected(prefs.selected);
-    if (!SERVICES.some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
+    if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(LL.LOCAL_ID);
+    if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
     history.load(await load('history', []));
     // 마지막으로 받은 원격 셀렉터를 먼저 적용한다 (새로 받아 오는 것은 아래에서).
     const cached = prefs.remoteSelectors && remoteCore.sanitize(await load('remoteSelectors', null), SERVICES);
