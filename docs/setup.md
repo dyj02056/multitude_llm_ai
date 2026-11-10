@@ -77,6 +77,17 @@ npm run check:ext   # extension/ 이 src/와 맞는지 확인
 npm test            # 단위 테스트 (공통 모듈 · 확장 background 규칙 · 매니페스트 권한)
 ```
 
+## 스크린샷 다시 찍기 (v0.20.1)
+
+```bash
+npm run screenshots                         # 모든 장면 → docs/screenshots/*.png
+npm run screenshots -- 02-ask-all 24-side-panel   # 일부만
+```
+
+- [scripts/screenshots/](../scripts/screenshots)가 실제 화면 코드(`src/renderer` · `extension/sidepanel.html`)에 가짜 본체와 예시 데이터를 붙여 Electron 창(화면 밖 렌더링)에 띄우고 장면마다 저장합니다. 장면 목록은 `run.js`의 `SCENES`, 예시 질문 · 답은 `sample.js`.
+- 패널 안은 실제 AI 사이트가 아니라 **테스트용 채팅 페이지**입니다. 실제 사이트에는 접속하지 않습니다 (서비스 주소 요청은 이 도구 안에서 가짜 페이지로 바뀜).
+- 디자인을 바꾼 뒤 다시 찍으면 문서 그림이 한 번에 맞춰집니다. 프로젝트 폴더가 필요한 장면(09 · 10 · 16 · 21~23)은 아직 없습니다.
+
 ## 개발 옵션
 
 환경 변수로 켜며, 일반 실행에는 영향이 없습니다. 자세한 내용은 [src/main/dev.js](../src/main/dev.js)를 참고하세요.

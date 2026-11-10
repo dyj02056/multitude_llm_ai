@@ -1,7 +1,7 @@
 # Multitude LLM (multitude_llm_ai)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.20.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.20.1-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -80,12 +80,12 @@ flowchart LR
 | <img src="docs/screenshots/01-model-picker.png" width="270"> | <img src="docs/screenshots/03-synthesis.png" width="270"> | <img src="docs/screenshots/05-history.png" width="270"> |
 | **파일 첨부** | **라이브러리** | **변경 제안** |
 | <img src="docs/screenshots/07-attachments.png" width="270"> | <img src="docs/screenshots/12-library.png" width="270"> | <img src="docs/screenshots/10-changes.png" width="270"> |
-| **테스트 실행** | **로컬 LLM** | **크롬 확장** |
-| <img src="docs/screenshots/16-test-run.png" width="270"> | <img src="docs/screenshots/19-local-llm.png" width="270"> | <img src="docs/screenshots/08-chrome-extension.png" width="270"> |
+| **차이 강조** | **로컬 LLM** | **사이드탭** |
+| <img src="docs/screenshots/14-diff-highlight.png" width="270"> | <img src="docs/screenshots/19-local-llm.png" width="270"> | <img src="docs/screenshots/24-side-panel.png" width="120"> |
 
 </details>
 
-> 스크린샷은 v0.19.0 CLI 디자인 개편 전 화면이고, 패널 안은 테스트용 채팅 페이지입니다. 기능은 같고 색 · 버튼 이름만 다릅니다 (지금 버튼 이름: [화면 디자인](docs/guide.md#화면-디자인)).
+> 스크린샷은 `npm run screenshots`로 찍은 지금 화면이고, 패널 안은 실제 서비스가 아니라 **테스트용 채팅 페이지**입니다. 프로젝트 모드 일부(09 · 10 · 16 · 21~23)와 크롬 확장 탭(08)은 아직 예전 디자인 화면입니다.
 
 ## 기술 스택
 
@@ -165,10 +165,10 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.20.1** | 문서 스크린샷을 지금 화면으로 — `npm run screenshots` 한 번으로 다시 찍기 |
 | **v0.20.0** | Windows 앱 **자동 업데이트**(알리기만 → 누르면 받기 · 설치), 크롬 확장은 새 버전 알림 |
 | **v0.19.2** | 사이드탭 **자동 읽기** — 한 번 허용하면 보고 있는 탭 본문을 탭 이동 · 페이지 로드 · 보낼 때마다 자동으로 함께 보냄 (선택 권한) |
 | **v0.19.1** | 사이드탭 첫 질문에 페이지가 안 가던 문제 — 본문 3만 자 이하는 질문 글에 바로 넣음, 보낸 내용 표시 |
-| **v0.19.0** | 화면 전체를 **CLI 디자인**으로, 크롬 **사이드탭 모드**(AI 최대 2개 + 페이지 맥락) |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 
@@ -179,4 +179,4 @@ multitude_llm_ai/
 - **크롬 확장**은 앱 탭을 새로 열 때마다 프로젝트 폴더 접근을 다시 허용해야 하고, git 콘솔 · 테스트 실행이 없습니다.
 - **사이드탭**은 폭이 좁아 AI 사이트가 모바일 화면으로 뜨고, 여기서 보낸 질문은 앱의 기록 · 비교에 들어가지 않습니다. 자동 읽기를 허용하지 않으면 `Alt+Shift+S` · 오른쪽 클릭으로 가져온 탭만 씁니다.
 - **기록 · 설정은 이 PC에 암호화 없이** 저장됩니다. Windows 앱과 크롬 확장의 기록은 따로입니다.
-- 스크린샷은 v0.19.0 디자인 개편 전 화면입니다.
+- 프로젝트 모드 일부와 크롬 확장 탭 스크린샷은 예전 디자인 화면입니다 (프로젝트 폴더가 있어야 하는 장면이라 아직 자동으로 찍지 않음).
