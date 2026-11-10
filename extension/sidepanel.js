@@ -35,6 +35,7 @@
   let ctx = null; // 가져온 페이지 { title, url, text, truncated, at, tabId }
   let ctxError = '';
   let activeTabId = null;
+  let shortcut = 'Alt+Shift+S'; // 크롬이 실제로 지정한 사이드탭 단축키 (시작할 때 확인)
   const panes = new Map(); // id -> { el, iframe, dot, url, status, port, pending, seq, helloTimer, loginTimer, retried, sentKey, watch, curUrl }
 
   const savePrefs = () => chrome.storage.local.set({ sidePrefs: prefs }).catch(() => {});
@@ -378,7 +379,10 @@
       return;
     }
     if (!ctx) {
-      text.textContent = '없음 — Alt+Shift+S 또는 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기';
+      // 확장을 업데이트로 받으면 크롬이 새 단축키를 지정하지 않을 때가 있다 — 그때는 지정하는 곳을 알려 준다
+      text.textContent = shortcut
+        ? `없음 — ${shortcut} 또는 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기`
+        : '없음 — 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기 (단축키 미지정: chrome://extensions/shortcuts)';
       text.title = '보고 있는 페이지의 본문을 가져와 질문과 함께 보냅니다';
       return;
     }
@@ -403,13 +407,13 @@
       ctx = next;
       ctxError = '';
       prefs.ctxOn = true;
-      hint(`페이지를 가져왔습니다 — 다음 질문에 page.md로 함께 보냅니다`, 'ok');
+      hint(`페이지를 가져왔습니다 (${ctx.text.length.toLocaleString()}자) — 다음 질문에 본문을 함께 보냅니다`, 'ok');
     }
     renderCtx();
   }
 
-  /** ↻: 지금 보는 탭의 본문을 읽는다. 단축키 · 메뉴로 받은 그 탭 한 번 권한이 남아 있을 때만 된다. */
-  async function grabCtx() {
+  /** ↻: 지금 보는 탭의 본문을 읽는다. 단축키 · 메뉴로 받은 그 탭 한 번 권한이 남아 있을 때만 된다. quiet면 실패해도 알리지 않는다 */
+  async function grabCtx(quiet = false) {
     const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
     if (!tab) return;
     try {
@@ -421,7 +425,7 @@
       takeCtx({ ...res.result, tabId: tab.id, at: Date.now() });
     } catch {
       // 권한이 없는 탭(처음 보는 탭 · 다른 주소로 이동한 탭 · 크롬 설정 화면 등)
-      hint('이 탭은 Alt+Shift+S(또는 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기)로 가져와 주세요', 'error');
+      if (!quiet) hint(`이 탭은 ${shortcut || '오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기'}${shortcut ? '(또는 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기)' : ''}로 가져와 주세요`, 'error');
     }
   }
 
@@ -433,6 +437,8 @@
     if (!text || sending) return;
     const ids = prefs.selected.filter((id) => panes.get(id)?.port);
     if (!ids.length) return hint('연결된 패널이 없습니다 — 패널이 다 뜬 뒤 보내세요', 'error');
+    // 가져온 페이지가 없으면 지금 탭을 한 번 조용히 읽어 본다 (그 탭에 한 번 권한이 남아 있을 때만 된다)
+    if (prefs.ctxOn && !ctx) await grabCtx(true);
     const useCtx = prefs.ctxOn && ctx;
     // 페이지 본문을 처음 보낼 때: 키 · 토큰처럼 보이는 것이 있으면 확인 (앱 탭의 오른쪽 클릭 메뉴와 같음)
     if (useCtx && ids.some((id) => panes.get(id).sentKey !== SP.contextKey(ctx))) {
@@ -448,7 +454,8 @@
     const bad = results.filter((r) => !r.ok);
     if (!bad.length) {
       $('#spPrompt').value = '';
-      hint(`보냄 → ${ids.map((id) => svcOf(id).name).join(' · ')}`, 'ok');
+      const how = results.map((r) => r.how).find(Boolean);
+      hint(`보냄 → ${ids.map((id) => svcOf(id).name).join(' · ')}${how ? ` · ${how}` : useCtx ? '' : ' · 페이지 없이 (Alt+Shift+S로 가져오기)'}`, useCtx || how ? 'ok' : 'error');
     } else hint(bad.map((r) => `${svcOf(r.id).name}: ${r.error}`).join(' · '), 'error');
   }
 
@@ -457,7 +464,7 @@
     const svc = svcOf(id);
     const out = SP.buildSend({ text, ctx: pageCtx, on: !!pageCtx, sentKey: p.sentKey, webAsk: W });
     p.status.dataset.state = 'send-sending';
-    p.status.textContent = out.page ? 'page.md 첨부 후 보내는 중…' : '보내는 중…';
+    p.status.textContent = { inline: '페이지 본문과 함께 보내는 중…', file: 'page.md 첨부 후 보내는 중…' }[out.mode] || '보내는 중…';
     const before = await snapshot(id);
     let upload = null;
     let fallbackText;
@@ -481,12 +488,15 @@
       p.status.textContent = `보내기 실패: ${res.error}`;
       return { id, ok: false, error: res.error };
     }
-    if (out.page && (res.attach?.ok || res.attach?.fallback)) p.sentKey = SP.contextKey(pageCtx);
+    if (out.mode === 'inline' || (out.page && (res.attach?.ok || res.attach?.fallback))) p.sentKey = SP.contextKey(pageCtx);
     const attachWarn = out.page && !res.attach?.ok;
     p.status.dataset.state = attachWarn ? 'send-attach-warn' : 'send-sent';
-    p.status.textContent = attachWarn ? (res.attach?.fallback ? '보냄 · 첨부 대신 본문에 넣음' : '보냄 · 첨부 실패') : '보냄';
+    p.status.textContent = attachWarn
+      ? res.attach?.fallback ? '보냄 · 첨부 대신 본문에 넣음' : '보냄 · 첨부 실패'
+      : { inline: '보냄 · 페이지 본문 포함', file: '보냄 · page.md 첨부' }[out.mode] || '보냄';
     watch(id, before);
-    return { id, ok: true };
+    const size = pageCtx ? `${pageCtx.text.length.toLocaleString()}자` : '';
+    return { id, ok: true, how: { inline: `페이지 본문 ${size} 포함`, file: `page.md(${size}) 첨부` }[out.mode] || '' };
   }
 
   /** 보낸 뒤 답변이 끝날 때까지 머리줄 상태를 바꾼다: 답변 중… → 완료 */
@@ -534,7 +544,7 @@
     if (!picker.hidden) renderPicker();
   });
   $('#spApp').addEventListener('click', openApp);
-  $('#spCtxGrab').addEventListener('click', grabCtx);
+  $('#spCtxGrab').addEventListener('click', () => grabCtx());
   $('#spCtxToggle').addEventListener('click', () => {
     prefs.ctxOn = !prefs.ctxOn;
     savePrefs();
@@ -570,6 +580,8 @@
     }
     const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
     activeTabId = tab?.id ?? null;
+    const cmds = await chrome.commands?.getAll?.().catch(() => null);
+    if (cmds) shortcut = cmds.find((c) => c.name === 'open-side-panel')?.shortcut || '';
     const got = await chrome.storage.session.get(CTX_KEY()).catch(() => ({}));
     takeCtx(got?.[CTX_KEY()]);
     if (!ctx) renderCtx();

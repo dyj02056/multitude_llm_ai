@@ -66,17 +66,28 @@ test('맥락 줄 상태: 없음 · 꺼 둠 · 다른 탭 · 정상', () => {
   assert.equal(SP.contextState(ctx, { activeTabId: null }), 'ok');
 });
 
-test('보낼 글: 처음엔 page.md + 안내, 같은 페이지를 두 번째 보낼 땐 글만', () => {
-  const ctx = SP.normalizeContext({ title: '글', url: 'https://a.test/p', text: '본문', at: 10, tabId: 1 });
+test('보낼 글: 보통 길이 본문은 질문 글에 그대로, 같은 페이지 두 번째는 글만', () => {
+  const ctx = SP.normalizeContext({ title: '글', url: 'https://a.test/p', text: '본문입니다', at: 10, tabId: 1 });
   const first = SP.buildSend({ text: ' 요약해줘 ', ctx, webAsk: W });
-  assert.equal(first.page.name, 'page.md');
-  assert.match(first.page.text, /본문/);
-  assert.ok(first.text.startsWith('첨부한 page.md는 웹페이지'));
+  assert.equal(first.mode, 'inline');
+  assert.equal(first.page, null); // 첨부에 기대지 않는다 — 사이드 패널(모바일 화면)에서는 첨부가 조용히 실패할 수 있다
+  assert.match(first.text, /「글」\(https:\/\/a\.test\/p\)/);
+  assert.ok(first.text.includes('\n---\n본문입니다\n---\n'));
   assert.ok(first.text.endsWith('질문: 요약해줘'));
   const again = SP.buildSend({ text: '더', ctx, sentKey: SP.contextKey(ctx), webAsk: W });
-  assert.deepEqual(again, { text: '더', page: null });
-  assert.deepEqual(SP.buildSend({ text: '끔', ctx, on: false, webAsk: W }), { text: '끔', page: null });
-  assert.deepEqual(SP.buildSend({ text: '없음', ctx: null, webAsk: W }), { text: '없음', page: null });
+  assert.deepEqual(again, { text: '더', page: null, mode: 'none' });
+  assert.deepEqual(SP.buildSend({ text: '끔', ctx, on: false, webAsk: W }), { text: '끔', page: null, mode: 'none' });
+  assert.deepEqual(SP.buildSend({ text: '없음', ctx: null, webAsk: W }), { text: '없음', page: null, mode: 'none' });
+});
+
+test('보낼 글: 3만 자보다 긴 본문은 page.md 첨부 + 안내', () => {
+  const ctx = SP.normalizeContext({ title: '긴 글', url: 'https://a.test/long', text: 'x'.repeat(SP.INLINE_MAX + 1), at: 10 });
+  const out = SP.buildSend({ text: '요약', ctx, webAsk: W });
+  assert.equal(out.mode, 'file');
+  assert.equal(out.page.name, 'page.md');
+  assert.ok(out.text.startsWith('첨부한 page.md는 웹페이지'));
+  assert.ok(out.text.endsWith('질문: 요약'));
+  assert.equal(SP.buildSend({ text: '요약', ctx: { ...ctx, text: 'x'.repeat(SP.INLINE_MAX) }, webAsk: W }).mode, 'inline');
 });
 
 test('확장 설정: 사이드 패널 · 단축키 · 권한 (모든 사이트 권한은 여전히 없음)', () => {
