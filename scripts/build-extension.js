@@ -5,6 +5,7 @@
 //   node scripts/build-extension.js --check  만든 결과가 src/와 맞는지만 확인 (다르면 실패)
 //
 // 직접 고치는 파일: extension/host.js · project-fs.js · content.js · cookie-shim.js · cookie-bridge.js · background.js · ext.css
+//                   · sidepanel.html · sidepanel.js · sidepanel.css (사이드탭 모드)
 // 이 스크립트가 만드는 파일 (직접 고치지 말 것):
 //   extension/manifest.json        서비스 목록(src/shared/services.js)과 package.json 버전으로 생성
 //   extension/app.html             src/renderer/index.html에서 생성
@@ -119,11 +120,18 @@ function buildManifest() {
       default_icon: Object.fromEntries([16, 32].map((s) => [s, `icons/icon-${s}.png`])),
     },
     background: { service_worker: 'background.js' },
+    // 사이드탭 모드 (v0.19.0): 크롬 오른쪽 사이드 패널에 AI 채팅 최대 2개 + 보고 있는 페이지 본문
+    side_panel: { default_path: 'sidepanel.html' },
+    // 단축키를 누르면 사이드탭을 열고 지금 탭의 본문을 가져온다 (단축키도 그 탭 한 번 권한(activeTab)을 준다)
+    commands: {
+      'open-side-panel': { suggested_key: { default: 'Alt+Shift+S' }, description: '사이드탭 열기 · 지금 페이지 가져오기' },
+    },
     // browsingData: 패널을 막는 서비스 워커 등록만 지운다 (host.js clearServiceWorkers)
     // cookies: 앱 탭 iframe의 WebSocket 연결에 그 사이트 쿠키를 붙이려고 읽는다 (background.js syncWsCookies)
     // contextMenus · activeTab · scripting: 오른쪽 클릭 메뉴 "Multitude LLM에 묻기" (background.js) — 메뉴를 누른 그 탭의 글만, 누른 그때만 읽는다.
     //   셋 다 설치 · 업데이트 때 새 권한 확인 창을 띄우지 않는다. 모든 사이트 권한(<all_urls>)은 받지 않는다.
-    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData', 'cookies', 'contextMenus', 'activeTab', 'scripting'],
+    // sidePanel: 사이드탭 모드 (v0.19.0, sidepanel.html) — 확인 창을 띄우지 않는다. 페이지 글은 위와 같은 한 번 권한(activeTab)으로만 읽는다.
+    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData', 'cookies', 'contextMenus', 'activeTab', 'scripting', 'sidePanel'],
     // wss://는 WebSocket 요청 헤더(쿠키)를 바꾸는 규칙에 필요하다 (background.js syncWsCookies)
     host_permissions: [...matches, ...hosts.map((h) => `wss://${h}/*`)],
     // 로컬 LLM 패널(v0.16.0, 선택 기능): 설정에서 켤 때만 묻는 이 PC 주소 권한 — 설치 · 업데이트 때 확인 창을 띄우지 않는다

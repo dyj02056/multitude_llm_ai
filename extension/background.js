@@ -22,10 +22,16 @@
 // 토큰 다리(tokenBridge, 지금은 Qwen·Z.ai): Qwen 화면은 쿠키가 아니라 localStorage.token으로 로그인을 확인하는데, 확장 탭 안
 // iframe의 저장소는 일반 탭과 분리될 수 있다. 서버가 같은 토큰을 넣어 두는 token 쿠키 값을 그 iframe에만 알려 주고,
 // cookie-bridge.js가 iframe의 localStorage에 넣은 뒤 한 번 새로고침한다.
+//
+// 사이드탭 모드 (v0.19.0): 크롬 사이드 패널(sidepanel.html) 안의 iframe 요청은 어느 탭 소속도 아니라서(tabId -1)
+// 앱 탭 규칙이 닿지 않는다. 사이드 패널이 연결선('mla-side')을 열어 두는 동안만, "탭 없음(-1) + 요청한 곳이 이 확장
+// (또는 그 서비스 페이지 자신)"인 서비스 iframe 요청에 같은 규칙을 걸고, 사이드 패널이 모두 닫히면 바로 지운다.
+// 페이지 본문은 오른쪽 클릭 메뉴 "사이드탭에서 묻기"나 단축키(Alt+Shift+S)를 누른 그 탭에서만, 그때 받은 한 번 권한으로 읽는다.
 
 importScripts('lib/shared/services.js');
 
 const APP_URL = chrome.runtime.getURL('app.html');
+const SIDE_URL = chrome.runtime.getURL('sidepanel.html');
 const DOMAINS = [...new Set(MLA.services.SERVICES.flatMap((s) => s.hosts))];
 const JS_COOKIE_HOSTS = MLA.services.SERVICES.filter((s) => s.jsCookies).flatMap((s) => s.hosts);
 const PARTITION = { topLevelSite: `chrome-extension://${chrome.runtime.id}` };
@@ -61,6 +67,7 @@ const ASK_KEY = 'mla:ask';
 const ASK_MENUS = [
   { id: 'mla-ask-selection', title: 'Multitude LLM에 묻기 — 선택한 글', contexts: ['selection'] },
   { id: 'mla-ask-page', title: 'Multitude LLM에 묻기 — 이 페이지 본문', contexts: ['page', 'selection'] },
+  { id: 'mla-side-page', title: '사이드탭에서 이 페이지로 묻기 (Alt+Shift+S)', contexts: ['page', 'selection'] },
 ];
 function setupAskMenus() {
   chrome.contextMenus.removeAll(() => {
@@ -79,8 +86,33 @@ async function readPageText(tabId) {
   return res?.result || null;
 }
 
+// ---------- 사이드탭 (v0.19.0) ----------
+// 사이드 패널은 사용자가 누른 그 순간에만 열 수 있어서, 기다리는 일(await) 전에 먼저 연다.
+// 그다음 그 탭의 본문을 읽어 창마다의 칸(storage.session 'mla:side-ctx:<창 번호>')에 두면 사이드 패널이 가져간다.
+const SIDE_CTX = (windowId) => `mla:side-ctx:${windowId}`;
+async function sideAsk(tab) {
+  try {
+    if (!/^https?:/i.test(tab.url || '')) throw new Error('웹페이지(http · https)만 가져올 수 있습니다');
+    const page = await readPageText(tab.id);
+    if (!page?.text?.trim()) throw new Error('페이지 글을 읽지 못했습니다');
+    const ctx = { title: page.title || tab.title || '', url: page.url || tab.url, text: page.text, tabId: tab.id, at: Date.now() };
+    await chrome.storage.session.set({ [SIDE_CTX(tab.windowId)]: ctx });
+  } catch (err) {
+    await chrome.storage.session.set({ [SIDE_CTX(tab.windowId)]: { error: err.message, tabId: tab.id, at: Date.now() } }).catch(() => {});
+  }
+}
+function openSide(tab) {
+  if (!tab || tab.windowId === undefined) return;
+  chrome.sidePanel.open({ windowId: tab.windowId }).catch((err) => console.warn('[background] 사이드탭을 열지 못했습니다:', err.message));
+  if (tab.id >= 0) sideAsk(tab);
+}
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === 'open-side-panel') openSide(tab);
+});
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!ASK_MENUS.some((m) => m.id === info.menuItemId) || !tab || tab.id < 0) return;
+  if (info.menuItemId === 'mla-side-page') return openSide(tab);
   if (!/^https?:/i.test(tab.url || '')) return;
   try {
     let ask;
@@ -102,19 +134,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // ---------- iframe 허용 규칙 ----------
 
 const owners = new Map(); // tabId -> 지금 주인인 앱 화면 번호
+const SIDE_TAB = -1; // 사이드 패널 iframe 요청의 탭 번호 (어느 탭 소속도 아님)
+const SIDE_RULE_ID = 999999999; // 사이드 패널 iframe 규칙 번호 (탭 번호 · WebSocket 규칙 번호와 겹치지 않게)
+const sidePages = new Set(); // 열려 있는 사이드 패널 화면 번호 (창마다 하나씩)
 const WS_RULE_BASE = 1000000000; // WebSocket 쿠키 규칙 번호 = 이 값 + 탭마다 붙이는 순번 (iframe 규칙 번호 = 탭 번호와 겹치지 않게)
 let wsSeq = 0;
 const wsRules = new Map(); // tabId -> [규칙 번호]
 let queue = Promise.resolve();
 const serial = (fn) => (queue = queue.then(fn, fn).catch((err) => console.warn('[background] 규칙 작업 실패:', err.message)));
 
-/** 규칙 번호 = 탭 번호. 그 탭의 서비스 iframe 요청에서만 두 헤더를 지운다. */
+/**
+ * 규칙 번호 = 탭 번호. 그 탭의 서비스 iframe 요청에서만 두 헤더를 지운다.
+ * 사이드 패널(SIDE_TAB): 탭이 없는 요청이라, 요청한 곳이 이 확장(사이드 패널 화면)이나 서비스 페이지 자신인 것만.
+ */
+const ruleIdOf = (tabId) => (tabId === SIDE_TAB ? SIDE_RULE_ID : tabId);
+const sideOnly = (tabId, domains) => (tabId === SIDE_TAB ? { initiatorDomains: domains } : {});
 const addRule = (tabId) =>
   chrome.declarativeNetRequest.updateSessionRules({
-    removeRuleIds: [tabId],
+    removeRuleIds: [ruleIdOf(tabId)],
     addRules: [
       {
-        id: tabId,
+        id: ruleIdOf(tabId),
         priority: 1,
         action: {
           type: 'modifyHeaders',
@@ -123,7 +163,7 @@ const addRule = (tabId) =>
             { header: 'content-security-policy', operation: 'remove' },
           ],
         },
-        condition: { tabIds: [tabId], resourceTypes: ['sub_frame'], requestDomains: DOMAINS },
+        condition: { tabIds: [tabId], resourceTypes: ['sub_frame'], requestDomains: DOMAINS, ...sideOnly(tabId, [chrome.runtime.id, ...DOMAINS]) },
       },
     ],
   });
@@ -151,7 +191,7 @@ async function syncWsCookies(tabId) {
       id: WS_RULE_BASE + (wsSeq = (wsSeq + 1) % 100000000),
       priority: 2,
       action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'set', value }] },
-      condition: { tabIds: [tabId], resourceTypes: ['websocket'], requestDomains: [host] },
+      condition: { tabIds: [tabId], resourceTypes: ['websocket'], requestDomains: [host], ...sideOnly(tabId, DOMAINS) },
     });
   }
   await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: wsRules.get(tabId) || [], addRules });
@@ -250,8 +290,10 @@ const TOKEN_BRIDGES = new Map(
 );
 
 /** 앱 탭 안 서비스 iframe(content script)이 보낸 메시지인지 확인하고 그 페이지 주소를 돌려준다 */
+// 사이드 패널 안 iframe은 탭이 없다(sender.tab 없음) — 사이드 패널이 열려 있을 때만 받는다.
 function appFrameUrl(sender, hosts) {
-  if (sender.id !== chrome.runtime.id || !(sender.frameId > 0) || !owners.has(sender.tab?.id)) return null;
+  if (sender.id !== chrome.runtime.id) return null;
+  if (sender.tab ? !(sender.frameId > 0) || !owners.has(sender.tab.id) : !sidePages.size) return null;
   try {
     const url = new URL(sender.url);
     return url.protocol === 'https:' && hosts.includes(url.hostname) ? url : null;
@@ -288,11 +330,12 @@ let cookieTimer = null;
 chrome.cookies.onChanged.addListener(({ cookie }) => {
   if (cookie.partitionKey) return; // 우리가 만든 복사본(또는 다른 칸) 변화
   const domain = cookie.domain.replace(/^\./, '');
-  if (!owners.size || !DOMAINS.some((h) => h === domain || h.endsWith(`.${domain}`) || domain.endsWith(`.${h}`))) return;
+  if ((!owners.size && !sidePages.size) || !DOMAINS.some((h) => h === domain || h.endsWith(`.${domain}`) || domain.endsWith(`.${h}`))) return;
   clearTimeout(cookieTimer);
   cookieTimer = setTimeout(() => {
     serial(mirrorJsCookies);
     for (const tabId of owners.keys()) serial(() => syncWsCookies(tabId));
+    if (sidePages.size) serial(() => syncWsCookies(SIDE_TAB));
   }, 300);
 });
 
@@ -301,8 +344,9 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
 async function sweepStaleRules() {
   const rules = await chrome.declarativeNetRequest.getSessionRules();
   if (!rules.length) return;
-  const contexts = await chrome.runtime.getContexts({ contextTypes: ['TAB'] });
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ['TAB', 'SIDE_PANEL'] });
   const appTabs = new Set(contexts.filter((c) => c.documentUrl?.startsWith(APP_URL)).map((c) => c.tabId));
+  if (contexts.some((c) => c.documentUrl?.startsWith(SIDE_URL))) appTabs.add(SIDE_TAB); // 사이드 패널이 열려 있으면 그 규칙은 둔다
   const stale = rules.filter((r) => !appTabs.has(r.condition?.tabIds?.[0])).map((r) => r.id);
   if (stale.length) await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: stale });
 }
@@ -310,6 +354,7 @@ globalThis.sweepStaleRules = sweepStaleRules; // 테스트용
 
 // 앱 탭이 연결되면 규칙을 걸고, 연결이 끊기면(닫기·새로고침·다른 주소) 바로 지웁니다.
 chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'mla-side') return connectSide(port);
   if (port.name !== 'mla-app') return;
   const tabId = port.sender?.tab?.id;
   const fromApp = port.sender?.url?.startsWith(APP_URL);
@@ -338,6 +383,31 @@ chrome.runtime.onConnect.addListener((port) => {
     serial(() => removeRule(tabId));
   });
 });
+
+// 사이드 패널(창마다 하나)이 연결되면 탭 없는(-1) 규칙을 걸고, 마지막 사이드 패널이 닫히면 지웁니다.
+function connectSide(port) {
+  const fromSide = port.sender?.url?.startsWith(SIDE_URL) && !port.sender?.tab;
+  if (!fromSide) return port.disconnect();
+  let pageId = null;
+  port.onMessage.addListener((msg) => {
+    if (msg?.type !== 'hello' || typeof msg.pageId !== 'string') return;
+    pageId = msg.pageId;
+    sidePages.add(pageId);
+    serial(async () => {
+      await addRule(SIDE_TAB);
+      await syncWsCookies(SIDE_TAB).catch((err) => console.warn('[background] WebSocket 쿠키 규칙 실패:', err.message));
+      await mirrorJsCookies().catch((err) => console.warn('[background] 쿠키 복사 실패:', err.message));
+      try {
+        port.postMessage({ type: 'ready' });
+      } catch {}
+    });
+  });
+  port.onDisconnect.addListener(() => {
+    if (pageId === null) return;
+    sidePages.delete(pageId);
+    if (!sidePages.size) serial(() => removeRule(SIDE_TAB));
+  });
+}
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   owners.delete(tabId);

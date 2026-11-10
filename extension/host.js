@@ -137,6 +137,7 @@
   let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
   const barIds = new Set(); // 변경 바를 띄운 패널 — iframe 아래쪽을 바 높이만큼 비운다
   let tabId = null;
+  let windowId = null; // 사이드탭 열기 (v0.19.0) — 누른 그 순간에 열어야 해서 미리 알아 둔다
   const panels = new Map(); // id -> { iframe, frameId, origin, url, retried, helloTimer, loginTimer }
 
   const framesEl = document.createElement('div');
@@ -813,7 +814,9 @@
       remoteStatus = { source: 'cache', version: cached.version, updated: cached.updated };
     }
 
-    tabId = (await chrome.tabs.getCurrent())?.id ?? null;
+    const me = await chrome.tabs.getCurrent();
+    tabId = me?.id ?? null;
+    windowId = me?.windowId ?? null;
     if (tabId === null) {
       alert('Multitude LLM은 크롬 탭에서 열어야 합니다. 툴바의 확장 프로그램 아이콘을 눌러 주세요.');
       return;
@@ -830,7 +833,15 @@
   // 크롬이 페이지에 넘겨주지 않는 키는 바꿔 썼으므로 버튼 안내도 맞춘다 (shared/shortcuts.js의 browserKeys).
   function fixButtonTitles() {
     const newChat = document.getElementById('newChatAll');
-    if (newChat) newChat.title = 'Alt+Shift+N';
+    if (newChat) newChat.title = '모두 새 대화 (Alt+Shift+N)';
+    // 사이드탭 (v0.19.0): 크롬 확장에서만 있는 버튼. 누른 그 순간에 열어야 해서 기다리는 일 없이 바로 연다.
+    const side = document.getElementById('sideBtn');
+    if (side && chrome.sidePanel) {
+      side.hidden = false;
+      side.addEventListener('click', () => {
+        if (windowId !== null) chrome.sidePanel.open({ windowId }).catch((err) => alert(`사이드탭을 열지 못했습니다: ${err.message}`));
+      });
+    }
   }
 
   // renderer.js가 host.on(...)으로 화면 갱신 함수를 등록한 뒤에 시작한다.

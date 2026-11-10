@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; frame-src https://gemini.google.com https://chatgpt.com https://claude.ai https://chat.deepseek.com https://www.perplexity.ai https://perplexity.ai https://grok.com https://chat.mistral.ai https://chat.qwen.ai https://auth.qwen.ai https://chat.z.ai https://www.genspark.ai https://genspark.ai https://duck.ai https://duckduckgo.com; connect-src https://raw.githubusercontent.com" />
+  <title>Multitude LLM 사이드탭</title>
+  <link rel="stylesheet" href="lib/renderer/styles.css" />
+  <link rel="stylesheet" href="sidepanel.css" />
+  <link rel="icon" href="icons/icon-32.png" />
+</head>
+<body class="side">
+  <!-- [쉽게 말하면] 크롬 오른쪽 사이드 패널(사이드탭) 화면의 뼈대입니다 (v0.19.0).
+       위: 고른 모델(최대 2개) · 모델 고르기 · 앱 탭 열기
+       그 아래: 함께 보낼 웹페이지(맥락) 줄
+       가운데: AI 웹 채팅 1~2개 (2개면 위/아래, 가운데 선을 끌어 비율 조절)
+       아래: 질문 입력창 — Enter로 열린 패널 모두에 보냅니다 -->
+  <header id="spBar">
+    <strong class="brand" data-path="side">multitude</strong>
+    <div id="spModels" class="sp-models"></div>
+    <span class="spacer"></span>
+    <button id="spPick" class="ghost" title="사이드탭에 띄울 모델 고르기 (최대 2개)" aria-expanded="false">models</button>
+    <button id="spApp" class="ghost" title="Multitude LLM 앱 탭 열기 (모델 최대 6개 · 비교 · 프로젝트)">app ↗</button>
+  </header>
+
+  <div id="spPicker" class="sp-picker" hidden>
+    <div class="sp-picker-head"><span class="muted-label"># 모델 고르기 — 최대 2개</span><span id="spPickNote" class="muted-label"></span></div>
+    <div id="spPickList" class="sp-pick-list"></div>
+  </div>
+
+  <div id="spCtx" class="sp-ctx" data-state="none">
+    <span class="sp-ctx-label">ctx:</span>
+    <span id="spCtxText" class="sp-ctx-text"></span>
+    <button id="spCtxGrab" class="ghost" title="지금 보고 있는 탭의 본문을 가져옵니다">↻</button>
+    <button id="spCtxToggle" class="ghost" title="질문에 이 페이지 본문을 함께 보낼지">on</button>
+    <button id="spCtxClear" class="ghost" title="가져온 페이지를 지웁니다">✕</button>
+  </div>
+
+  <main id="spPanes"></main>
+
+  <footer id="spComposer">
+    <div class="sp-input">
+      <textarea id="spPrompt" rows="3" spellcheck="false" placeholder="이 페이지에 대해 질문…"></textarea>
+    </div>
+    <div class="sp-foot">
+      <span id="spHint" class="muted-label">Enter 보내기 · Shift+Enter 줄바꿈</span>
+      <span class="spacer"></span>
+      <button id="spSend" class="primary">send</button>
+    </div>
+  </footer>
+
+  <script src="lib/shared/services.js"></script>
+  <script src="lib/shared/remote-core.js"></script>
+  <script src="lib/shared/watch.js"></script>
+  <script src="lib/shared/web-ask.js"></script>
+  <script src="lib/shared/secret-scan.js"></script>
+  <script src="lib/shared/side-panel.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

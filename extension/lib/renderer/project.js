@@ -210,7 +210,7 @@
       host.setSidebar(side);
     }
     $('#projectBtn').classList.toggle('active', !!project.info);
-    $('#projectBtn').textContent = project.info ? `📁 ${project.info.name}` : '📁 프로젝트';
+    $('#projectBtn').textContent = project.info ? `proj:${project.info.name}` : 'proj';
     $('#psName').textContent = project.info?.name || '';
     $('#psConnect').hidden = !project.info?.needsPermission;
     $('#projectChip').hidden = !has();
@@ -231,7 +231,7 @@
     const amount = chars < 10000 ? `${chars.toLocaleString()}자` : `${(chars / 10000).toFixed(1)}만 자`;
     const summary = `내용 보낼 파일 ${project.checked.size}개 · 약 ${amount} / 보낼 수 있는 파일 ${sendablePaths().length}개`;
     $('#psSummary').textContent = project.scan.truncated ? `${summary} (항목이 많아 일부만 읽음)` : summary;
-    $('#projectChipText').textContent = `📁 ${project.info.name} · 파일 ${project.checked.size}개 · ${MODE_TEXT[project.uploadMode]}로 업로드`;
+    $('#projectChipText').textContent = `~/${project.info.name} · 파일 ${project.checked.size}개 · ${MODE_TEXT[project.uploadMode]}로 업로드`;
   }
 
   /** 서비스마다 이 프로젝트의 파일을 보낼지 (끄면 그 서비스에는 질문 글만 보낸다) */
@@ -687,7 +687,7 @@
     if (!p) return;
     project.need.set(id, wanted);
     p.needBtn.hidden = !wanted.length;
-    p.needBtn.textContent = `📂 요청 파일 ${wanted.length}개 보내기`;
+    p.needBtn.textContent = `[+] 요청 파일 ${wanted.length}개 보내기`;
     p.needBtn.title = `AI가 내용을 보고 싶다고 한 파일:\n${wanted.join('\n')}`;
   };
 
@@ -909,7 +909,7 @@
         setChangeBar(id, false);
       });
       drop.className = 'cb-close';
-      bar.replaceChildren(span('cb-icon', '🗂'), text, start, drop);
+      bar.replaceChildren(span('cb-icon', '»'), text, start, drop);
     } else {
       const cur = run.files[Math.min(run.index, total - 1)];
       const text = span('cb-text', '');
@@ -920,7 +920,7 @@
         renderBar(id);
       });
       const stop = button('멈추기', '여기까지 받은 수정안으로 바를 그립니다', () => finishRun(id));
-      bar.replaceChildren(span('cb-icon', '⏳'), text, skip, stop);
+      bar.replaceChildren(span('cb-icon', '…'), text, skip, stop);
     }
     setChangeBar(id, true);
     return true;
@@ -1028,10 +1028,10 @@
     const cut = bad.filter(({ plan }) => plan.truncated);
     if (cut.length) notes.push(span('cb-bad', `✂ 답변이 잘림 ${cut.length}개`)); // 출력 한도로 끊긴 파일 (v0.16.1) — 적용하지 않음
     if (bad.length > cut.length) notes.push(span('cb-bad', `${bad.length - cut.length}개 적용 불가`));
-    if (b.split) notes.push(span('cb-warn', `🗂 파일별로 받음 ${b.split.got}/${b.split.total}`));
+    if (b.split) notes.push(span('cb-warn', `» 파일별로 받음 ${b.split.got}/${b.split.total}`));
     if (b.continued) notes.push(span(b.continued.error ? 'cb-bad' : 'cb-warn', b.continued.error ? '이어 붙이지 못함' : `↪ 이어 받음 ${b.continued.rounds}번`));
 
-    const collect = button('📋', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다 (파일에는 쓰지 않음)`, () => window.onCollectClick(id));
+    const collect = button('collect', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다 (파일에는 쓰지 않음)`, () => window.onCollectClick(id));
     const view = live.length
       ? button('변경 보기', '파일마다 바뀌는 줄을 보고 골라서 적용합니다', () => openPreview(ai))
       : button('변경 제안에서 보기', '변경 제안 화면에서 전체 파일 다시 요청 등을 할 수 있습니다', () => host.setView('changes'));
@@ -1079,7 +1079,7 @@
     if (!has()) {
       $('#changesInfo').textContent = '';
       cols.style.gridTemplateColumns = '1fr';
-      return cols.replaceChildren(span('change-empty', '📁 프로젝트를 먼저 열어 주세요. 툴바의 "📁 프로젝트"로 폴더를 고르면 AI 답변의 코드 수정안을 여기서 비교하고 적용할 수 있습니다.'));
+      return cols.replaceChildren(span('change-empty', '프로젝트를 먼저 열어 주세요. 툴바의 "proj"로 폴더를 고르면 AI 답변의 코드 수정안을 여기서 비교하고 적용할 수 있습니다.'));
     }
     $('#changesInfo').textContent = `${project.info.name} — AI 답변에서 찾은 코드 수정안`;
     cols.replaceChildren(span('change-empty', '답변을 읽는 중…'));
@@ -1133,7 +1133,7 @@
     foot.className = 'change-foot';
     const applyBtn = button('미리보기·적용', `${ai.name}의 수정안을 미리 보고 적용합니다`, () => openPreview(ai));
     applyBtn.disabled = !ok.length;
-    const collectBtn = button('📋 모아보기', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다`, () => window.onCollectClick(ai.id));
+    const collectBtn = button('모아보기', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다`, () => window.onCollectClick(ai.id));
     collectBtn.disabled = !ai.plans.length;
     foot.append(applyBtn, collectBtn);
     col.append(head, list, foot);
@@ -1544,7 +1544,7 @@
     p.collectBtn.hidden = !changes.length;
     p.collectBtn.classList.remove('attn');
     if (!changes.length) return;
-    p.collectBtn.textContent = `📋 파일 ${changes.length}개 모아보기`;
+    p.collectBtn.textContent = `파일 ${changes.length}개 모아보기`;
     p.collectBtn.title = `답변에서 찾은 파일 — 경로와 전체 코드를 모아 복사할 수 있습니다:\n${listLines(changes, (c) => `- ${c.path}`)}`;
     void p.collectBtn.offsetWidth; // 애니메이션을 처음부터 다시 돌린다
     p.collectBtn.classList.add('attn');

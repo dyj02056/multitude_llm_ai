@@ -1,0 +1,66 @@
+/* 사이드탭(크롬 사이드 패널) 전용 모양 (v0.19.0). 색 · 글꼴 · 버튼은 앱과 같은 lib/renderer/styles.css를 쓴다. */
+/* [쉽게 말하면] 폭이 좁은(약 320~600px) 세로 화면이라: 위 막대 → 맥락 줄 → AI 패널(위/아래) → 입력창 순서로 쌓습니다. */
+body.side { display: flex; flex-direction: column; height: 100vh; min-width: 0; }
+
+#spBar { flex: none; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--border); }
+#spBar .brand::after { display: none; }
+#spBar button { padding: 1px 7px; font-size: 11.5px; flex: none; }
+#spBar button.active { background: var(--text); border-color: var(--text); color: var(--bg); }
+.sp-models { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+.sp-model { display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); color: var(--bright); font-size: 11.5px; white-space: nowrap; }
+.sp-model::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--svc); }
+
+.sp-picker { flex: none; border-bottom: 1px solid var(--border); padding: 6px 8px 8px; background: var(--bg); }
+.sp-picker[hidden] { display: none; }
+.sp-picker-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+#spPickNote { color: var(--warn-text); }
+.sp-pick-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+.sp-pick { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; text-align: left; color: var(--text); }
+.sp-pick::before { content: "[ ]"; color: var(--muted); }
+.sp-pick.on { color: var(--bright); background: var(--accent-soft); }
+.sp-pick.on::before { content: "[x]"; color: var(--ok); }
+.sp-pick .swatch { width: 6px; height: 6px; border-radius: 50%; background: var(--svc); flex: none; }
+
+/* 맥락 줄: ctx: 제목 · 주소 · 글자 수 */
+.sp-ctx { flex: none; display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 4px 0 8px; border-bottom: 1px solid var(--border); font-size: 11.5px; background: var(--bg-2); }
+.sp-ctx-label { color: var(--muted); flex: none; }
+.sp-ctx-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-2); }
+.sp-ctx-text .ok { color: var(--ok-text); }
+.sp-ctx-text .url { color: var(--accent-text); font-size: inherit; }
+.sp-ctx button { padding: 0 6px; font-size: 11.5px; flex: none; }
+.sp-ctx[data-state="ok"] .sp-ctx-label { color: var(--ok-text); }
+.sp-ctx[data-state="other"] .sp-ctx-text, .sp-ctx[data-state="error"] .sp-ctx-text { color: var(--warn-text); }
+.sp-ctx[data-state="off"] .sp-ctx-text { text-decoration: line-through; color: var(--muted); }
+.sp-ctx[data-state="none"] #spCtxToggle, .sp-ctx[data-state="none"] #spCtxClear,
+.sp-ctx[data-state="error"] #spCtxToggle { display: none; }
+#spCtxToggle[aria-pressed="false"] { color: var(--muted); }
+
+/* AI 패널: 1개면 전체, 2개면 위/아래 (가운데 선을 끌어 비율 조절) */
+#spPanes { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px; gap: 0; }
+.sp-pane { display: flex; flex-direction: column; min-height: 60px; border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; }
+.sp-pane .panel-head { flex: none; }
+.sp-pane .url { font-size: 10.5px; }
+.sp-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: #fff; }
+.sp-split { flex: none; height: 7px; cursor: row-resize; position: relative; }
+.sp-split::after { content: ""; position: absolute; left: 40%; right: 40%; top: 3px; height: 1px; background: var(--border-strong); }
+.sp-split:hover::after, body.sp-dragging .sp-split::after { background: var(--accent); left: 0; right: 0; }
+body.sp-dragging, body.sp-dragging * { cursor: row-resize !important; user-select: none; }
+body.sp-dragging .sp-frame { pointer-events: none; }
+.sp-empty { margin: auto; color: var(--muted); text-align: center; padding: 20px; }
+
+/* 입력창 */
+#spComposer { flex: none; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px 8px; border-top: 1px solid var(--border); }
+.sp-input { position: relative; }
+.sp-input::before { content: "❯"; position: absolute; left: 9px; top: 6px; color: var(--ok); font: 700 13px/1.5 var(--mono); pointer-events: none; }
+#spPrompt {
+  width: 100%; resize: none; display: block; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 10px 6px 24px; font: 12.5px/1.5 var(--mono); user-select: text;
+}
+#spPrompt::placeholder { color: var(--muted); }
+#spPrompt:focus { border-color: var(--border-strong) !important; }
+.sp-foot { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#spHint { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#spHint[data-kind="error"] { color: var(--err-text); }
+#spHint[data-kind="ok"] { color: var(--ok-text); }
+#spSend { padding: 3px 14px; flex: none; }
+#spSend::after { content: " ⏎"; font-weight: 400; }

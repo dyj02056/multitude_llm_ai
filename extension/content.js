@@ -3,6 +3,9 @@
 // 서비스 페이지 안에서 실행된다 (content script).
 // Multitude LLM 탭의 패널 iframe으로 열렸을 때만 동작하고, 일반 탭으로 연 사이트에서는 아무것도 하지 않는다.
 // 앱 탭(host.js)의 요청을 받아 질문을 넣고 보내고, 답변을 읽어 돌려준다.
+// 사이드탭(sidepanel.js, v0.19.0) 안의 iframe이면: 탭이 없어 앱 탭처럼 tabs.sendMessage로 부를 수 없으므로,
+// 사이드 패널이 iframe에 붙여 둔 이름(window.name = "mla-side:<번호>:<서비스>")으로 사이드 패널에 연결선(port)을 열고
+// 같은 요청을 그 연결선으로 받는다. 앱 단축키 가로채기는 하지 않는다 (사이드탭에는 앱 단축키가 없다).
 
 // [쉽게 말하면] 각 AI 사이트 페이지 안에 들어가 일하는 "현장 직원"입니다.
 // 앱 탭(host.js)이 "이 질문 넣고 보내", "지금 답변 읽어 와"라고 메시지를 보내면 그대로 해 주고 결과를 돌려줍니다.
@@ -20,8 +23,20 @@
   const { htmlToMarkdown } = MLA.markdown;
   const { shortcutFor } = MLA.shortcuts;
 
+  const SIDE_NAME = /^mla-side:[0-9a-f-]{36}:[a-z0-9-]{1,40}$/;
+  const side = SIDE_NAME.test(window.name) ? window.name : null; // 사이드탭 안의 iframe이면 연결 이름
+  let sidePort = null;
+
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const post = (msg) => chrome.runtime.sendMessage({ ...msg, host: location.hostname }).catch(() => {});
+  const post = (msg) => {
+    if (side) {
+      try {
+        sidePort?.postMessage({ event: { ...msg, host: location.hostname } });
+      } catch {}
+      return;
+    }
+    chrome.runtime.sendMessage({ ...msg, host: location.hostname }).catch(() => {});
+  };
   const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   const findInput = (cfg) => cfg.input.flatMap((s) => [...document.querySelectorAll(s)]).find(visible) || null;
   const isField = (el) => el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement;
@@ -30,7 +45,7 @@
   const squash = (s) => s.replace(/\s+/g, '');
   const hasText = (el, text) => squash(fieldText(el)).includes(squash(text).slice(0, 40));
 
-  post({ type: 'mla:hello', url: location.href });
+  if (!side) post({ type: 'mla:hello', url: location.href }); // 사이드탭은 아래 연결선이 열리면 인사한다
 
   // 앱 탭이 postMessage로 넘긴 첨부 파일. 확장 프로그램 탭(바로 위 부모)에서 온 것만 받는다.
   const received = new Map(); // nonce -> File[]
@@ -61,8 +76,8 @@
     post({ type: 'mla:nav', url: lastUrl });
   }, 1000);
 
-  // 패널 안에 커서가 있어도 앱 단축키가 동작하도록 가로채서 앱에 넘긴다.
-  window.addEventListener(
+  // 패널 안에 커서가 있어도 앱 단축키가 동작하도록 가로채서 앱에 넘긴다 (앱 탭에서만).
+  if (!side) window.addEventListener(
     'keydown',
     (e) => {
       if (!e.isTrusted) return;
@@ -172,12 +187,45 @@
     },
   };
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  const run = (msg) => {
     const handler = HANDLERS[msg?.type];
-    if (!handler) return;
-    Promise.resolve()
+    if (!handler) return null;
+    return Promise.resolve()
       .then(() => handler(msg))
-      .then(sendResponse, (err) => sendResponse({ ok: false, error: err.message }));
-    return true; // 응답을 비동기로 보낸다
-  });
+      .catch((err) => ({ ok: false, error: err.message }));
+  };
+
+  if (!side) {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      const job = run(msg);
+      if (!job) return;
+      job.then(sendResponse);
+      return true; // 응답을 비동기로 보낸다
+    });
+    return;
+  }
+
+  // 사이드탭: 연결선으로 { id, msg }를 받아 { id, result }로 답한다. 끊기면(확장 업데이트 등) 잠시 뒤 다시 연결한다.
+  const connectSide = () => {
+    try {
+      sidePort = chrome.runtime.connect({ name: side });
+    } catch {
+      return; // 확장이 꺼졌다
+    }
+    sidePort.onMessage.addListener(({ id, msg } = {}) => {
+      const job = run(msg);
+      if (!job || typeof id !== 'number') return;
+      job.then((result) => {
+        try {
+          sidePort?.postMessage({ id, result: result ?? null });
+        } catch {}
+      });
+    });
+    sidePort.onDisconnect.addListener(() => {
+      sidePort = null;
+      setTimeout(connectSide, 1000);
+    });
+    post({ type: 'mla:hello', url: location.href });
+  };
+  connectSide();
 })();

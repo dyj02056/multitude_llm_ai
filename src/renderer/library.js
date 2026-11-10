@@ -58,7 +58,7 @@
       option('none', TEMPLATES[0].name),
       ...(mine.length ? [group('내 템플릿', mine)] : []),
       group('기본 템플릿', TEMPLATES.slice(1).map((t) => option(t.id, t.name))),
-      option('__library', '📚 라이브러리 열기…'),
+      option('__library', 'lib: 라이브러리 열기…'),
     );
     $('#tplSelect').value = template.id;
   }
@@ -186,7 +186,7 @@
     if (s.compact && PL.compactStale(s)) return { text: `⚠ 압축본이 원문보다 오래됨 · ${len.toLocaleString()}자`, level: 'stale' };
     if (s.compact && s.useCompact) return { text: `✓ 압축본 ${len.toLocaleString()}자 (원문 ${s.body.length.toLocaleString()}자)`, level: 'compact' };
     const level = s.noWarn ? 'none' : PL.compressLevel(len, lib.compressWarn, lib.skillMode);
-    const label = { warn: '🟡 압축 권장 · ', strong: '🟠 압축 강력 권장 · ' }[level] || '';
+    const label = { warn: '[!] 압축 권장 · ', strong: '[!!] 압축 강력 권장 · ' }[level] || '';
     return { text: `${label}${len.toLocaleString()}자`, level };
   }
 
@@ -196,7 +196,7 @@
     const { len } = PL.prefixSize(active);
     const L = PL.warnLimits(lib.compressWarn, lib.skillMode);
     const btn = $('#skillBtn');
-    btn.textContent = active.length === 0 ? '🧩 스킬 없음' : active.length === 1 ? `🧩 ${active[0].name}` : `🧩 스킬 ${active.length}개`;
+    btn.textContent = active.length === 0 ? 'skill: 없음' : active.length === 1 ? `skill: ${active[0].name}` : `skill: ${active.length}개`;
     btn.classList.toggle('on', active.length > 0);
     btn.classList.toggle('warn', len >= L.total);
     btn.title = active.length
@@ -210,7 +210,7 @@
       chip.disabled = at < 0 && lib.activeSkills.length >= PL.LIMITS.activeSkills;
       return chip;
     });
-    $('#skillChips').replaceChildren(...(chips.length ? chips : [span('muted-label', '스킬이 없습니다 — 📚 관리에서 만들거나 SKILL.md를 가져오세요')]));
+    $('#skillChips').replaceChildren(...(chips.length ? chips : [span('muted-label', '스킬이 없습니다 — lib 관리에서 만들거나 SKILL.md를 가져오세요')]));
     $('#skillTotal').textContent = `${lib.activeSkills.length}/${PL.LIMITS.activeSkills} · 합계 ${len.toLocaleString()} / ${PL.LIMITS.prefixTotal.toLocaleString()}자`;
     $('#skillTotal').classList.toggle('warn', len >= L.total);
   }
@@ -353,7 +353,7 @@
         list.push(listRow(t.name, varsSummary(t.text), ui.sel === t.id, () => select(t.id), [star]));
       }
       list.push(span('lib-group', '기본 템플릿 (복제해서 고칠 수 있음)'));
-      for (const t of TEMPLATES.slice(1)) list.push(listRow(`🔒 ${t.name}`, varsSummary(t.text), ui.sel === t.id, () => select(t.id)));
+      for (const t of TEMPLATES.slice(1)) list.push(listRow(`[기본] ${t.name}`, varsSummary(t.text), ui.sel === t.id, () => select(t.id)));
     } else {
       list.push(button('＋ 새 스킬', '빈 스킬을 만듭니다', () => editNewSkill()));
       list.push(button('SKILL.md 가져오기', '.md 파일에서 스킬을 가져옵니다 (맨 위 --- 사이에 name · description)', () => $('#libSkillFile').click()));
@@ -700,7 +700,7 @@
     setCmpStatus(status, kind);
     cmpCount();
     if (state?.chatView !== 'compress' && kind === 'ok') {
-      $('#sendHint').textContent = `${cmpSkill()?.name || '스킬'} 압축본을 읽어 왔습니다 — 📚 라이브러리 → 스킬 → AI로 압축에서 확인하고 저장하세요`;
+      $('#sendHint').textContent = `${cmpSkill()?.name || '스킬'} 압축본을 읽어 왔습니다 — lib(라이브러리) → 스킬 → AI로 압축에서 확인하고 저장하세요`;
     }
   }
 
@@ -786,7 +786,7 @@
     await save();
     const sid = s.id;
     Object.assign(cmp, { skillId: null, panelId: null, waiting: null, out: null });
-    refreshAll(); // 🧩 합계도 압축본 길이로
+    refreshAll(); // skill: 합계도 압축본 길이로
     openLibrary('skills', sid);
     flash($('#libInfo'), '압축본을 저장했습니다 (보낼 때 압축본을 씁니다)');
   });

@@ -89,6 +89,8 @@ function loadBackground(cookies) {
     action: { onClicked: ev() },
     runtime: { id: 'test', getURL: (p) => `chrome-extension://test/${p}`, onMessage: ev(), onConnect: ev(), onInstalled: ev(), onStartup: ev(), getContexts: async () => [] },
     contextMenus: { onClicked: ev(), removeAll: (cb) => cb?.(), create: () => {} }, // 웹페이지 질문 메뉴 (v0.15.0)
+    commands: { onCommand: ev() }, // 사이드탭 단축키 (v0.19.0)
+    sidePanel: { open: async () => {} },
     tabs: { onRemoved: ev() },
     declarativeNetRequest: { getSessionRules: async () => [], updateSessionRules: async () => {} },
     cookies: {

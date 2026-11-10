@@ -134,7 +134,7 @@ function syncPanels() {
 /**
  * 패널 하나의 머리줄을 만듭니다: 점(상태 색) · 이름 · 주소 · 상태 글자 · 버튼들
  * 아래쪽 변경 바(프로젝트 모드, 수정안이 있을 때만)는 project.js가 채운다.
- * 버튼: 📋 파일 모아보기 · 📂 요청 파일 보내기 · 로그인 · 복사 · ⤢ 크게 보기 · ＋ 새 대화 · ← 뒤로 · ⌂ 처음 주소 · ↻ 새로고침
+ * 버튼: 파일 모아보기 · 요청 파일 보내기 · 로그인 · copy(복사) · ⤢ 크게 보기 · + 새 대화 · ← 뒤로 · ⌂ 처음 주소 · ↻ 새로고침
  */
 function createPanel(svc) {
   const el = document.createElement('section');
@@ -175,12 +175,12 @@ function createPanel(svc) {
     collectBtn,
     needBtn,
     loginBtn,
-    button('복사', '최신 답변 복사', async () => {
+    button('copy', '최신 답변 복사', async () => {
       const r = await host.copyAnswer(svc.id);
       flash(status, r.copied ? '답변을 복사했습니다' : '복사할 답변이 없습니다');
     }),
     focusBtn,
-    button('＋', '새 대화', () => host.panelAction(svc.id, 'newchat')),
+    button('+', '새 대화', () => host.panelAction(svc.id, 'newchat')),
   );
   // 웹페이지 패널에만: 뒤로 · 처음 주소 · 새로고침 · 개발자 도구. 로컬 LLM 패널은 대신 ■ 답 그만 받기.
   const isLocalPanel = svc.kind === 'local';
@@ -234,7 +234,7 @@ function renderDiagBadge(id) {
   p.diagBadge.classList.toggle('limit', limit);
   if (!broken && !limit) return;
   if (limit) {
-    p.diagBadge.textContent = '⏳ 사용 한도에 걸린 것 같음';
+    p.diagBadge.textContent = '[limit] 사용 한도에 걸린 것 같음';
     p.diagBadge.title = [`화면 문구: "${d.limit}"`, '', d.limitHint, '', '누르면 설정의 서비스별 상태 표를 엽니다'].join('\n');
     return;
   }
@@ -278,7 +278,7 @@ function renderLocalChat(id, view) {
     b.className = `local-msg ${m.role === 'user' ? 'user' : 'bot'}`;
     if (m.role === 'user') {
       b.textContent = m.text;
-      if (m.images) b.append(span('local-img', ` 🖼 이미지 ${m.images}개`));
+      if (m.images) b.append(span('local-img', ` [img] 이미지 ${m.images}개`));
     } else {
       b.innerHTML = MLA.exporter.mdToHtml(m.text || (view.streaming ? '…' : '')); // mdToHtml은 모든 글을 이스케이프한다
     }
@@ -344,7 +344,7 @@ function renderDiagTable() {
     }
     const lim = document.createElement('td');
     lim.dataset.state = d.limit ? 'warn' : 'unknown';
-    lim.textContent = d.limit ? '⏳ 걸린 것 같음' : '–';
+    lim.textContent = d.limit ? '[limit] 걸린 것 같음' : '–';
     if (d.limit) lim.title = `화면 문구: "${d.limit}"`;
     tr.append(lim);
     const st = document.createElement('td');
@@ -470,7 +470,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
       p.status.textContent = `보냄 · ${warn}`;
       p.status.dataset.state = 'send-attach-warn';
       p.attachBadge.hidden = false;
-      p.attachBadge.textContent = `📎 ${warn}`;
+      p.attachBadge.textContent = `[+] ${warn}`;
       p.attachBadge.title = attach.error || warn;
     }
     if (send === 'sent') {
@@ -492,7 +492,19 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     p.status.textContent = LOGIN_TEXT[login] ?? '';
     p.status.dataset.state = login;
   }
+  renderStatusLine();
 });
+
+// 툴바의 상태줄: "2/3 ready" — 열린 패널 중 쓸 수 있는(로그인된) 패널 수 (v0.19.0)
+function renderStatusLine() {
+  const el = $('#statusLine');
+  if (!el) return;
+  const all = [...panels.values()];
+  const ready = all.filter((p) => p.dot.classList.contains('ready')).length;
+  const bad = all.some((p) => p.dot.classList.contains('error'));
+  el.textContent = all.length ? `${ready}/${all.length} ready` : '';
+  el.dataset.state = bad ? 'error' : all.length && ready === all.length ? 'ok' : 'wait';
+}
 
 // ---------- 공통 입력창 ----------
 
@@ -954,7 +966,7 @@ async function renderHistoryDetail() {
   const question = document.createElement('div');
   question.className = 'history-question';
   question.textContent = rec.question || NO_TEXT;
-  if (rec.files?.length) question.append(document.createElement('br'), span('history-files', `📎 ${filesLine(rec.files)}`));
+  if (rec.files?.length) question.append(document.createElement('br'), span('history-files', `[+] ${filesLine(rec.files)}`));
 
   const cols = document.createElement('div');
   cols.className = 'compare-cols';
@@ -1301,7 +1313,7 @@ function renderAttachments() {
       chip.className = 'attach-chip';
       chip.title = `${a.file.name} (${fmtSize(a.file.size)})`;
       if (a.url) chip.append(Object.assign(document.createElement('img'), { src: a.url, alt: '' }));
-      else chip.append(span('file-icon', '📄'));
+      else chip.append(span('file-icon', '[f]'));
       chip.append(span('file-name', a.file.name), span('file-size', fmtSize(a.file.size)));
       chip.append(button('✕', '첨부에서 빼기', () => removeAttachment(i)));
       return chip;
@@ -1492,6 +1504,9 @@ host.on('state', (next) => {
   }
   if (state.mode === 'pick' && modeChanged) renderPick();
   syncPanels();
+  renderStatusLine();
+  // 툴바 이름 뒤의 "~/chat" 같은 경로 = 지금 보는 화면
+  $('.brand').dataset.path = state.mode === 'chat' ? (state.chatView === 'panels' || state.chatView === 'dialog' ? 'chat' : state.chatView) : state.mode;
   if (state.mode === 'chat') {
     renderTargets();
     renderSynth();
