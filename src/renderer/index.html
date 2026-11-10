@@ -338,6 +338,17 @@
         <button id="remoteRefresh">지금 확인</button>
       </div>
       <p class="muted small" id="remoteStatus"></p>
+      <h2>업데이트</h2>
+      <div class="setting-row">
+        <label class="check-label"><input type="checkbox" id="updateAuto" /> 새 버전 자동 확인</label>
+        <span class="row-actions">
+          <button id="updateCheck">지금 확인</button>
+          <button id="updateDownload" class="accent" hidden>다운로드</button>
+          <button id="updateInstall" class="primary" hidden>다시 시작해서 설치</button>
+          <button id="updateOpen" class="ghost" hidden title="GitHub Releases 페이지">releases ↗</button>
+        </span>
+      </div>
+      <p class="muted small" id="updateStatus"></p>
       <h2>로컬 LLM (선택 기능)</h2>
       <div class="setting-row">
         <label class="check-label"><input type="checkbox" id="localEnabled" /> 로컬 LLM 패널 쓰기</label>
@@ -419,6 +430,7 @@
   <script src="../shared/export.js"></script>
   <script src="../shared/web-ask.js"></script>
   <script src="../shared/prompt-lib.js"></script>
+  <script src="../shared/update-core.js"></script>
   <script src="templates.js"></script>
   <script src="renderer.js"></script>
   <script src="project.js"></script>

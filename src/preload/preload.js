@@ -44,6 +44,13 @@ contextBridge.exposeInMainWorld('host', {
   setSynth: (opts) => ipcRenderer.send('synth:set', opts),
   setSettings: (opts) => ipcRenderer.send('settings:set', opts),
   refreshRemote: () => ipcRenderer.invoke('remote:refresh'),
+  // 앱 업데이트 (v0.20.0): 확인 · 받기 · 다시 시작해서 설치
+  update: {
+    check: () => ipcRenderer.invoke('update:check'),
+    download: () => ipcRenderer.invoke('update:download'),
+    install: () => ipcRenderer.invoke('update:install'),
+    openReleases: () => ipcRenderer.send('update:openReleases'),
+  },
   setLayout: (value) => ipcRenderer.send('layout:set', value),
   setFocus: (id) => ipcRenderer.send('layout:focus', id),
   setSidebar: (open) => ipcRenderer.send('layout:sidebar', open),

@@ -487,6 +487,10 @@ kbd {
 .status[data-state="answer-timeout"] { color: var(--warn-text); }
 
 .check-label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.setting-row .row-actions { display: flex; gap: 6px; align-items: center; font-weight: 400; }
+.setting-row .row-actions button[hidden] { display: none; }
+/* 툴바의 업데이트 표시 (v0.20.0): 누르면 설정 화면의 업데이트 칸 */
+.status-line .update-badge { margin-left: 8px; color: var(--accent-text); cursor: pointer; text-decoration: underline dotted; }
 #remoteRefresh:disabled { opacity: .5; cursor: default; }
 
 /* ---------- 첨부 파일 ---------- */

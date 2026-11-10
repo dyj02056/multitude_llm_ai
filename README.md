@@ -1,7 +1,7 @@
 # Multitude LLM (multitude_llm_ai)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.19.2-58a6ff)
+![version](https://img.shields.io/badge/version-0.20.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -22,7 +22,7 @@
 | **답 다루기** | 답변 비교(차이 강조 · 이견 분석 표), 한 AI에게 종합 맡기기, 기록 · 검색, MD · HTML 내보내기 |
 | **코드 작업** | 프로젝트 폴더 맥락 보내기 → AI별 수정안 비교 → 미리보기 · 테스트 실행 · 적용 · 되돌리기, 잘린 답변 막기 |
 | **브라우저에서** | 크롬 확장: 같은 앱을 탭 하나로, 오른쪽 클릭으로 웹페이지 질문, **사이드탭**(보고 있는 페이지 옆에 AI 2개) |
-| **실행 형태** | Windows 앱(Electron, Google 계정 하나로 로그인) · 크롬 확장(크롬에 로그인된 계정 그대로) |
+| **실행 형태** | Windows 앱(Electron, Google 계정 하나로 로그인, 자동 업데이트) · 크롬 확장(크롬에 로그인된 계정 그대로) |
 | **디자인** | 터미널(CLI) 느낌의 검정 단색 · 고정폭 글꼴 화면 (v0.19.0~) |
 
 ## 구조
@@ -98,7 +98,7 @@ flowchart LR
 
 ## 빠른 시작
 
-**Windows 앱** — [Releases](https://github.com/dyj02056/multitude_llm_ai/releases)의 `MultitudeLLM-Setup-<버전>.exe`를 실행합니다. 코드 서명이 없어 SmartScreen 경고가 뜨면 "추가 정보 → 실행".
+**Windows 앱** — [Releases](https://github.com/dyj02056/multitude_llm_ai/releases)의 `MultitudeLLM-Setup-<버전>.exe`를 실행합니다. 코드 서명이 없어 SmartScreen 경고가 뜨면 "추가 정보 → 실행". v0.20.0부터는 새 버전이 나오면 앱이 알려 주고, 설정 › 업데이트에서 받아 설치합니다.
 
 **크롬 확장**
 
@@ -165,10 +165,10 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.20.0** | Windows 앱 **자동 업데이트**(알리기만 → 누르면 받기 · 설치), 크롬 확장은 새 버전 알림 |
 | **v0.19.2** | 사이드탭 **자동 읽기** — 한 번 허용하면 보고 있는 탭 본문을 탭 이동 · 페이지 로드 · 보낼 때마다 자동으로 함께 보냄 (선택 권한) |
 | **v0.19.1** | 사이드탭 첫 질문에 페이지가 안 가던 문제 — 본문 3만 자 이하는 질문 글에 바로 넣음, 보낸 내용 표시 |
 | **v0.19.0** | 화면 전체를 **CLI 디자인**으로, 크롬 **사이드탭 모드**(AI 최대 2개 + 페이지 맥락) |
-| **v0.18.0** | 큰 작업 — 계획 먼저 받고 파일별로 나눠 받기 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

@@ -504,7 +504,42 @@ function renderStatusLine() {
   const bad = all.some((p) => p.dot.classList.contains('error'));
   el.textContent = all.length ? `${ready}/${all.length} ready` : '';
   el.dataset.state = bad ? 'error' : all.length && ready === all.length ? 'ok' : 'wait';
+  // 새 버전이 있으면 "update 0.20.1" (누르면 설정 화면의 업데이트 칸)
+  const badge = state?.update && MLA.update ? MLA.update.badgeText(state.update) : '';
+  if (badge) {
+    const b = span('update-badge', badge);
+    b.title = MLA.update.statusText(state.update);
+    b.addEventListener('click', () => host.setView('help'));
+    el.append(b);
+  }
 }
+
+// ---------- 앱 업데이트 (v0.20.0) ----------
+// 설정 화면의 업데이트 칸: 지금 버전 · 상태 글 · [지금 확인] [다운로드] [다시 시작해서 설치], 자동 확인 켜기/끄기.
+// 크롬 확장은 받기 · 설치가 없고(압축해제 방식) 새 버전이 있다는 것만 알린다.
+function renderUpdate() {
+  const u = state?.update;
+  const box = $('#updateStatus');
+  if (!box) return;
+  if (!u || !MLA.update) {
+    box.textContent = '이 실행 환경에서는 업데이트를 확인하지 않습니다.';
+    return;
+  }
+  box.textContent = MLA.update.statusText(u) + (u.checkedAt ? ` · 마지막 확인 ${fmtTime(u.checkedAt)}` : '');
+  box.dataset.state = u.state;
+  $('#updateAuto').checked = state.autoUpdate !== false;
+  $('#updateCheck').disabled = ['checking', 'downloading', 'dev'].includes(u.state);
+  $('#updateDownload').hidden = !(u.canInstall && u.state === 'available');
+  $('#updateInstall').hidden = u.state !== 'downloaded';
+  $('#updateOpen').hidden = !(u.state === 'available' || u.state === 'error');
+}
+$('#updateAuto').addEventListener('change', (e) => host.setSettings({ autoUpdate: e.target.checked }));
+$('#updateCheck').addEventListener('click', () => host.update?.check());
+$('#updateDownload').addEventListener('click', () => host.update?.download());
+$('#updateInstall').addEventListener('click', () => {
+  if (confirm('앱을 닫고 새 버전을 설치한 뒤 다시 켭니다. 답변을 기다리는 패널이 있으면 끊깁니다. 계속할까요?')) host.update?.install();
+});
+$('#updateOpen').addEventListener('click', () => host.update?.openReleases());
 
 // ---------- 공통 입력창 ----------
 
@@ -1124,6 +1159,7 @@ async function renderStatsTable() {
 
 function renderSettings() {
   renderRemoteStatus();
+  renderUpdate();
   renderDiagTable();
   renderStatsTable();
   renderLocalSettings();
@@ -1505,6 +1541,7 @@ host.on('state', (next) => {
   if (state.mode === 'pick' && modeChanged) renderPick();
   syncPanels();
   renderStatusLine();
+  if (state.chatView === 'help') renderUpdate();
   // 툴바 이름 뒤의 "~/chat" 같은 경로 = 지금 보는 화면
   $('.brand').dataset.path = state.mode === 'chat' ? (state.chatView === 'panels' || state.chatView === 'dialog' ? 'chat' : state.chatView) : state.mode;
   if (state.mode === 'chat') {

@@ -69,6 +69,7 @@
     answerTimeoutMin: 20,
     remoteSelectors: true, // 사이트 셀렉터 원격 갱신
     local: { enabled: false, baseUrl: MLA.localLLM.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
+    autoUpdate: true, // 새 버전 알림 (v0.20.0)
   };
   const savePrefs = () => store('prefs', prefs);
 
@@ -393,6 +394,8 @@
       diag: diag.all(SERVICES.map((s) => s.id)),
       services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
       local: { ...prefs.local },
+      autoUpdate: prefs.autoUpdate !== false,
+      update: updateStatus,
       rects,
     });
   }
@@ -579,6 +582,33 @@
     remoteStatus = { source: 'builtin' };
   }
 
+  // ---------- 새 버전 알림 (v0.20.0) ----------
+  // 압축해제된 확장은 스스로 바꿀 수 없다. GitHub main의 package.json 버전만 보고 새 버전이 있으면 알린다
+  // (원격 셀렉터와 같은 raw.githubusercontent.com — 권한 · CSP를 더 받지 않는다).
+  const UPD = MLA.update;
+  const myVersion = chrome.runtime.getManifest().version;
+  let updateStatus = UPD.normalizeStatus({ state: 'idle', canInstall: false }, myVersion);
+  async function checkUpdate() {
+    updateStatus = UPD.normalizeStatus({ ...updateStatus, state: 'checking' }, myVersion);
+    pushState();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(UPD.PACKAGE_URL, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const latest = UPD.versionFromPackage(await res.text());
+      if (!latest) throw new Error('버전을 읽지 못했습니다');
+      const state = UPD.isNewer(latest, myVersion) ? 'available' : 'none';
+      updateStatus = UPD.normalizeStatus({ state, version: latest, checkedAt: Date.now(), canInstall: false }, myVersion);
+    } catch (err) {
+      updateStatus = UPD.normalizeStatus({ state: 'error', error: err.name === 'AbortError' ? '시간 초과' : err.message, checkedAt: Date.now(), canInstall: false }, myVersion);
+    } finally {
+      clearTimeout(timer);
+    }
+    pushState();
+    return updateStatus;
+  }
+
   // ---------- 단축키 ----------
 
   /** 단축키 동작을 실행한다. 처리했으면 true */
@@ -735,8 +765,9 @@
       savePrefs();
       pushState();
     },
-    setSettings: ({ answerTimeoutMin, remoteSelectors }) => {
+    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate }) => {
       if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
+      if (typeof autoUpdate === 'boolean') prefs.autoUpdate = autoUpdate;
       if (typeof remoteSelectors === 'boolean' && remoteSelectors !== prefs.remoteSelectors) {
         prefs.remoteSelectors = remoteSelectors;
         if (remoteSelectors) refreshRemote();
@@ -746,6 +777,13 @@
       pushState();
     },
     refreshRemote: () => refreshRemote(),
+    // 새 버전 알림 (v0.20.0): 확장은 받기 · 설치가 없다 (git pull 후 chrome://extensions에서 ↻)
+    update: {
+      check: () => checkUpdate(),
+      download: async () => updateStatus,
+      install: async () => false,
+      openReleases: () => chrome.tabs.create({ url: UPD.RELEASES_URL }),
+    },
     setSidebar: (open) => {
       sidebarOpen = !!open;
       pushState();
@@ -828,6 +866,8 @@
 
     if (prefs.remoteSelectors) refreshRemote();
     setInterval(refreshRemote, REMOTE_REFRESH_MS); // 꺼져 있으면 refreshRemote가 아무것도 하지 않는다
+    setTimeout(() => prefs.autoUpdate !== false && checkUpdate(), UPD.FIRST_CHECK_MS);
+    setInterval(() => prefs.autoUpdate !== false && checkUpdate(), UPD.CHECK_EVERY_MS);
   }
 
   // 크롬이 페이지에 넘겨주지 않는 키는 바꿔 썼으므로 버튼 안내도 맞춘다 (shared/shortcuts.js의 browserKeys).

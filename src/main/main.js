@@ -42,6 +42,7 @@ const { shortcutList, shortcutFor } = require('../shared/shortcuts');
 const project = require('./project');
 const { setupGitConsole } = require('./gitconsole');
 const { setupDevTest } = require('./devtest');
+const { createUpdater } = require('./updater');
 
 // ---------- 화면 크기 관련 숫자 (단위: 픽셀) ----------
 // 패널을 어디에 얼마나 크게 놓을지 계산할 때 씁니다. styles.css의 크기와 맞아야 화면이 어긋나지 않습니다.
@@ -104,6 +105,7 @@ let prefs = {
   remoteSelectors: true, // 사이트 셀렉터 원격 갱신
   projectRoot: null, // 마지막으로 연 프로젝트 폴더
   local: { enabled: false, baseUrl: L.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
+  autoUpdate: true, // 새 버전 자동 확인 (알리기만, v0.20.0)
 };
 
 /**
@@ -501,6 +503,8 @@ function pushState() {
     diag: diag.all(SERVICES.map((s) => s.id)),
     services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { ...prefs.local },
+    autoUpdate: prefs.autoUpdate !== false,
+    update: updater?.status() || null,
     rects: rects.panels,
   });
 }
@@ -802,8 +806,9 @@ ipcMain.handle('project:loadState', projectCall(() => (project.info() ? project.
 ipcMain.handle('project:saveState', projectCall((data) => (project.info() ? project.saveState(project.info().id, data) : false)));
 
 // 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 사이트 셀렉터 자동 갱신 켜기/끄기
-ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors }) => {
+ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate }) => {
   if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
+  if (typeof autoUpdate === 'boolean') prefs.autoUpdate = autoUpdate;
   if (typeof remoteSelectors === 'boolean' && remoteSelectors !== prefs.remoteSelectors) {
     prefs.remoteSelectors = remoteSelectors;
     if (remoteSelectors) refreshRemote();
@@ -960,6 +965,14 @@ async function refreshRemote() {
 
 ipcMain.handle('remote:refresh', () => refreshRemote());
 
+// ---------- 앱 업데이트 (v0.20.0) ----------
+// 확인은 자동(켜 두었을 때) 또는 설정 화면의 [지금 확인]. 받기 · 설치는 사용자가 누를 때만.
+let updater = null;
+ipcMain.handle('update:check', () => updater?.check());
+ipcMain.handle('update:download', () => updater?.download());
+ipcMain.handle('update:install', () => updater?.install() || false);
+ipcMain.on('update:openReleases', () => shell.openExternal(require('../shared/update-core').RELEASES_URL));
+
 // ---------- 단축키 ----------
 
 ipcMain.handle('shortcuts:list', () => shortcutList());
@@ -1050,11 +1063,14 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     gitConsole = setupGitConsole({ ipcMain, getWin: () => win, getRoot: () => project.info()?.id || null });
     devTest = setupDevTest({ ipcMain, getWin: () => win, project, userDataDir: app.getPath('userData') });
+    updater = createUpdater({ app, isAuto: () => prefs.autoUpdate !== false, onChange: () => schedulePushState(), log });
+    updater.start();
   });
   app.on('window-all-closed', () => app.quit());
   app.on('will-quit', () => {
     cleanupTemp();
     gitConsole?.stop();
     devTest?.stop();
+    updater?.stop();
   });
 }
