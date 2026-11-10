@@ -1,7 +1,7 @@
 # Multitude LLM (multitude_llm_ai)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.21.1-58a6ff)
+![version](https://img.shields.io/badge/version-0.22.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -58,7 +58,7 @@ flowchart LR
 | | 응답 통계 · 자가진단 | AI별 완료율 · 응답 시간 · 사용 한도 감지, 사이트 화면이 바뀌면 알림 → 자가진단 창(셀렉터 지금 확인 · 진단 정보 복사) | [응답 통계](docs/guide.md#응답-통계) · [자가진단](docs/guide.md#셀렉터-자가진단) |
 | **코드 작업** | 프로젝트 모드 | 폴더 구조 · 고른 파일 업로드(3단계 제외 규칙 · 비밀 정보 검사), `NEED_FILES` 요청 처리 | [프로젝트 모드](docs/project-mode.md#프로젝트-모드) |
 | | 수정안 적용 | 패널 아래 변경 바로 바로 적용, AI별 비교 · 덩어리 단위 적용 · 되돌리기 | [단계](docs/project-mode.md#프로젝트-모드) |
-| | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기, 계획 먼저 · 파일별로 받기 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
+| | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기(자동 가능), 계획 먼저 · 파일별로 받기(바로 시작 가능), 보낼 양 토큰 어림 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
 | | 파일 모아보기 | 답변의 파일 코드를 새 파일 · 수정 · 삭제로 모아 복사 (프로젝트 없이도) | [파일 모아보기](docs/project-mode.md#파일-모아보기) |
 | | 테스트 실행 · git 콘솔 | 적용 전/후 `npm test` 비교, 그 폴더의 git 명령만 실행 (Windows 앱) | [테스트 실행](docs/project-mode.md#테스트-실행-windows-앱) · [git 콘솔](docs/project-mode.md#git-콘솔-windows-앱) |
 | **확장 · 기타** | 사이드탭 | 크롬 사이드 패널에 AI 2개, 보고 있는 페이지 본문을 자동으로 함께 보냄 | [사이드탭](docs/chrome-extension.md#사이드탭-크롬-확장) |
@@ -165,10 +165,10 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.22.0** | 큰 작업 자동 시작 · 잘리면 자동 이어받기 · 보낼 양 토큰 어림 |
 | **v0.21.1** | 자가진단 창 — 셀렉터 지금 확인 · 처음 화면으로 · 진단 정보 복사 |
 | **v0.21.0** | 사이드탭 ↔ 앱 탭 — 기록 공유, `app ↗`로 질문 · 페이지 넘기기, 템플릿 · 스킬 |
 | **v0.20.1** | 문서 스크린샷을 지금 화면으로 — `npm run screenshots` 한 번으로 다시 찍기 |
-| **v0.20.0** | Windows 앱 **자동 업데이트**(알리기만 → 누르면 받기 · 설치), 크롬 확장은 새 버전 알림 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

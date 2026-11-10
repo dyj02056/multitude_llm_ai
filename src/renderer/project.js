@@ -38,6 +38,8 @@
     include: true, // 다음 질문에 맥락을 붙일지
     uploadMode: PU.DEFAULT_MODE, // 올리는 방식: 'bundle'(묶음 파일) | 'files'(개별 파일)
     split: false, // 큰 작업: 계획 먼저 받고 파일별로 차례로 받기 (v0.18.0)
+    autoRun: false, // 계획 답이 오면 바로 파일별로 받기 시작 (v0.22.0)
+    autoContinue: false, // 잘린 파일은 자동으로 이어 받기 — 한 파일 최대 PX.MAX_CONTINUE번 (v0.22.0)
     l3Enabled: [],
     checked: new Set(), // 내용을 보낼 파일
     allowSecret: new Set(), // 비밀 정보 경고를 보고도 보내기로 한 파일
@@ -72,6 +74,8 @@
         include: project.include,
         uploadMode: project.uploadMode,
         split: project.split,
+        autoRun: project.autoRun,
+        autoContinue: project.autoContinue,
         blocked: [...project.blocked],
         uploadOk: [...project.uploadOk],
         log: project.log.slice(0, MAX_LOG),
@@ -87,6 +91,8 @@
     project.include = s.include !== false;
     project.uploadMode = PU.normalizeMode(s.uploadMode);
     project.split = s.split === true;
+    project.autoRun = s.autoRun === true;
+    project.autoContinue = s.autoContinue === true;
     project.blocked = new Set(Array.isArray(s.blocked) ? s.blocked : []);
     project.uploadOk = new Set(Array.isArray(s.uploadOk) ? s.uploadOk : []);
     project.log = Array.isArray(s.log) ? s.log : [];
@@ -183,7 +189,18 @@
   $('#psSplit').addEventListener('change', (e) => {
     project.split = e.target.checked;
     saveState();
+    render();
     notice(project.split ? '큰 작업: 다음 질문은 계획(고칠 파일 목록)만 받고, 파일별로 차례로 받습니다' : '큰 작업을 껐습니다');
+  });
+  $('#psAutoRun').addEventListener('change', (e) => {
+    project.autoRun = e.target.checked;
+    saveState();
+    notice(project.autoRun ? '계획 답이 오면 바로 한 파일씩 받기 시작합니다' : '계획 답이 오면 [▶ 파일별로 받기 시작]을 눌러 시작합니다');
+  });
+  $('#psAutoCont').addEventListener('change', (e) => {
+    project.autoContinue = e.target.checked;
+    saveState();
+    notice(project.autoContinue ? `잘린 파일은 자동으로 이어 받습니다 (한 파일 최대 ${PX.MAX_CONTINUE}번)` : '잘린 파일은 [↪ 이어서 받기]를 눌러 받습니다');
   });
   $('#projectInclude').addEventListener('change', (e) => {
     project.include = e.target.checked;
@@ -217,6 +234,9 @@
     $('#projectInclude').checked = project.include;
     for (const b of document.querySelectorAll('#psUploadMode [data-umode]')) b.classList.toggle('active', b.dataset.umode === project.uploadMode);
     $('#psSplit').checked = project.split;
+    $('#psAutoRun').checked = project.autoRun;
+    $('#psAutoRun').disabled = !project.split; // 큰 작업을 켰을 때만 의미가 있다
+    $('#psAutoCont').checked = project.autoContinue;
     if (!has()) {
       $('#psTree').replaceChildren();
       $('#psRulesBody').replaceChildren();
@@ -228,8 +248,15 @@
     renderTree();
     const chars = [...project.checked].reduce((n, p) => n + (entryOf(p)?.size || 0), 0);
     const amount = chars < 10000 ? `${chars.toLocaleString()}자` : `${(chars / 10000).toFixed(1)}만 자`;
-    const summary = `내용 보낼 파일 ${project.checked.size}개 · 약 ${amount} / 보낼 수 있는 파일 ${sendablePaths().length}개`;
-    $('#psSummary').textContent = project.scan.truncated ? `${summary} (항목이 많아 일부만 읽음)` : summary;
+    // 보낼 양 어림 (v0.22.0): 파일 크기로 센 대략의 토큰 수. 많으면 "큰 작업"을 먼저 권한다
+    const tokens = PC.estimateTokens(chars);
+    const summary = `내용 보낼 파일 ${project.checked.size}개 · 약 ${amount} (${PC.tokenText(tokens)}) / 보낼 수 있는 파일 ${sendablePaths().length}개`;
+    $('#psSummary').replaceChildren(document.createTextNode(project.scan.truncated ? `${summary} (항목이 많아 일부만 읽음)` : summary));
+    if (!project.split && PC.suggestSplitTokens(tokens)) {
+      const w = span('split-warn', ' · [!] 큰 작업 권장');
+      w.title = `고른 파일이 ${PC.tokenText(tokens)}입니다 — 한 답에 다 고쳐 쓰면 출력 한도로 끊기기 쉬워 "큰 작업"을 권합니다 (토큰 수는 파일 크기로 어림한 값)`;
+      $('#psSummary').append(w);
+    }
     $('#projectChipText').textContent = `~/${project.info.name} · 파일 ${project.checked.size}개 · ${MODE_TEXT[project.uploadMode]}로 업로드`;
   }
 
@@ -849,6 +876,16 @@
     if (!planned.length || changes.some((c) => !c.isDelete)) return false; // 코드가 함께 왔으면 평소대로
     runs.set(id, { status: 'offer', files: planned, index: 0, changes: new Map(changes.map((c) => [c.path, c])), skip: false });
     renderBar(id);
+    // 계획이 오면 바로 시작 (v0.22.0) — 사이트가 다음 질문을 받을 준비가 되도록 잠깐 둔다
+    if (project.autoRun) {
+      notice(`계획: 파일 ${planned.length}개 — 바로 한 파일씩 받기 시작합니다`);
+      setTimeout(() => {
+        const run = runs.get(id);
+        if (!run || run.status !== 'offer') return; // 그사이 버렸거나 직접 시작함
+        run.status = 'running';
+        sendStep(id);
+      }, 800);
+    }
     return true;
   }
 
@@ -930,13 +967,17 @@
   // 답이 끝나면(onPanelAnswerDone) 앞부분과 겹치는지 보고 이어 붙여, 원래 답의 다른 수정안과 함께 바를 다시 그린다.
   const continuing = new Map(); // 패널 id -> { path, cont, changes: 원래 답의 수정안들, rounds }
 
-  async function continueFile(id, path) {
+  async function continueFile(id, path, { auto = false } = {}) {
     const b = bars.get(id);
     const item = b?.ai.plans.find((x) => x.change.path === path);
     const cont = item && PX.continuationOf(item.change);
     if (!cont) return notice('이 수정안은 이어 받을 수 없습니다 — 변경 제안에서 다시 요청하세요');
     const rounds = (b.continued?.path === path ? b.continued.rounds : 0) + 1;
-    if (rounds > PX.MAX_CONTINUE) return alert(`${path}은(는) 이미 ${PX.MAX_CONTINUE}번 이어 받았습니다. 변경 제안에서 "다시 요청"으로 받으세요 (긴 파일은 바꿀 곳만 찾기/바꾸기로).`);
+    if (rounds > PX.MAX_CONTINUE) {
+      const msg = `${path}은(는) 이미 ${PX.MAX_CONTINUE}번 이어 받았습니다. 변경 제안에서 "다시 요청"으로 받으세요 (긴 파일은 바꿀 곳만 찾기/바꾸기로).`;
+      return auto ? notice(msg) : alert(msg);
+    }
+    if (auto && continuing.has(id)) return; // 이미 이어 받는 중
     if (!allowedFor(id)) return;
     const res = await host.sendFollowUp(id, PX.continuePrompt(cont));
     if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
@@ -1037,6 +1078,14 @@
     const btns = [collect, view];
     // 이어서 받기 (v0.17.1): 잘렸거나 끝이 잘린 것 같은 파일 — 같은 AI에게 끊긴 곳부터 나머지만 받아 이어 붙인다
     const contTarget = [...ai.plans].reverse().find(PX.wantsContinue);
+    // 자동으로 이어 받기 (v0.22.0): 같은 파일 · 같은 횟수에 한 번만 (바를 다시 그려도 또 보내지 않게), 이어 붙이기에 실패했으면 멈춘다
+    if (contTarget && project.autoContinue && !b.continued?.error && PX.autoContinueKey) {
+      const key = PX.autoContinueKey(contTarget.change.path, b.continued);
+      if (b.autoKey !== key) {
+        b.autoKey = key;
+        setTimeout(() => bars.get(id) === b && continueFile(id, contTarget.change.path, { auto: true }), 600);
+      }
+    }
     if (contTarget) {
       const cont = button('↪ 이어서 받기', `${contTarget.plan.path}이(가) 끊겼습니다. ${ai.name}에게 끊긴 곳부터 나머지만 달라고 해서 이어 붙입니다`, () => continueFile(id, contTarget.change.path));
       cont.className = 'cb-continue';

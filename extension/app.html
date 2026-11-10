@@ -108,6 +108,8 @@
         </div>
       </div>
       <label class="check ps-split" title="고칠 파일이 많거나 길 때: 먼저 고칠 파일 목록(계획)만 받고, 한 파일씩 차례로 물어 모읍니다 — 답이 출력 한도로 끊기지 않게 (v0.18.0)"><input type="checkbox" id="psSplit" /> 큰 작업 — 계획 먼저 · 파일별로 받기</label>
+      <label class="check ps-split ps-sub" title="계획 답이 오면 [▶ 파일별로 받기 시작]을 누르지 않아도 바로 한 파일씩 받기 시작합니다 (v0.22.0)"><input type="checkbox" id="psAutoRun" /> 계획이 오면 바로 시작</label>
+      <label class="check ps-split" title="답이 출력 한도로 끊긴 파일이 있으면 [↪ 이어서 받기]를 누르지 않아도 같은 AI에게 나머지를 부탁합니다 — 한 파일 최대 3번 (v0.22.0)"><input type="checkbox" id="psAutoCont" /> 잘리면 자동으로 이어 받기</label>
       <button id="psGit" title="이 프로젝트 폴더에서 git 명령을 실행합니다 (Windows 앱 전용)" hidden>git 콘솔</button>
       <button id="psSync" class="primary" hidden></button>
       <span id="psSummary" class="muted-label"></span>

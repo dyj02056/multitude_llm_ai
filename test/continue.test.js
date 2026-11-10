@@ -83,3 +83,12 @@ test('부탁 글 · 이어 받을 만한지: 기준 줄을 보여 주고, 잘림
   assert.equal(PX.wantsContinue({ change: next(FULL), plan: { ok: true } }), false);
   assert.equal(PX.MAX_CONTINUE, 3);
 });
+
+test('자동 이어받기 (v0.22.0): 같은 파일 · 같은 횟수에는 한 번만, 이어 받을 때마다 열쇠가 바뀐다', () => {
+  const X = require('../src/shared/patch');
+  assert.equal(X.autoContinueKey('src/a.js', null), 'src/a.js#0');
+  assert.equal(X.autoContinueKey('src/a.js', { path: 'src/a.js', rounds: 2 }), 'src/a.js#2');
+  assert.equal(X.autoContinueKey('src/b.js', { path: 'src/a.js', rounds: 2 }), 'src/b.js#0'); // 다른 파일은 처음부터
+  assert.notEqual(X.autoContinueKey('src/a.js', { path: 'src/a.js', rounds: 1 }), X.autoContinueKey('src/a.js', { path: 'src/a.js', rounds: 2 }));
+  assert.ok(X.MAX_CONTINUE >= 1); // 자동이어도 이 횟수를 넘지 않는다 (continueFile)
+});

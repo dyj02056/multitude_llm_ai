@@ -49,3 +49,17 @@ test('계획 먼저 부탁 글 · 큰 작업 권하기', () => {
   assert.equal(PC.suggestSplit({ files: 5, lines: 200 }), true);
   assert.equal(PC.suggestSplit({ files: 2, lines: 900 }), true);
 });
+
+test('보낼 양 어림 (v0.22.0): 바이트 ÷ 4, 글로 줄여 보이고, 1만 2천 토큰을 넘으면 큰 작업 권장', () => {
+  const C = require('../src/shared/project-context');
+  assert.equal(C.estimateTokens(4000), 1000);
+  assert.equal(C.estimateTokens(-5), 0);
+  assert.equal(C.estimateTokens('x'), 0);
+  assert.equal(C.tokenText(800), '≈ 800 토큰');
+  assert.equal(C.tokenText(3200), '≈ 3.2천 토큰');
+  assert.equal(C.tokenText(14000), '≈ 1.4만 토큰');
+  assert.equal(C.suggestSplitTokens(C.SPLIT_TOKENS), false);
+  assert.equal(C.suggestSplitTokens(C.SPLIT_TOKENS + 1), true);
+  // 한글 파일(한 글자 3바이트)도 대략 같은 크기로 센다
+  assert.equal(C.estimateTokens(Buffer.byteLength('가'.repeat(1000))), 750);
+});

@@ -597,6 +597,8 @@ body.project-open[data-mode="chat"][data-view="dialog"] .project-side { display:
 .change-bar.run { border-top-color: var(--accent); }
 .change-bar.run .cb-icon { color: var(--accent-text); }
 .ps-split { margin: 2px 0; }
+.ps-split.ps-sub { padding-left: 16px; } /* 큰 작업 아래 옵션 */
+.ps-foot .split-warn { color: var(--warn-text); }
 .change-bar .cb-icon { flex: none; font-weight: 700; color: var(--warn-text); }
 .change-bar.applied .cb-icon { color: var(--ok-text); }
 .change-bar .cb-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; cursor: help; }

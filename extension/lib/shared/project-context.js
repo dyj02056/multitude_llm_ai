@@ -213,6 +213,19 @@
   /** 고른 파일 수 · 줄 수가 크면 "큰 작업"을 권할지 */
   const suggestSplit = ({ files, lines }) => files > SPLIT_SUGGEST.files || lines > SPLIT_SUGGEST.lines;
 
+  // ---------- 보낼 양 어림 (v0.22.0) ----------
+  // 토큰은 모델마다 다르게 센다. 파일 크기(UTF-8 바이트)만 보고 어림한다: 영어 · 코드는 약 4글자(4바이트)에 1토큰,
+  // 한글은 1글자(3바이트)가 약 0.7토큰이라 결국 둘 다 "바이트 ÷ 4" 근처다. 정확한 값이 아니라 크기 감을 잡는 용도.
+  const SPLIT_TOKENS = 12000; // 이보다 많으면 사이드바에 "큰 작업 권장" (답이 출력 한도로 끊기기 쉬움)
+  const estimateTokens = (bytes) => Math.max(0, Math.round((Number(bytes) || 0) / 4));
+  /** 사이드바 요약에 붙일 글: "≈ 3.2천 토큰" · "≈ 1.4만 토큰" */
+  function tokenText(tokens) {
+    if (tokens < 1000) return `≈ ${tokens} 토큰`;
+    if (tokens < 10000) return `≈ ${(tokens / 1000).toFixed(1)}천 토큰`;
+    return `≈ ${(tokens / 10000).toFixed(1)}만 토큰`;
+  }
+  const suggestSplitTokens = (tokens) => tokens > SPLIT_TOKENS;
+
   return {
     INLINE_LIMIT,
     CONTEXT_FILE,
@@ -221,6 +234,10 @@
     PLAN_FIRST,
     MAX_PLAN_FILES,
     SPLIT_SUGGEST,
+    SPLIT_TOKENS,
+    estimateTokens,
+    tokenText,
+    suggestSplitTokens,
     buildTree,
     buildContext,
     buildFollowUp,

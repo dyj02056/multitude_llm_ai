@@ -670,7 +670,12 @@
   const wantsContinue = ({ change, plan }) =>
     !!continuationOf(change) && (plan.truncated || /끝이 잘린 것 같습니다/.test(plan.suspect || ''));
 
+
+  /** 자동 이어받기(v0.22.0)가 같은 파일 · 같은 횟수에 두 번 보내지 않게 하는 열쇠 */
+  const autoContinueKey = (path, continued) => `${path}#${continued && continued.path === path ? continued.rounds : 0}`;
+
   return {
+    autoContinueKey,
     TRUNCATED_TEXT,
     MAX_CONTINUE,
     suspectFullReplace,
