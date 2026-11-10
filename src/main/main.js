@@ -43,6 +43,7 @@ const project = require('./project');
 const { setupGitConsole } = require('./gitconsole');
 const { setupDevTest } = require('./devtest');
 const { createUpdater } = require('./updater');
+const secure = require('./secure-store'); // 기록 · 설정 · 라이브러리 · 프로젝트 상태 암호화 (v0.22.1)
 
 // ---------- 화면 크기 관련 숫자 (단위: 픽셀) ----------
 // 패널을 어디에 얼마나 크게 놓을지 계산할 때 씁니다. styles.css의 크기와 맞아야 화면이 어긋나지 않습니다.
@@ -114,9 +115,8 @@ let prefs = {
  * 예전 버전 설정(없어진 서비스 등)이 남아 있어도 지금 목록에 맞게 고칩니다.
  */
 function loadPrefs() {
-  try {
-    prefs = { ...prefs, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) };
-  } catch {}
+  const saved = secure.store().readJson(prefsFile(), null);
+  if (saved && typeof saved === 'object') prefs = { ...prefs, ...saved };
   // 예전 설정(Groq 등 없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
   prefs.local = normalizeLocalPrefs(prefs.local);
   const hadLocal = Array.isArray(prefs.selected) && prefs.selected.includes(L.LOCAL_ID);
@@ -159,7 +159,7 @@ function closeLocalPanel() {
 /** 지금 설정(prefs)을 파일에 씁니다. 실패해도 앱은 계속 돌아가고, 터미널에 이유만 남깁니다. */
 function savePrefs() {
   try {
-    fs.writeFileSync(prefsFile(), JSON.stringify(prefs, null, 2));
+    secure.store().writeJson(prefsFile(), prefs);
   } catch (err) {
     console.error('[prefs] 설정을 저장하지 못했습니다:', err.message);
   }
@@ -505,6 +505,7 @@ function pushState() {
     local: { ...prefs.local },
     autoUpdate: prefs.autoUpdate !== false,
     update: updater?.status() || null,
+    storage: { encrypted: secure.store().available() }, // 로컬 데이터 암호화 (v0.22.1)
     rects: rects.panels,
   });
 }
@@ -980,14 +981,14 @@ ipcMain.handle('shortcuts:list', () => shortcutList());
 // 프롬프트 라이브러리·스킬: 모양을 검사하고 길이를 잘라서 이 PC에만 저장한다 (shared/prompt-lib.js)
 ipcMain.handle('library:load', () => {
   try {
-    return normalizeLibrary(JSON.parse(fs.readFileSync(libraryFile(), 'utf8')));
+    return normalizeLibrary(secure.store().readJson(libraryFile(), {}));
   } catch {
     return normalizeLibrary({});
   }
 });
 ipcMain.handle('library:save', (_e, data) => {
   try {
-    fs.writeFileSync(libraryFile(), JSON.stringify(normalizeLibrary(data), null, 2));
+    secure.store().writeJson(libraryFile(), normalizeLibrary(data));
     return true;
   } catch (err) {
     console.error('[library] 저장하지 못했습니다:', err.message);

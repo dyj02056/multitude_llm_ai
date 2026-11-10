@@ -96,7 +96,8 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
     });
   }
 
-  const writeRecovery = (data) => fs.writeFileSync(recoveryFile, JSON.stringify(data));
+  // 원본 파일 내용이 들어 있어 암호화해 저장한다 (v0.22.1)
+  const writeRecovery = (data) => require('./secure-store').store().writeJson(recoveryFile, data);
   const clearRecovery = () => fs.rmSync(recoveryFile, { force: true });
 
   /** 원본으로 되돌린다. → 되돌리지 못한 파일 목록 */
@@ -115,12 +116,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
 
   /** 지난번 테스트 중 앱이 꺼져 남은 임시 적용이 있으면 되돌린다 (그 프로젝트를 열 때). → 되돌린 파일 수 */
   async function recover() {
-    let data;
-    try {
-      data = JSON.parse(fs.readFileSync(recoveryFile, 'utf8'));
-    } catch {
-      return 0;
-    }
+    const data = require('./secure-store').store().readJson(recoveryFile, null);
     if (!data || data.root !== root() || !Array.isArray(data.files)) return 0;
     const failed = await restore(data.files);
     if (!failed.length) clearRecovery();

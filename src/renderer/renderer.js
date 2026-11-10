@@ -1269,9 +1269,21 @@ async function renderStatsTable() {
     : '';
 }
 
+// 저장 방식 안내 (v0.22.1): Windows 앱은 이 Windows 계정에 묶인 암호화, 크롬 확장은 암호화하지 않음
+function renderStorage() {
+  const s = state?.storage;
+  const el = $('#storageStatus');
+  if (!el || !s) return;
+  el.textContent = s.extension
+    ? '기록 · 설정 · 라이브러리는 크롬 프로필의 확장 저장소에 암호화 없이 저장됩니다. 크롬 확장에는 OS 열쇠 보관소가 없어 암호화해도 열쇠를 데이터 옆에 둘 수밖에 없기 때문입니다. 필요하면 기록 화면의 "기록 전체 삭제"로 지우세요.'
+    : s.encrypted
+      ? '기록 · 설정 · 라이브러리 · 프로젝트 상태(되돌리기용 원본 포함)를 이 PC의 앱 데이터 폴더에 암호화해 저장합니다 (Windows DPAPI — 같은 Windows 계정에서만 풀림). 파일만 복사해 가거나 다른 계정에서는 읽을 수 없고, 같은 계정에서 도는 프로그램까지 막지는 못합니다.'
+      : '이 환경에서는 암호화를 쓸 수 없어 기록 · 설정을 평문으로 저장합니다.';
+}
 function renderSettings() {
   renderRemoteStatus();
   renderUpdate();
+  renderStorage();
   renderDiagTable();
   renderStatsTable();
   renderLocalSettings();

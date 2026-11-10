@@ -178,18 +178,12 @@ const stateFile = (id) =>
 
 /** 이 프로젝트의 지난 상태(고른 파일, 켠 규칙, 적용 기록 등)를 불러옵니다. 없으면 null. */
 async function loadState(id) {
-  try {
-    return JSON.parse(await fsp.readFile(stateFile(id), 'utf8'));
-  } catch {
-    return null;
-  }
+  return require('./secure-store').store().readJsonAsync(stateFile(id), null); // 암호화 (v0.22.1) — 적용 기록의 원본도 들어 있다
 }
 
 /** 이 프로젝트의 상태를 저장합니다. 파일 이름은 폴더 경로를 짧은 암호(sha1)로 바꾼 것입니다. */
 async function saveState(id, data) {
-  const file = stateFile(id);
-  await fsp.mkdir(path.dirname(file), { recursive: true });
-  await fsp.writeFile(file, JSON.stringify(data));
+  await require('./secure-store').store().writeJsonAsync(stateFile(id), data);
   return true;
 }
 

@@ -1,7 +1,7 @@
 # Multitude LLM (multitude_llm_ai)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.22.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.22.1-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -43,7 +43,7 @@ flowchart LR
 
 - 각 AI는 **원래 사이트 화면 그대로** 패널 안에 뜹니다. 앱은 입력창에 글을 넣고 보내기를 누르고 답을 읽는 일만 합니다.
 - Windows 앱과 크롬 확장은 **같은 화면 · 같은 로직**을 씁니다. 확장 폴더는 `npm run build:ext`로 `src/`에서 만듭니다.
-- 이 앱의 서버는 없습니다. 질문은 사용자가 켠 AI 서비스로만 가고, 기록은 이 PC에만 남습니다 → [보안](docs/security.md)
+- 이 앱의 서버는 없습니다. 질문은 사용자가 켠 AI 서비스로만 가고, 기록은 이 PC에만 남습니다 (Windows 앱은 암호화) → [보안](docs/security.md)
 
 ## 기능
 
@@ -165,10 +165,10 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.22.1** | Windows 앱 **로컬 데이터 암호화**(DPAPI) — 기록 · 설정 · 라이브러리 · 프로젝트 상태 |
 | **v0.22.0** | 큰 작업 자동 시작 · 잘리면 자동 이어받기 · 보낼 양 토큰 어림 |
 | **v0.21.1** | 자가진단 창 — 셀렉터 지금 확인 · 처음 화면으로 · 진단 정보 복사 |
 | **v0.21.0** | 사이드탭 ↔ 앱 탭 — 기록 공유, `app ↗`로 질문 · 페이지 넘기기, 템플릿 · 스킬 |
-| **v0.20.1** | 문서 스크린샷을 지금 화면으로 — `npm run screenshots` 한 번으로 다시 찍기 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 
@@ -178,5 +178,5 @@ multitude_llm_ai/
 - **각 서비스의 무료 사용 한도 · 약관**을 그대로 따릅니다. 한도에 걸리면 패널에 `[limit]`이 뜹니다.
 - **크롬 확장**은 앱 탭을 새로 열 때마다 프로젝트 폴더 접근을 다시 허용해야 하고, git 콘솔 · 테스트 실행이 없습니다.
 - **사이드탭**은 폭이 좁아 AI 사이트가 모바일 화면으로 뜹니다. 비교 · 종합 · 분석은 `app ↗`로 앱 탭에 넘겨서 합니다. 자동 읽기를 허용하지 않으면 `Alt+Shift+S` · 오른쪽 클릭으로 가져온 탭만 씁니다.
-- **기록 · 설정은 이 PC에 암호화 없이** 저장됩니다. Windows 앱과 크롬 확장의 기록은 따로입니다.
+- **기록 · 설정은 이 PC에만** 저장됩니다. Windows 앱은 Windows 계정에 묶인 암호화(DPAPI)로, 크롬 확장은 암호화 없이 저장합니다 ([보안](docs/security.md)). 두 쪽의 기록은 따로입니다.
 - 프로젝트 모드 일부와 크롬 확장 탭 스크린샷은 예전 디자인 화면입니다 (프로젝트 폴더가 있어야 하는 장면이라 아직 자동으로 찍지 않음).

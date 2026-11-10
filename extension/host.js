@@ -403,6 +403,7 @@
       local: { ...prefs.local },
       autoUpdate: prefs.autoUpdate !== false,
       update: updateStatus,
+      storage: { encrypted: false, extension: true }, // 크롬 확장은 OS 열쇠 보관소가 없어 암호화하지 않는다 (v0.22.1)
       rects,
     });
   }
