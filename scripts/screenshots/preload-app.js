@@ -89,7 +89,8 @@ function push() {
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b' },
     autoUpdate: true,
-    update: { state: 'none', current: '0.20.1', version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
+    update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
+    storage: { encrypted: true },
     rects: rs,
   });
 }
