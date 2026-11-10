@@ -30,7 +30,7 @@
       records = Array.isArray(data) ? data : [];
     }
 
-    function add({ question, targets, files = [] }) {
+    function add({ question, targets, files = [], source, page }) {
       const rec = {
         id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         at: Date.now(),
@@ -39,6 +39,8 @@
         files,
         answers: {},
         synth: [],
+        ...(source ? { source } : {}), // 'side' = 사이드탭에서 보낸 질문 (v0.21.0)
+        ...(page ? { page } : {}), // 사이드탭: 함께 보낸 페이지 { title, url }
       };
       records.unshift(rec);
       if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
@@ -80,12 +82,16 @@
         synth: r.synth.filter((s) => s.mode !== 'analysis').length,
         analysis: r.synth.filter((s) => s.mode === 'analysis').length,
         files: (r.files || []).length,
+        ...(r.source ? { source: r.source } : {}),
       }));
     }
 
     function get(id) {
       return find(id) || null;
     }
+
+    /** 지금 기록 전체 (사이드탭 기록을 앱 탭과 맞출 때) */
+    const all = () => records;
 
     /**
      * 응답 통계 (v0.13.0): 저장된 기록의 답변마다 남긴 숫자(metrics)로 서비스별로 센다. 기록을 지우면 통계도 같이 사라진다.
@@ -142,7 +148,7 @@
       changed();
     }
 
-    return { load, add, setAnswer, addSynth, list, get, stats, remove, clear };
+    return { load, add, setAnswer, addSynth, list, get, stats, remove, clear, all };
   }
 
   return { createHistory };

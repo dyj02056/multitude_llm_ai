@@ -122,5 +122,41 @@
     return { text: `${webAsk.pagePrompt(ctx)}${q}`, page: webAsk.pageFile(ctx), mode: 'file' };
   }
 
-  return { MAX_SIDE, DEFAULT_SIDE, MAX_PAGE, INLINE_MAX, normalizeSelected, toggle, clampRatio, portName, parsePortName, normalizeContext, contextState, contextKey, inlinePrompt, buildSend };
+  // ---------- 앱 라이브러리 함께 쓰기 · 앱 탭으로 넘기기 (v0.21.0) ----------
+
+  /**
+   * 사이드탭에서 고를 수 있는 템플릿: 변수({{이름}})가 없는 것만 (변수 입력 화면은 앱 탭에만 있다)
+   * builtin: 앱 기본 템플릿(templates.js), lib: 앱 라이브러리(normalizeLibrary 결과)
+   */
+  function usableTemplates(builtin, lib, PL) {
+    const ok = (t) => t && typeof t.text === 'string' && t.id !== 'none' && !PL.parseVars(t.text).length;
+    return [...(lib?.templates || []).filter(ok).map((t) => ({ ...t, mine: true })), ...(builtin || []).filter(ok)];
+  }
+
+  /** 템플릿을 채운 질문 (템플릿이 없으면 그대로) */
+  function applyTemplate(question, tpl, PL) {
+    return tpl ? PL.fillTemplate(tpl.text, question) : question;
+  }
+
+  /**
+   * 스킬 지침 붙이기: 그 패널의 이 대화에 이 스킬을 아직 안 보냈으면 질문 앞에 지침을 붙인다 → { text, sent }
+   * sent: 이 패널에 보낸 스킬 id ('' = 없음). 새 대화를 열면 사이드탭이 ''로 되돌린다.
+   */
+  function withSkill(text, skill, sent, PL) {
+    if (!skill) return { text, sent: sent || '' };
+    if (sent === skill.id) return { text, sent };
+    return { text: `${PL.skillPrefix([skill])}${text}`, sent: skill.id };
+  }
+
+  /**
+   * [app ↗]로 앱 탭에 넘길 요청 (오른쪽 클릭 메뉴와 같은 storage.session 'mla:ask' 모양) | null
+   * 페이지가 있으면 페이지 본문(page.md로 첨부) + 쓰던 질문, 없으면 질문만.
+   */
+  function handoff({ ctx, on = true, question = '', now = Date.now() }) {
+    const q = String(question || '').trim();
+    if (ctx && on) return { kind: 'page', title: ctx.title, url: ctx.url, text: ctx.text, question: q, at: now };
+    return q ? { kind: 'question', text: q, question: q, at: now } : null;
+  }
+
+  return { MAX_SIDE, DEFAULT_SIDE, MAX_PAGE, INLINE_MAX, usableTemplates, applyTemplate, withSkill, handoff, normalizeSelected, toggle, clampRatio, portName, parsePortName, normalizeContext, contextState, contextKey, inlinePrompt, buildSend };
 });

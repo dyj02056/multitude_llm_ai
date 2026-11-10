@@ -1,7 +1,7 @@
 # Multitude LLM (multitude_llm_ai)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.20.1-58a6ff)
+![version](https://img.shields.io/badge/version-0.21.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -165,10 +165,10 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.21.0** | 사이드탭 ↔ 앱 탭 — 기록 공유, `app ↗`로 질문 · 페이지 넘기기, 템플릿 · 스킬 |
 | **v0.20.1** | 문서 스크린샷을 지금 화면으로 — `npm run screenshots` 한 번으로 다시 찍기 |
 | **v0.20.0** | Windows 앱 **자동 업데이트**(알리기만 → 누르면 받기 · 설치), 크롬 확장은 새 버전 알림 |
 | **v0.19.2** | 사이드탭 **자동 읽기** — 한 번 허용하면 보고 있는 탭 본문을 탭 이동 · 페이지 로드 · 보낼 때마다 자동으로 함께 보냄 (선택 권한) |
-| **v0.19.1** | 사이드탭 첫 질문에 페이지가 안 가던 문제 — 본문 3만 자 이하는 질문 글에 바로 넣음, 보낸 내용 표시 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 
@@ -177,6 +177,6 @@ multitude_llm_ai/
 - **사이트 화면이 바뀌면** 입력 · 답변 읽기가 깨질 수 있습니다. 원격 셀렉터로 고치기 전까지는 패널에서 직접 입력하세요.
 - **각 서비스의 무료 사용 한도 · 약관**을 그대로 따릅니다. 한도에 걸리면 패널에 `[limit]`이 뜹니다.
 - **크롬 확장**은 앱 탭을 새로 열 때마다 프로젝트 폴더 접근을 다시 허용해야 하고, git 콘솔 · 테스트 실행이 없습니다.
-- **사이드탭**은 폭이 좁아 AI 사이트가 모바일 화면으로 뜨고, 여기서 보낸 질문은 앱의 기록 · 비교에 들어가지 않습니다. 자동 읽기를 허용하지 않으면 `Alt+Shift+S` · 오른쪽 클릭으로 가져온 탭만 씁니다.
+- **사이드탭**은 폭이 좁아 AI 사이트가 모바일 화면으로 뜹니다. 비교 · 종합 · 분석은 `app ↗`로 앱 탭에 넘겨서 합니다. 자동 읽기를 허용하지 않으면 `Alt+Shift+S` · 오른쪽 클릭으로 가져온 탭만 씁니다.
 - **기록 · 설정은 이 PC에 암호화 없이** 저장됩니다. Windows 앱과 크롬 확장의 기록은 따로입니다.
 - 프로젝트 모드 일부와 크롬 확장 탭 스크린샷은 예전 디자인 화면입니다 (프로젝트 폴더가 있어야 하는 장면이라 아직 자동으로 찍지 않음).

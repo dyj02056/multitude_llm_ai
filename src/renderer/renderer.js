@@ -942,7 +942,8 @@ async function renderHistoryList() {
       row.classList.toggle('active', it.id === historySelected);
       const meta =
         `${fmtTime(it.at)} · 답변 ${it.answered}/${it.targets}` +
-        `${it.files ? ` · 첨부 ${it.files}` : ''}${it.synth ? ` · 종합 ${it.synth}` : ''}${it.analysis ? ` · 분석 ${it.analysis}` : ''}`;
+        `${it.files ? ` · 첨부 ${it.files}` : ''}${it.synth ? ` · 종합 ${it.synth}` : ''}${it.analysis ? ` · 분석 ${it.analysis}` : ''}` +
+        `${it.source === 'side' ? ' · side' : ''}`; // 사이드탭에서 보낸 질문 (v0.21.0)
       row.append(span('history-q', it.question || NO_TEXT), span('history-meta', meta));
       row.addEventListener('click', () => {
         historySelected = it.id;
@@ -1306,6 +1307,14 @@ function applyWebAsk(ask) {
   const W = MLA.webAsk;
   const { scanSecrets, describeSecrets } = MLA.secretScan;
   const hits = scanSecrets(ask.text);
+  if (ask.kind === 'question') {
+    // 사이드탭 [app ↗]: 페이지 없이 쓰던 질문만 넘어옴 (v0.21.0)
+    host.setView('panels');
+    $('#prompt').value = ask.question + ($('#prompt').value ? `\n\n${$('#prompt').value}` : '');
+    $('#prompt').focus();
+    attachHint('사이드탭의 질문을 넣었습니다 — 보낼 대상을 고르고 보내세요');
+    return;
+  }
   if (hits.length && !confirm(`${ask.kind === 'page' ? '페이지 본문' : '선택한 글'}에 비밀 정보로 보이는 것이 있습니다:\n${describeSecrets(hits)}\n\n그래도 넣을까요? (AI 서비스로 보내기 전에 입력창 · 첨부에서 지울 수 있습니다)`)) {
     attachHint('웹페이지 글을 넣지 않았습니다 (비밀 정보 확인에서 취소)', 'warn');
     return;
@@ -1319,9 +1328,12 @@ function applyWebAsk(ask) {
     addFiles([new File([f.text], f.name, { type: f.type })]);
     prompt.value = W.pagePrompt(ask) + (prompt.value ? `\n\n${prompt.value}` : '');
   }
-  prompt.focus();
   const end = ask.kind === 'selection' ? W.selectionPrompt(ask).length : W.pagePrompt(ask).length;
-  prompt.setSelectionRange(end, end); // "질문: " 바로 뒤에 이어 쓰게
+  // 사이드탭에서 쓰던 질문이 함께 오면 "질문: " 뒤에 넣는다 (v0.21.0)
+  if (ask.question) prompt.value = prompt.value.slice(0, end) + ask.question + prompt.value.slice(end);
+  prompt.focus();
+  const caret = end + (ask.question ? ask.question.length : 0);
+  prompt.setSelectionRange(caret, caret); // "질문: " 바로 뒤(또는 넘어온 질문 끝)에 이어 쓰게
   prompt.scrollTop = prompt.scrollHeight; // 입력칸이 작아서, 글쓴이가 쓸 "질문: " 줄이 보이게
   attachHint(`웹페이지 ${ask.kind === 'page' ? '본문을 page.md로 첨부했습니다' : '선택한 글을 넣었습니다'} — 질문을 쓰고 보내세요${ask.truncated ? ' (길어서 앞부분만)' : ''}`);
 }

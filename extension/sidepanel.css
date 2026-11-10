@@ -60,7 +60,10 @@ body.sp-dragging .sp-frame { pointer-events: none; }
 #spPrompt::placeholder { color: var(--muted); }
 #spPrompt:focus { border-color: var(--border-strong) !important; }
 .sp-foot { display: flex; align-items: center; gap: 6px; min-width: 0; }
-#spHint { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#spHint { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* 템플릿 · 스킬 고르기 (v0.21.0) */
+.sp-foot select { flex: none; max-width: 108px; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11px; }
+.sp-foot select.on { border-color: rgba(88, 166, 255, .6); color: var(--accent-text); }
 #spHint[data-kind="error"] { color: var(--err-text); }
 #spHint[data-kind="ok"] { color: var(--ok-text); }
 #spSend { padding: 3px 14px; flex: none; }

@@ -13,23 +13,29 @@
   'use strict';
 
   const MAX_SELECTION = 50000; // 입력창에 넣는 선택한 글의 최대 글자 수
+  const MAX_QUESTION = 20000; // 사이드탭에서 함께 넘기는 질문의 최대 글자 수 (v0.21.0)
   const MAX_PAGE = 300000; // page.md에 넣는 본문의 최대 글자 수
   const FRESH_MS = 2 * 60 * 1000; // 이보다 오래된 요청은 버린다 (앱 탭을 늦게 열었을 때 엉뚱한 글이 들어가지 않게)
 
-  /** 메뉴에서 넘어온 요청을 검사한다 → { kind, title, url, text, truncated } | null */
+  /**
+   * 메뉴 · 사이드탭에서 넘어온 요청을 검사한다 → { kind, title, url, text, truncated, question } | null
+   * kind: 'selection'(선택한 글) · 'page'(페이지 본문) · 'question'(사이드탭이 넘긴 질문만, v0.21.0)
+   * question: 사이드탭에서 쓰던 질문 — 입력창의 "질문: " 뒤에 이어 넣는다 (v0.21.0)
+   */
   function normalize(raw, now = Date.now()) {
-    if (!raw || typeof raw !== 'object' || !['selection', 'page'].includes(raw.kind)) return null;
+    if (!raw || typeof raw !== 'object' || !['selection', 'page', 'question'].includes(raw.kind)) return null;
     if (!Number.isFinite(raw.at) || now - raw.at > FRESH_MS || raw.at - now > 5000) return null;
     let url = '';
     try {
       const u = new URL(String(raw.url || ''));
       if (u.protocol === 'http:' || u.protocol === 'https:') url = u.href;
     } catch {}
-    const max = raw.kind === 'page' ? MAX_PAGE : MAX_SELECTION;
-    const text = String(raw.text || '').replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim();
+    const max = raw.kind === 'page' ? MAX_PAGE : raw.kind === 'question' ? MAX_QUESTION : MAX_SELECTION;
+    const question = String(raw.question || '').replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim().slice(0, MAX_QUESTION);
+    const text = raw.kind === 'question' ? question : String(raw.text || '').replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim();
     if (!text) return null;
     const title = String(raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 200) || url || '웹페이지';
-    return { kind: raw.kind, title, url, text: text.slice(0, max), truncated: text.length > max };
+    return { kind: raw.kind, title, url, text: text.slice(0, max), truncated: text.length > max, ...(question ? { question } : {}) };
   }
 
   const source = (r) => (r.url ? `「${r.title}」(${r.url})` : `「${r.title}」`);
@@ -76,5 +82,5 @@
     return [`첨부한 page.md는 웹페이지 ${source(r)}의 본문입니다.`, '', '질문: '].join('\n');
   }
 
-  return { MAX_SELECTION, MAX_PAGE, FRESH_MS, normalize, selectionPrompt, pageFile, pagePrompt };
+  return { MAX_SELECTION, MAX_PAGE, MAX_QUESTION, FRESH_MS, normalize, selectionPrompt, pageFile, pagePrompt };
 });

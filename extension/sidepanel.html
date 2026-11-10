@@ -20,7 +20,7 @@
     <div id="spModels" class="sp-models"></div>
     <span class="spacer"></span>
     <button id="spPick" class="ghost" title="사이드탭에 띄울 모델 고르기 (최대 2개)" aria-expanded="false">models</button>
-    <button id="spApp" class="ghost" title="Multitude LLM 앱 탭 열기 (모델 최대 6개 · 비교 · 프로젝트)">app ↗</button>
+    <button id="spApp" class="ghost" title="앱 탭으로 넘기기: 쓰던 질문과 페이지 본문을 앱 탭 입력창에 넣습니다 (모델 최대 6개 · 비교 · 종합 · 분석)">app ↗</button>
   </header>
 
   <div id="spPicker" class="sp-picker" hidden>
@@ -44,6 +44,8 @@
       <textarea id="spPrompt" rows="3" spellcheck="false" placeholder="이 페이지에 대해 질문…"></textarea>
     </div>
     <div class="sp-foot">
+      <select id="spTpl" title="앱 라이브러리의 템플릿 (변수가 없는 것만 — 변수가 있는 템플릿은 앱 탭에서)" aria-label="템플릿"></select>
+      <select id="spSkill" title="앱 라이브러리의 스킬 — 패널마다 새 대화 첫 질문에 지침을 붙입니다" aria-label="스킬"></select>
       <span id="spHint" class="muted-label">Enter 보내기 · Shift+Enter 줄바꿈</span>
       <span class="spacer"></span>
       <button id="spSend" class="primary">send</button>
@@ -56,6 +58,9 @@
   <script src="lib/shared/web-ask.js"></script>
   <script src="lib/shared/secret-scan.js"></script>
   <script src="lib/shared/side-panel.js"></script>
+  <script src="lib/shared/history-core.js"></script>
+  <script src="lib/shared/prompt-lib.js"></script>
+  <script src="lib/renderer/templates.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

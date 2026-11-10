@@ -17,6 +17,7 @@
   const { scanSecrets, describeSecrets } = MLA.secretScan;
   const { watchAnswer } = MLA.watch;
   const remoteCore = MLA.remoteCore;
+  const PL = MLA.promptLib;
 
   const NONCE = crypto.randomUUID(); // 이 사이드 패널 화면의 번호 — 다른 창의 사이드 패널과 연결선이 섞이지 않게
   const HELLO_TIMEOUT_MS = 8000;
@@ -31,7 +32,10 @@
   const webServices = () => SERVICES.filter((s) => (s.kind || 'web') === 'web');
 
   let windowId = null;
-  let prefs = { selected: [...SP.DEFAULT_SIDE], ratio: 0.5, ctxOn: true };
+  let prefs = { selected: [...SP.DEFAULT_SIDE], ratio: 0.5, ctxOn: true, tpl: '', skill: '' };
+  let lib = PL.normalizeLibrary({}); // 앱 라이브러리 (읽기만, v0.21.0)
+  // 사이드탭 기록 (v0.21.0): 'history:side'에 남기고, 앱 탭의 기록 화면이 `side` 표시와 함께 보여 준다
+  const sideHistory = MLA.historyCore.createHistory((records) => chrome.storage.local.set({ 'history:side': records }).catch(() => {}));
   let ctx = null; // 가져온 페이지 { title, url, text, truncated, at, tabId }
   let ctxError = '';
   let activeTabId = null;
@@ -145,6 +149,7 @@
       button('copy', '최신 답변 복사', () => copyAnswer(svc.id)),
       button('+', '새 대화', () => {
         p.sentKey = '';
+        p.skillSent = '';
         navigate(svc.id, svc.newChatUrl || svc.url);
       }),
       button('↻', '새로고침', () => {
@@ -157,7 +162,7 @@
     iframe.name = SP.portName(NONCE, svc.id); // content.js가 이 이름으로 이 화면에 연결한다
     iframe.allow = 'clipboard-write; microphone';
     el.append(head, iframe);
-    const p = { el, iframe, dot, url, status, loginBtn, port: null, pending: new Map(), seq: 0, helloTimer: null, loginTimer: null, retried: false, sentKey: '', watch: 0, curUrl: svc.url };
+    const p = { el, iframe, dot, url, status, loginBtn, port: null, pending: new Map(), seq: 0, helloTimer: null, loginTimer: null, retried: false, sentKey: '', skillSent: '', watch: 0, curUrl: svc.url };
     iframe.addEventListener('load', () => {
       clearTimeout(p.helloTimer);
       p.helloTimer = setTimeout(() => {
@@ -466,7 +471,16 @@
     sending = true;
     $('#spSend').disabled = true;
     hint(`보내는 중… (${ids.length}개)`);
-    const results = await Promise.all(ids.map((id) => sendOne(id, text, useCtx ? ctx : null)));
+    const tpl = currentTemplate();
+    const asked = SP.applyTemplate(text, tpl, PL);
+    const hid = sideHistory.add({
+      question: text,
+      targets: ids,
+      files: useCtx ? [{ name: 'page.md', size: ctx.text.length }] : [],
+      source: 'side',
+      page: useCtx ? { title: ctx.title, url: ctx.url } : undefined,
+    });
+    const results = await Promise.all(ids.map((id) => sendOne(id, asked, useCtx ? ctx : null, hid)));
     sending = false;
     $('#spSend').disabled = false;
     const bad = results.filter((r) => !r.ok);
@@ -477,10 +491,13 @@
     } else hint(bad.map((r) => `${svcOf(r.id).name}: ${r.error}`).join(' · '), 'error');
   }
 
-  async function sendOne(id, text, pageCtx) {
+  async function sendOne(id, text, pageCtx, hid) {
     const p = panes.get(id);
     const svc = svcOf(id);
     const out = SP.buildSend({ text, ctx: pageCtx, on: !!pageCtx, sentKey: p.sentKey, webAsk: W });
+    // 스킬 지침: 이 패널의 이 대화에 아직 안 보냈으면 질문 앞에 붙인다 (v0.21.0)
+    const sk = SP.withSkill(out.text, currentSkill(), p.skillSent, PL);
+    out.text = sk.text;
     p.status.dataset.state = 'send-sending';
     p.status.textContent = { inline: '페이지 본문과 함께 보내는 중…', file: 'page.md 첨부 후 보내는 중…' }[out.mode] || '보내는 중…';
     const before = await snapshot(id);
@@ -493,7 +510,7 @@
       p.iframe.contentWindow.postMessage({ mla: 'files', nonce, files: [{ name: out.page.name, type: out.page.type, data, lastModified: Date.now() }] }, new URL(p.curUrl).origin);
       upload = { nonce, cfg: uploadOf(svc) };
       // 첨부에 실패하면 본문을 글에 넣어 보낸다 (너무 길면 앞부분만)
-      fallbackText = W.selectionPrompt({ ...pageCtx, text: pageCtx.text.slice(0, FALLBACK_MAX), truncated: pageCtx.truncated || pageCtx.text.length > FALLBACK_MAX }) + text;
+      fallbackText = SP.withSkill(W.selectionPrompt({ ...pageCtx, text: pageCtx.text.slice(0, FALLBACK_MAX), truncated: pageCtx.truncated || pageCtx.text.length > FALLBACK_MAX }) + text, currentSkill(), p.skillSent, PL).text;
     }
     let res;
     try {
@@ -504,26 +521,33 @@
     if (!res.ok) {
       p.status.dataset.state = 'send-error';
       p.status.textContent = `보내기 실패: ${res.error}`;
+      sideHistory.setAnswer(hid, id, { state: 'send-error', error: String(res.error || '') });
       return { id, ok: false, error: res.error };
     }
+    p.skillSent = sk.sent;
     if (out.mode === 'inline' || (out.page && (res.attach?.ok || res.attach?.fallback))) p.sentKey = SP.contextKey(pageCtx);
     const attachWarn = out.page && !res.attach?.ok;
     p.status.dataset.state = attachWarn ? 'send-attach-warn' : 'send-sent';
     p.status.textContent = attachWarn
       ? res.attach?.fallback ? '보냄 · 첨부 대신 본문에 넣음' : '보냄 · 첨부 실패'
       : { inline: '보냄 · 페이지 본문 포함', file: '보냄 · page.md 첨부' }[out.mode] || '보냄';
-    watch(id, before);
+    watch(id, before, hid);
     const size = pageCtx ? `${pageCtx.text.length.toLocaleString()}자` : '';
     return { id, ok: true, how: { inline: `페이지 본문 ${size} 포함`, file: `page.md(${size}) 첨부` }[out.mode] || '' };
   }
 
   /** 보낸 뒤 답변이 끝날 때까지 머리줄 상태를 바꾼다: 답변 중… → 완료 */
-  function watch(id, before) {
+  function watch(id, before, hid) {
     const p = panes.get(id);
     const token = ++p.watch;
     const current = () => panes.get(id) === p && p.watch === token;
-    watchAnswer(() => snapshot(id), before, current, (state, info = {}) => {
+    watchAnswer(() => snapshot(id), before, current, async (state, info = {}) => {
       if (!current()) return;
+      // 기록: 답이 끝나면 답변 글(Markdown)을 남긴다 — 앱 탭 기록 화면에서 볼 수 있다
+      if (state === 'done') {
+        const snap = await snapshot(id, true);
+        sideHistory.setAnswer(hid, id, { text: snap?.text || '', md: snap?.md || snap?.text || '', state: 'done', chars: (snap?.text || '').length });
+      } else if (state !== 'answering') sideHistory.setAnswer(hid, id, { state, text: '' });
       const text = { answering: '답변 중…', done: `완료 · ${(info.chars || 0).toLocaleString()}자`, timeout: '시간 초과 (계속 지켜봄)', 'no-answer': '답변 없음' }[state];
       p.status.dataset.state = `answer-${state}`;
       p.status.textContent = text || '';
@@ -532,18 +556,56 @@
 
   // ---------- 앱 탭 열기 ----------
 
+  /** [app ↗]: 쓰던 질문과 페이지 본문을 앱 탭에 넘기고 그 탭을 연다 (오른쪽 클릭 메뉴와 같은 길, v0.21.0) */
   async function openApp() {
+    const ask = SP.handoff({ ctx, on: prefs.ctxOn, question: $('#spPrompt').value });
+    if (ask) await chrome.storage.session.set({ 'mla:ask': ask }).catch(() => {});
+    const wasOpen = await focusApp();
+    if (ask && wasOpen) chrome.runtime.sendMessage({ type: 'mla:ask' }).catch(() => {});
+    if (ask) hint(ask.kind === 'page' ? '앱 탭에 페이지 본문과 질문을 넘겼습니다' : '앱 탭에 질문을 넘겼습니다', 'ok');
+  }
+
+  /** 앱 탭을 앞으로 가져오거나 새로 연다 → 이미 열려 있었는지 */
+  async function focusApp() {
     try {
       const contexts = await chrome.runtime.getContexts({ contextTypes: ['TAB'] });
       const app = contexts.find((c) => c.tabId >= 0 && c.documentUrl?.startsWith(APP_URL));
       if (app) {
         await chrome.tabs.update(app.tabId, { active: true });
         await chrome.windows.update(app.windowId, { focused: true });
-        return;
+        return true;
       }
     } catch {}
-    chrome.tabs.create({ url: APP_URL });
+    await chrome.tabs.create({ url: APP_URL });
+    return false;
   }
+
+  // ---------- 앱 라이브러리 (템플릿 · 스킬, 읽기만 — v0.21.0) ----------
+
+  const currentTemplate = () => SP.usableTemplates(window.TEMPLATES, lib, PL).find((t) => t.id === prefs.tpl) || null;
+  const currentSkill = () => (lib.skills || []).find((s) => s.id === prefs.skill) || null;
+
+  function renderLibrary() {
+    const opt = (value, text) => Object.assign(document.createElement('option'), { value, textContent: text });
+    const tpls = SP.usableTemplates(window.TEMPLATES, lib, PL);
+    $('#spTpl').replaceChildren(opt('', 'tpl: 없음'), ...tpls.map((t) => opt(t.id, `${t.mine ? '' : '[기본] '}${t.name}`)));
+    $('#spTpl').value = currentTemplate() ? prefs.tpl : '';
+    $('#spTpl').classList.toggle('on', !!currentTemplate());
+    $('#spSkill').replaceChildren(opt('', 'skill: 없음'), ...(lib.skills || []).map((s) => opt(s.id, s.name)));
+    $('#spSkill').value = currentSkill() ? prefs.skill : '';
+    $('#spSkill').classList.toggle('on', !!currentSkill());
+  }
+  $('#spTpl').addEventListener('change', (e) => {
+    prefs.tpl = e.target.value;
+    savePrefs();
+    renderLibrary();
+  });
+  $('#spSkill').addEventListener('change', (e) => {
+    prefs.skill = e.target.value;
+    for (const p of panes.values()) p.skillSent = ''; // 바꾼 스킬은 다음 질문에 다시 붙인다
+    savePrefs();
+    renderLibrary();
+  });
 
   // ---------- 화면 이벤트 ----------
 
@@ -603,6 +665,12 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'session' && windowId !== null && changes[CTX_KEY()]?.newValue) takeCtx(changes[CTX_KEY()].newValue);
+    if (area === 'local' && changes.library) {
+      lib = PL.normalizeLibrary(changes.library.newValue || {});
+      renderLibrary();
+    }
+    // 앱 탭 기록 화면에서 지웠으면 따라간다
+    if (area === 'local' && changes['history:side'] && changes['history:side'].newValue?.length !== sideHistory.all().length) sideHistory.load(changes['history:side'].newValue || []);
   });
   chrome.tabs.onActivated.addListener((info) => {
     if (info.windowId !== windowId) return;
@@ -615,9 +683,18 @@
 
   async function init() {
     windowId = (await chrome.windows.getCurrent()).id;
-    const saved = (await chrome.storage.local.get(['sidePrefs', 'prefs', 'remoteSelectors']).catch(() => ({}))) || {};
+    const saved = (await chrome.storage.local.get(['sidePrefs', 'prefs', 'remoteSelectors', 'library', 'history:side']).catch(() => ({}))) || {};
     const sp = saved.sidePrefs || {};
-    prefs = { selected: SP.normalizeSelected(sp.selected, SERVICES), ratio: SP.clampRatio(sp.ratio), ctxOn: sp.ctxOn !== false };
+    prefs = {
+      selected: SP.normalizeSelected(sp.selected, SERVICES),
+      ratio: SP.clampRatio(sp.ratio),
+      ctxOn: sp.ctxOn !== false,
+      tpl: typeof sp.tpl === 'string' ? sp.tpl : '',
+      skill: typeof sp.skill === 'string' ? sp.skill : '',
+    };
+    lib = PL.normalizeLibrary(saved.library || {});
+    sideHistory.load(Array.isArray(saved['history:side']) ? saved['history:side'] : []);
+    renderLibrary();
     // 앱 탭과 같은 원격 셀렉터(마지막으로 받은 것)를 쓴다 — 앱 설정에서 꺼 두었으면 내장 셀렉터
     if (saved.prefs?.remoteSelectors !== false) {
       const cached = remoteCore.sanitize(saved.remoteSelectors || null, SERVICES);

@@ -183,3 +183,51 @@ test('맥락 열쇠: 같은 페이지를 다시 읽어도 글이 같으면 같�
   assert.notEqual(SP.contextKey(a), SP.contextKey(edited));
   assert.equal(SP.contextKey(null), '');
 });
+
+// ---------- v0.21.0: 앱 라이브러리 · 앱 탭으로 넘기기 · 사이드탭 기록 ----------
+const PL = require('../src/shared/prompt-lib');
+const { createHistory } = require('../src/shared/history-core');
+
+test('템플릿: 변수 없는 것만 고를 수 있고, 내 템플릿이 먼저, {q}에 질문을 넣는다', () => {
+  const builtin = [{ id: 'none', name: '없음', text: '{q}' }, { id: 'summary', name: '요약', text: '요약해 줘.\n\n{q}' }, { id: 'v', name: '변수', text: '{{언어}}로 {q}' }];
+  const lib = PL.normalizeLibrary({ templates: [{ id: 'mine', name: '내 것', text: '짧게: {q}' }, { id: 'mv', name: '내 변수', text: '{{톤:간결,자세히}} {q}' }] });
+  const list = SP.usableTemplates(builtin, lib, PL);
+  assert.deepEqual(list.map((t) => t.name), ['내 것', '요약']); // 내 템플릿 id는 라이브러리가 새로 붙인다
+  assert.equal(list[0].mine, true);
+  assert.equal(SP.applyTemplate('이 글', list[1], PL), '요약해 줘.\n\n이 글');
+  assert.equal(SP.applyTemplate('그대로', null, PL), '그대로');
+});
+
+test('스킬: 패널의 이 대화에 처음 보낼 때만 지침을 붙이고, 바꾸면 다시 붙인다', () => {
+  const a = { id: 'a', name: '리뷰어', body: '버그 먼저' };
+  const first = SP.withSkill('질문', a, '', PL);
+  assert.ok(first.text.startsWith('### 지침 (스킬: 리뷰어)'));
+  assert.ok(first.text.endsWith('### 질문\n\n질문'));
+  assert.equal(first.sent, 'a');
+  assert.deepEqual(SP.withSkill('다음', a, 'a', PL), { text: '다음', sent: 'a' });
+  assert.equal(SP.withSkill('다음', { id: 'b', name: '다른 것', body: 'x' }, 'a', PL).sent, 'b');
+  assert.deepEqual(SP.withSkill('없음', null, '', PL), { text: '없음', sent: '' });
+});
+
+test('app ↗ 넘기기: 페이지가 있으면 본문 + 질문, 없으면 질문만, 둘 다 없으면 안 넘김 — 앱 탭이 받는 모양', () => {
+  const ctx = SP.normalizeContext({ title: '기사', url: 'https://n.test/a', text: '본문', at: 1, tabId: 2 });
+  const page = SP.handoff({ ctx, question: ' 요약 ', now: 100 });
+  assert.deepEqual(page, { kind: 'page', title: '기사', url: 'https://n.test/a', text: '본문', question: '요약', at: 100 });
+  assert.equal(W.normalize(page, 100).question, '요약');
+  const q = SP.handoff({ ctx, on: false, question: '질문만', now: 100 });
+  assert.deepEqual(W.normalize(q, 100), { kind: 'question', title: '웹페이지', url: '', text: '질문만', truncated: false, question: '질문만' });
+  assert.equal(SP.handoff({ ctx: null, question: '  ' }), null);
+});
+
+test('사이드탭 기록: source · page가 남고 목록 요약에 side 표시', () => {
+  const h = createHistory(() => {});
+  const id = h.add({ question: '요약해줘', targets: ['gemini'], files: [{ name: 'page.md', size: 10 }], source: 'side', page: { title: '기사', url: 'https://n.test/a' } });
+  h.setAnswer(id, 'gemini', { text: '요약입니다', md: '요약입니다', state: 'done', chars: 5 });
+  assert.equal(h.list()[0].source, 'side');
+  assert.equal(h.get(id).page.title, '기사');
+  assert.equal(h.list()[0].answered, 1);
+  const plain = createHistory(() => {});
+  plain.add({ question: 'q', targets: [] });
+  assert.equal('source' in plain.list()[0], false); // 앱 탭 기록은 그대로
+  assert.equal(h.all().length, 1);
+});

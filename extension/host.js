@@ -100,6 +100,13 @@
   }
 
   const history = createHistory((records) => store('history', records));
+  // 사이드탭 기록 (v0.21.0): 사이드탭이 'history:side'에 쓰고, 앱 탭 기록 화면이 함께 보여 준다.
+  // 같은 칸을 두 화면이 함께 쓰면 서로 덮어쓸 수 있어서 칸을 나눴다. 앱 탭은 지우기만 한다.
+  const sideHistory = createHistory((records) => store('history:side', records));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes['history:side']) sideHistory.load(changes['history:side'].newValue || []);
+  });
+  const byNewest = (a, b) => b.at - a.at;
 
   // ---------- 화면에 알리기 (Electron의 webContents.send 대신) ----------
 
@@ -701,11 +708,17 @@
     getAnswers: () => rounds.answers(),
     getAnswer: (id) => (typeof id === 'string' ? rounds.answer(id) : null),
     history: {
-      list: async (query) => history.list(typeof query === 'string' ? query : ''),
-      get: async (id) => history.get(id),
+      list: async (query) => {
+        const q = typeof query === 'string' ? query : '';
+        return [...history.list(q), ...sideHistory.list(q)].sort(byNewest);
+      },
+      get: async (id) => history.get(id) || sideHistory.get(id),
       stats: async () => history.stats(),
-      remove: async (id) => history.remove(id),
-      clear: async () => history.clear(),
+      remove: async (id) => (history.get(id) ? history.remove(id) : sideHistory.remove(id)),
+      clear: async () => {
+        history.clear();
+        sideHistory.clear();
+      },
     },
     copyText: (text) => typeof text === 'string' && copyText(text),
     // 로컬 LLM 설정 (v0.16.0): 켤 때 이 PC 주소(localhost · 127.0.0.1) 접근 권한을 묻는다 (선택 권한 — 설치 · 업데이트 때는 묻지 않음)
@@ -845,6 +858,7 @@
     if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(LL.LOCAL_ID);
     if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
     history.load(await load('history', []));
+    sideHistory.load(await load('history:side', []));
     // 마지막으로 받은 원격 셀렉터를 먼저 적용한다 (새로 받아 오는 것은 아래에서).
     const cached = prefs.remoteSelectors && remoteCore.sanitize(await load('remoteSelectors', null), SERVICES);
     if (cached) {
