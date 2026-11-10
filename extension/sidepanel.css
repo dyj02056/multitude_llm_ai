@@ -28,6 +28,7 @@ body.side { display: flex; flex-direction: column; height: 100vh; min-width: 0; 
 .sp-ctx-text .ok { color: var(--ok-text); }
 .sp-ctx-text .url { color: var(--accent-text); font-size: inherit; }
 .sp-ctx button { padding: 0 6px; font-size: 11.5px; flex: none; }
+#spCtxAuto[hidden] { display: none; }
 .sp-ctx[data-state="ok"] .sp-ctx-label { color: var(--ok-text); }
 .sp-ctx[data-state="other"] .sp-ctx-text, .sp-ctx[data-state="error"] .sp-ctx-text { color: var(--warn-text); }
 .sp-ctx[data-state="off"] .sp-ctx-text { text-decoration: line-through; color: var(--muted); }

@@ -135,7 +135,9 @@ function buildManifest() {
     // wss://는 WebSocket 요청 헤더(쿠키)를 바꾸는 규칙에 필요하다 (background.js syncWsCookies)
     host_permissions: [...matches, ...hosts.map((h) => `wss://${h}/*`)],
     // 로컬 LLM 패널(v0.16.0, 선택 기능): 설정에서 켤 때만 묻는 이 PC 주소 권한 — 설치 · 업데이트 때 확인 창을 띄우지 않는다
-    optional_host_permissions: ['http://localhost/*', 'http://127.0.0.1/*'],
+    // 사이드탭 자동 읽기(v0.19.2, 선택 기능): 사이드탭의 "자동 읽기 켜기"를 누를 때만 묻는 사이트 읽기 권한.
+    //   선택 권한이라 설치 · 업데이트 때는 확인 창을 띄우지 않고, 허용하지 않으면 예전처럼 단축키 · 메뉴로 받은 한 번 권한만 쓴다.
+    optional_host_permissions: ['http://localhost/*', 'http://127.0.0.1/*', 'http://*/*', 'https://*/*'],
     content_scripts: [
       {
         matches,

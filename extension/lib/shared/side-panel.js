@@ -92,7 +92,13 @@
   }
 
   /** 같은 페이지 본문을 다시 보내지 않게 기억하는 열쇠 (주소 + 가져온 때) */
-  const contextKey = (ctx) => (ctx ? `${ctx.url}#${ctx.at}` : '');
+  // 같은 페이지를 다시 읽어도 글이 같으면 같은 열쇠 (v0.19.2: 자동 읽기는 보낼 때마다 다시 읽는다)
+  function contextKey(ctx) {
+    if (!ctx) return '';
+    let h = 5381;
+    for (let i = 0; i < ctx.text.length; i++) h = ((h << 5) + h + ctx.text.charCodeAt(i)) | 0;
+    return `${ctx.url}#${ctx.text.length}#${(h >>> 0).toString(36)}`;
+  }
 
   // 이 길이까지는 본문을 질문 글에 그대로 넣는다 (v0.19.1). 사이드 패널은 폭이 좁아 사이트가 모바일 화면으로 바뀌고,
   // 그 화면에서는 파일 첨부가 "된 것처럼" 보이고 실제로는 안 붙는 경우가 있어 — 첨부에 기대지 않는 편이 확실하다.

@@ -36,6 +36,11 @@
   let ctxError = '';
   let activeTabId = null;
   let shortcut = 'Alt+Shift+S'; // 크롬이 실제로 지정한 사이드탭 단축키 (시작할 때 확인)
+  // 자동 읽기 (v0.19.2): 사용자가 "자동 읽기 켜기"로 사이트 읽기 권한(선택 권한)을 허용하면, 보고 있는 탭을
+  // 탭을 옮기거나 페이지가 바뀔 때마다, 그리고 보낼 때마다 다시 읽는다 (Gemini 사이드 패널처럼).
+  // 허용하지 않으면 예전처럼 단축키 · 오른쪽 클릭 메뉴로 받은 그 탭 한 번 권한으로만 읽는다.
+  const AUTO_ORIGINS = ['http://*/*', 'https://*/*'];
+  let autoRead = false;
   const panes = new Map(); // id -> { el, iframe, dot, url, status, port, pending, seq, helloTimer, loginTimer, retried, sentKey, watch, curUrl }
 
   const savePrefs = () => chrome.storage.local.set({ sidePrefs: prefs }).catch(() => {});
@@ -371,18 +376,21 @@
     const text = $('#spCtxText');
     const state = ctxError && !ctx ? 'error' : SP.contextState(ctx, { on: prefs.ctxOn, activeTabId });
     box.dataset.state = state;
+    $('#spCtxAuto').hidden = autoRead;
     $('#spCtxToggle').textContent = prefs.ctxOn ? 'on' : 'off';
     $('#spCtxToggle').setAttribute('aria-pressed', String(prefs.ctxOn));
     if (state === 'error') {
-      text.textContent = `${ctxError} — Alt+Shift+S로 다시 시도`;
+      text.textContent = autoRead ? `${ctxError}` : `${ctxError} — Alt+Shift+S로 다시 시도`;
       text.title = text.textContent;
       return;
     }
     if (!ctx) {
       // 확장을 업데이트로 받으면 크롬이 새 단축키를 지정하지 않을 때가 있다 — 그때는 지정하는 곳을 알려 준다
-      text.textContent = shortcut
-        ? `없음 — ${shortcut} 또는 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기`
-        : '없음 — 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기 (단축키 미지정: chrome://extensions/shortcuts)';
+      text.textContent = autoRead
+        ? '없음 — 읽을 수 있는 웹페이지(http · https)가 아닙니다'
+        : shortcut
+          ? `없음 — [자동 읽기 켜기]를 누르거나 ${shortcut}`
+          : '없음 — [자동 읽기 켜기]를 누르거나 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기';
       text.title = '보고 있는 페이지의 본문을 가져와 질문과 함께 보냅니다';
       return;
     }
@@ -396,7 +404,7 @@
     text.title = `${ctx.title}\n${ctx.url}\n${size}${state === 'other' ? '\n지금 보는 탭과 다른 페이지입니다' : ''}`;
   }
 
-  function takeCtx(raw) {
+  function takeCtx(raw, quiet = false) {
     if (!raw) return;
     if (raw.error) {
       ctxError = raw.error;
@@ -404,10 +412,11 @@
     } else {
       const next = SP.normalizeContext(raw);
       if (!next) return;
+      const changed = SP.contextKey(next) !== SP.contextKey(ctx);
       ctx = next;
       ctxError = '';
-      prefs.ctxOn = true;
-      hint(`페이지를 가져왔습니다 (${ctx.text.length.toLocaleString()}자) — 다음 질문에 본문을 함께 보냅니다`, 'ok');
+      if (!quiet) prefs.ctxOn = true;
+      if (!quiet || changed) hint(`페이지를 가져왔습니다 (${ctx.text.length.toLocaleString()}자) — 다음 질문에 본문을 함께 보냅니다`, 'ok');
     }
     renderCtx();
   }
@@ -422,8 +431,16 @@
         func: () => ({ title: document.title, url: location.href, text: (document.body?.innerText || '').slice(0, 400000) }),
       });
       if (!res?.result?.text?.trim()) throw new Error('페이지 글이 없습니다');
-      takeCtx({ ...res.result, tabId: tab.id, at: Date.now() });
+      takeCtx({ ...res.result, tabId: tab.id, at: Date.now() }, quiet);
     } catch {
+      if (autoRead) {
+        // 자동 읽기 중인데 못 읽는 탭(크롬 설정 · 웹 스토어 · 빈 탭 등): 이 탭은 맥락 없이 보낸다
+        if (ctx?.tabId !== tab.id) {
+          ctx = null;
+          renderCtx();
+        }
+        return;
+      }
       // 권한이 없는 탭(처음 보는 탭 · 다른 주소로 이동한 탭 · 크롬 설정 화면 등)
       if (!quiet) hint(`이 탭은 ${shortcut || '오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기'}${shortcut ? '(또는 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기)' : ''}로 가져와 주세요`, 'error');
     }
@@ -437,8 +454,9 @@
     if (!text || sending) return;
     const ids = prefs.selected.filter((id) => panes.get(id)?.port);
     if (!ids.length) return hint('연결된 패널이 없습니다 — 패널이 다 뜬 뒤 보내세요', 'error');
-    // 가져온 페이지가 없으면 지금 탭을 한 번 조용히 읽어 본다 (그 탭에 한 번 권한이 남아 있을 때만 된다)
-    if (prefs.ctxOn && !ctx) await grabCtx(true);
+    // 자동 읽기면 보낼 때마다 지금 탭을 다시 읽는다 (탭을 옮겼거나 페이지가 바뀌었을 수 있다).
+    // 아니면 가져온 페이지가 없을 때만 한 번 조용히 읽어 본다 (그 탭에 한 번 권한이 남아 있을 때만 된다).
+    if (prefs.ctxOn && (autoRead || !ctx)) await grabCtx(true);
     const useCtx = prefs.ctxOn && ctx;
     // 페이지 본문을 처음 보낼 때: 키 · 토큰처럼 보이는 것이 있으면 확인 (앱 탭의 오른쪽 클릭 메뉴와 같음)
     if (useCtx && ids.some((id) => panes.get(id).sentKey !== SP.contextKey(ctx))) {
@@ -545,6 +563,32 @@
   });
   $('#spApp').addEventListener('click', openApp);
   $('#spCtxGrab').addEventListener('click', () => grabCtx());
+  // 권한 요청은 누른 그 순간에 해야 해서 기다리는 일 없이 바로 묻는다
+  $('#spCtxAuto').addEventListener('click', () => {
+    chrome.permissions.request({ origins: AUTO_ORIGINS }).then(
+      (granted) => {
+        if (!granted) return hint('허용하지 않아 자동 읽기를 켜지 못했습니다 — Alt+Shift+S로 가져올 수 있습니다', 'error');
+        autoRead = true;
+        renderCtx();
+        grabCtx();
+      },
+      (err) => hint(`자동 읽기를 켜지 못했습니다: ${err.message}`, 'error'),
+    );
+  });
+  chrome.permissions.onRemoved?.addListener(async () => {
+    autoRead = await chrome.permissions.contains({ origins: AUTO_ORIGINS }).catch(() => false);
+    renderCtx();
+  });
+  // 자동 읽기: 탭을 옮기거나 지금 탭의 페이지가 다 열리면 다시 읽는다
+  let autoTimer = null;
+  const autoGrab = () => {
+    if (!autoRead) return;
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => grabCtx(true), 400);
+  };
+  chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+    if (tab?.windowId === windowId && tab.active && info.status === 'complete') autoGrab();
+  });
   $('#spCtxToggle').addEventListener('click', () => {
     prefs.ctxOn = !prefs.ctxOn;
     savePrefs();
@@ -564,6 +608,7 @@
     if (info.windowId !== windowId) return;
     activeTabId = info.tabId;
     renderCtx();
+    autoGrab();
   });
 
   // ---------- 시작 ----------
@@ -580,11 +625,13 @@
     }
     const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
     activeTabId = tab?.id ?? null;
+    autoRead = await chrome.permissions.contains({ origins: AUTO_ORIGINS }).catch(() => false);
     const cmds = await chrome.commands?.getAll?.().catch(() => null);
     if (cmds) shortcut = cmds.find((c) => c.name === 'open-side-panel')?.shortcut || '';
     const got = await chrome.storage.session.get(CTX_KEY()).catch(() => ({}));
     takeCtx(got?.[CTX_KEY()]);
     if (!ctx) renderCtx();
+    if (autoRead) grabCtx(true);
     hint('Enter 보내기 · Shift+Enter 줄바꿈');
     renderModels();
     await allowFraming();

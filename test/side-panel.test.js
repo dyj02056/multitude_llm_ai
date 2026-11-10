@@ -174,3 +174,12 @@ test('사이드탭 규칙: 사이드 패널이 열린 동안만, 탭 없는(-1) 
   await settle();
   assert.equal(bg.rules().length, 0);
 });
+
+test('맥락 열쇠: 같은 페이지를 다시 읽어도 글이 같으면 같고, 글이 바뀌면 다르다 (자동 읽기가 같은 본문을 또 보내지 않게)', () => {
+  const a = SP.normalizeContext({ url: 'https://a.test/', text: '본문', at: 1, tabId: 1 });
+  const again = SP.normalizeContext({ url: 'https://a.test/', text: '본문', at: 999, tabId: 1 });
+  const edited = SP.normalizeContext({ url: 'https://a.test/', text: '본문 + 새 댓글', at: 999, tabId: 1 });
+  assert.equal(SP.contextKey(a), SP.contextKey(again));
+  assert.notEqual(SP.contextKey(a), SP.contextKey(edited));
+  assert.equal(SP.contextKey(null), '');
+});

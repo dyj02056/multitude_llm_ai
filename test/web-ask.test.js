@@ -53,8 +53,11 @@ test('페이지 본문 → page.md와 안내 글', () => {
 test('확장 권한: 메뉴 · 한 번 권한 · 스크립트만 늘고, 모든 사이트 권한은 없다', () => {
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'extension', 'manifest.json'), 'utf8'));
   for (const p of ['contextMenus', 'activeTab', 'scripting']) assert.ok(m.permissions.includes(p), p);
-  const all = [...m.permissions, ...(m.host_permissions || []), ...(m.optional_host_permissions || [])];
+  // 설치할 때 받는 권한에는 모든 사이트 권한이 없다. 사이드탭 자동 읽기(v0.19.2)만 선택 권한으로 — 켤 때 사용자에게 묻는다
+  const all = [...m.permissions, ...(m.host_permissions || [])];
   assert.ok(!all.some((p) => /<all_urls>|^\*:\/\/\*|^https?:\/\/\*\//.test(p)), all.join(', '));
+  const wide = (m.optional_host_permissions || []).filter((p) => /<all_urls>|^\*:\/\/\*|^https?:\/\/\*\//.test(p));
+  assert.deepEqual(wide, ['http://*/*', 'https://*/*']);
   const serviceHosts = new Set(SERVICES.flatMap((s) => s.hosts));
   for (const h of m.host_permissions) assert.ok(serviceHosts.has(h.replace(/^(https|wss):\/\//, '').replace(/\/\*$/, '')), h);
 });
