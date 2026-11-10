@@ -314,6 +314,26 @@
     </div>
   </div>
 
+  <!-- 셀렉터 자가진단 창 (v0.21.1): 패널 머리줄의 ⚠ / [limit] 표시를 누르면 — 무엇을 못 찾았는지와 고치는 버튼 -->
+  <div id="diagModal" class="modal" hidden>
+    <div class="modal-box diag-box">
+      <div class="modal-head"><b id="diagTitle"></b><span id="diagSub" class="muted-label"></span></div>
+      <div class="modal-body">
+        <table id="diagParts" class="diag-table"></table>
+        <p id="diagMsg" class="muted small"></p>
+        <p id="diagRemote" class="muted small"></p>
+      </div>
+      <div class="modal-foot">
+        <span id="diagStatus" class="muted-label"></span>
+        <button id="diagRefresh" title="GitHub에서 고친 셀렉터가 있는지 지금 받아 봅니다">셀렉터 지금 확인</button>
+        <button id="diagHome" title="이 패널을 처음 주소로 다시 엽니다">처음 화면으로</button>
+        <button id="diagCopy" title="서비스 · 앱 버전 · 셀렉터 버전 · 찾은/못 찾은 항목을 복사합니다 (질문 · 답변 글은 넣지 않음)">진단 정보 복사</button>
+        <button id="diagSettings" class="ghost" title="설정의 서비스 화면 상태 표">전체 상태</button>
+        <button id="diagClose" class="primary">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 질문·답변 기록 화면 -->
   <section id="history" class="only-history">
     <aside class="history-side">

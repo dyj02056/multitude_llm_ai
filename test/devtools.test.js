@@ -313,3 +313,26 @@ test('테스트 실행 (v0.12.1): 수정안이 test 스크립트 · 실행 영�
   assert.deepEqual(R.trialWarnings([{ path: 'package.json', before: pkg({ test: 'a' }), after: pkg({ test: 'a' }) }]).scriptLines, []);
   assert.match(R.trialWarnings([{ path: 'package.json', before: pkg({ test: 'a' }), after: '{ broken' }]).scriptLines[0], /실행할 수 없습니다/);
 });
+
+test('진단 정보 복사 (v0.21.1): 셀렉터를 고칠 때 필요한 것만 — 질문 · 답변 · 주소 경로는 없음', () => {
+  const D = require('../src/shared/diag');
+  const text = D.report({
+    service: { id: 'deepseek', name: 'DeepSeek' },
+    status: { input: 'ok', send: 'warn', response: 'fail', notes: ['보내기 버튼 대신 Enter로 보냄'], limit: null },
+    remote: { source: 'remote', version: 12, updated: '2026-11-08', error: '' },
+    app: '0.21.1',
+    where: 'Windows 앱',
+    host: 'chat.deepseek.com',
+    now: Date.UTC(2026, 10, 10),
+  });
+  assert.match(text, /앱: v0\.21\.1 · Windows 앱/);
+  assert.match(text, /서비스: DeepSeek \(deepseek\) · chat\.deepseek\.com/);
+  assert.match(text, /셀렉터: 원격 셀렉터 v12 \(2026-11-08\)/);
+  assert.match(text, /- 답변 영역: ✕ 못 찾음/);
+  assert.match(text, /- 보내기 버튼: △ 다른 방법으로 됨/);
+  assert.doesNotMatch(text, /https?:\/\//); // 주소(대화 경로)는 넣지 않는다
+  const builtin = D.report({ service: { id: 'gemini', name: 'Gemini' }, status: null, remote: { source: 'builtin', error: '시간 초과' } });
+  assert.match(builtin, /셀렉터: 내장 셀렉터 · 마지막 확인 실패: 시간 초과/);
+  assert.match(builtin, /- 입력창: – 확인 전/);
+  assert.match(D.report({ service: { id: 'x', name: 'X' }, status: { limit: 'You have reached your limit' } }), /사용 한도 문구: "You have reached your limit"/);
+});

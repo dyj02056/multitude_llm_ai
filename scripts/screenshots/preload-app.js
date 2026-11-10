@@ -85,7 +85,7 @@ function push() {
     mode, chatView, layout, selected, maxSelected: 6,
     attachLimits: { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 },
     synthTarget: 'gemini', autoSynth: false, answerTimeoutMin: 20, timeoutChoices: [5, 10, 20, 30, 60],
-    remoteSelectors: true, remote: { source: 'remote', version: 12, updated: '2026-11-08', checkedAt: now - 3600e3 }, diag: DIAG,
+    remoteSelectors: true, remote: { source: 'remote', version: 12, updated: '2026-11-08', checkedAt: now - 3600e3 }, diag: ['15-screen-status', '25-diag'].includes(scene) ? DIAG : {},
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b' },
     autoUpdate: true,
@@ -160,6 +160,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (scene === '14-diff-highlight') click('#diffToggle');
   }
   if (scene === '05-history') click('#historyBtn');
+  if (scene === '25-diag') {
+    // 머리줄의 ⚠ 화면이 바뀐 것 같음 → 자가진단 창
+    const badge = [...document.querySelectorAll('.panel-head .diag-badge')].find((b) => !b.hidden && b.textContent.includes('화면이'));
+    badge?.click();
+  }
   if (scene === '06-settings-shortcuts') click('#helpBtn');
   // 설정 화면의 표들: 그 칸이 맨 위에 오게 스크롤
   const helpAt = { '15-screen-status': '#diagTable', '17-stats': '#statsTable', '20-local-llm-settings': '#localEnabled' }[scene];

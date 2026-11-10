@@ -125,5 +125,31 @@
     return { fromProbe, fromSend, fromAnswer, setLimit, status, all, reset };
   }
 
-  return { PARTS, PART_TEXT, MARK, HINT, LIMIT_HINT, createDiag };
+  const STATE_TEXT = { ok: '찾음', warn: '다른 방법으로 됨', fail: '못 찾음', unknown: '확인 전' };
+
+  /**
+   * [진단 정보 복사]용 글 (v0.21.1): 셀렉터를 고칠 때 필요한 것만 — 질문 · 답변 글 · 주소의 경로는 넣지 않는다.
+   * info: { service: { id, name }, status: status() 결과, remote: 원격 셀렉터 상태, app: 앱 버전, where: 'Windows 앱' | '크롬 확장', host: 패널 페이지 호스트, now }
+   */
+  function report({ service, status, remote = {}, app = '', where = '', host = '', now = Date.now() }) {
+    const st = status || {};
+    const r = remote || {};
+    const remoteLine =
+      r.source === 'remote' || r.source === 'cache'
+        ? `원격 셀렉터 v${r.version ?? '?'}${r.updated ? ` (${r.updated})` : ''}${r.source === 'cache' ? ' · 저장해 둔 것' : ''}`
+        : '내장 셀렉터';
+    return [
+      `[Multitude LLM 셀렉터 진단] ${new Date(now).toISOString()}`,
+      `앱: v${app || '?'}${where ? ` · ${where}` : ''}`,
+      `서비스: ${service?.name || '?'} (${service?.id || '?'})${host ? ` · ${host}` : ''}`,
+      `셀렉터: ${remoteLine}${r.error ? ` · 마지막 확인 실패: ${r.error}` : ''}`,
+      ...PARTS.map((p) => `- ${PART_TEXT[p]}: ${MARK[st[p]] || '–'} ${STATE_TEXT[st[p]] || STATE_TEXT.unknown}`),
+      ...(st.notes || []).map((n) => `  · ${n}`),
+      st.limit ? `- 사용 한도 문구: "${String(st.limit).slice(0, 120)}"` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return { PARTS, PART_TEXT, MARK, HINT, LIMIT_HINT, STATE_TEXT, createDiag, report };
 });

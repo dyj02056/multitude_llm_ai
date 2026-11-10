@@ -1,7 +1,7 @@
 # Multitude LLM (multitude_llm_ai)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.21.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.21.1-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -55,7 +55,7 @@ flowchart LR
 | **답 다루기** | 종합 | 다른 AI 답을 모아 한 AI에게 오류 · 빠진 점 · 최종 답 정리 요청 | [종합](docs/guide.md#4-교차검토종합) |
 | | 답변 비교 · 분석 | 칸별 비교, 기준과 다른 문장 강조, 공통 의견 · 이견 표 · 근거 부족 · 최종 답 | [답변 비교](docs/guide.md#5-답변-비교) |
 | | 기록 · 내보내기 | 질문 · 답 자동 저장(최근 500개) · 검색, MD · HTML(→PDF) 저장 | [기록](docs/guide.md#6-기록) · [내보내기](docs/guide.md#내보내기) |
-| | 응답 통계 · 자가진단 | AI별 완료율 · 응답 시간 · 사용 한도 감지, 사이트 화면이 바뀌면 알림 | [응답 통계](docs/guide.md#응답-통계) · [자가진단](docs/guide.md#셀렉터-자가진단) |
+| | 응답 통계 · 자가진단 | AI별 완료율 · 응답 시간 · 사용 한도 감지, 사이트 화면이 바뀌면 알림 → 자가진단 창(셀렉터 지금 확인 · 진단 정보 복사) | [응답 통계](docs/guide.md#응답-통계) · [자가진단](docs/guide.md#셀렉터-자가진단) |
 | **코드 작업** | 프로젝트 모드 | 폴더 구조 · 고른 파일 업로드(3단계 제외 규칙 · 비밀 정보 검사), `NEED_FILES` 요청 처리 | [프로젝트 모드](docs/project-mode.md#프로젝트-모드) |
 | | 수정안 적용 | 패널 아래 변경 바로 바로 적용, AI별 비교 · 덩어리 단위 적용 · 되돌리기 | [단계](docs/project-mode.md#프로젝트-모드) |
 | | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기, 계획 먼저 · 파일별로 받기 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
@@ -165,16 +165,16 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.21.1** | 자가진단 창 — 셀렉터 지금 확인 · 처음 화면으로 · 진단 정보 복사 |
 | **v0.21.0** | 사이드탭 ↔ 앱 탭 — 기록 공유, `app ↗`로 질문 · 페이지 넘기기, 템플릿 · 스킬 |
 | **v0.20.1** | 문서 스크린샷을 지금 화면으로 — `npm run screenshots` 한 번으로 다시 찍기 |
 | **v0.20.0** | Windows 앱 **자동 업데이트**(알리기만 → 누르면 받기 · 설치), 크롬 확장은 새 버전 알림 |
-| **v0.19.2** | 사이드탭 **자동 읽기** — 한 번 허용하면 보고 있는 탭 본문을 탭 이동 · 페이지 로드 · 보낼 때마다 자동으로 함께 보냄 (선택 권한) |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 
 ## 알려진 제한사항
 
-- **사이트 화면이 바뀌면** 입력 · 답변 읽기가 깨질 수 있습니다. 원격 셀렉터로 고치기 전까지는 패널에서 직접 입력하세요.
+- **사이트 화면이 바뀌면** 입력 · 답변 읽기가 깨질 수 있습니다. 패널의 `⚠`를 눌러 **셀렉터 지금 확인**을 해 보고, 원격 셀렉터로 고치기 전까지는 패널에서 직접 입력하세요.
 - **각 서비스의 무료 사용 한도 · 약관**을 그대로 따릅니다. 한도에 걸리면 패널에 `[limit]`이 뜹니다.
 - **크롬 확장**은 앱 탭을 새로 열 때마다 프로젝트 폴더 접근을 다시 허용해야 하고, git 콘솔 · 테스트 실행이 없습니다.
 - **사이드탭**은 폭이 좁아 AI 사이트가 모바일 화면으로 뜹니다. 비교 · 종합 · 분석은 `app ↗`로 앱 탭에 넘겨서 합니다. 자동 읽기를 허용하지 않으면 `Alt+Shift+S` · 오른쪽 클릭으로 가져온 탭만 씁니다.

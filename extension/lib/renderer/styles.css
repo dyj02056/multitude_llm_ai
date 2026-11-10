@@ -529,6 +529,12 @@ body.drag-files #attachHint { color: var(--accent-text); }
 .diag-table td[data-state="fail"] { color: var(--err-text); font-weight: 700; }
 .diag-table td[data-state="unknown"] { color: var(--muted); }
 .diag-table tr[data-level="broken"] td:last-child { color: var(--warn-text); font-weight: 700; }
+/* 셀렉터 자가진단 창 (v0.21.1): 미리보기 창보다 작게 */
+.modal-box.diag-box { width: min(680px, 94vw); height: auto; max-height: 88vh; }
+#diagStatus[data-kind="ok"] { color: var(--ok-text); }
+#diagStatus[data-kind="error"] { color: var(--err-text); }
+/* 원격 셀렉터를 새로 받았을 때 툴바에 잠깐 (v0.21.1) */
+.status-line .remote-badge { margin-left: 8px; color: var(--ok-text); }
 .panel-head .attach-badge { font-size: 11px; color: var(--err-text); white-space: nowrap; cursor: help; }
 .status[data-state="send-attach-warn"] { color: var(--warn-text); }
 .history-files { color: var(--muted); font-size: 11.5px; }

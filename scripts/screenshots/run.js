@@ -32,6 +32,7 @@ const SCENES = [
   { name: '15-screen-status', page: 'app' },
   { name: '17-stats', page: 'app' },
   { name: '20-local-llm-settings', page: 'app' },
+  { name: '25-diag', page: 'app' },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];
 

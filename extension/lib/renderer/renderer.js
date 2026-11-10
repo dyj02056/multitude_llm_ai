@@ -150,7 +150,7 @@ function createPanel(svc) {
   const attachBadge = span('attach-badge');
   attachBadge.hidden = true;
   // 셀렉터 자가진단: 입력창 · 보내기 버튼 · 답변 영역을 못 찾으면 띄운다 (누르면 설정 화면의 서비스별 상태 표)
-  const diagBadge = button('', '', () => host.setView('help'));
+  const diagBadge = button('', '', () => openDiag(svc.id)); // 자가진단 창 (v0.21.1)
   diagBadge.className = 'diag-badge';
   diagBadge.hidden = true;
   // 프로젝트 모드: 답변 끝의 NEED_FILES 요청을 보면 project.js가 이 버튼을 띄운다.
@@ -236,11 +236,117 @@ function renderDiagBadge(id) {
   if (!broken && !limit) return;
   if (limit) {
     p.diagBadge.textContent = '[limit] 사용 한도에 걸린 것 같음';
-    p.diagBadge.title = [`화면 문구: "${d.limit}"`, '', d.limitHint, '', '누르면 설정의 서비스별 상태 표를 엽니다'].join('\n');
+    p.diagBadge.title = [`화면 문구: "${d.limit}"`, '', d.limitHint, '', '누르면 자세히'].join('\n');
     return;
   }
   p.diagBadge.textContent = '⚠ 화면이 바뀐 것 같음';
-  p.diagBadge.title = [d.message, ...d.notes, '', d.hint, '', '누르면 설정의 서비스별 상태 표를 엽니다'].join('\n');
+  p.diagBadge.title = [d.message, ...d.notes, '', d.hint, '', '누르면 자세히 · 고치는 버튼'].join('\n');
+}
+
+// ---------- 셀렉터 자가진단 창 (v0.21.1) ----------
+// 패널 머리줄의 ⚠ / [limit] 표시를 누르면 연다: 입력창 · 보내기 · 답변 영역을 찾았는지, 안내, 원격 셀렉터 버전과
+// [셀렉터 지금 확인] [처음 화면으로] [진단 정보 복사]. Windows 앱은 패널 웹페이지가 화면 맨 위에 얹혀 있어서
+// 미리보기 창처럼 'dialog' 화면으로 바꿔 패널을 치운 뒤 띄운다.
+let diagOpen = null; // { id, dialog }
+function openDiag(id) {
+  diagOpen = { id, dialog: state?.chatView === 'panels' };
+  if (diagOpen.dialog) host.setView('dialog');
+  $('#diagStatus').textContent = '';
+  renderDiagModal();
+  $('#diagModal').hidden = false;
+  $('#diagClose').focus();
+}
+function closeDiag() {
+  if (!diagOpen) return;
+  const back = diagOpen.dialog;
+  diagOpen = null;
+  $('#diagModal').hidden = true;
+  if (back && state?.chatView === 'dialog') host.setView('panels');
+}
+function renderDiagModal() {
+  if (!diagOpen) return;
+  const D = MLA.diag;
+  const svc = state.services.find((s) => s.id === diagOpen.id);
+  const d = diagById[diagOpen.id] || {};
+  $('#diagTitle').textContent = `${svc?.name || diagOpen.id} — ${d.limit ? '사용 한도에 걸린 것 같음' : d.level === 'broken' ? '화면이 바뀐 것 같음' : '서비스 화면 상태'}`;
+  $('#diagSub').textContent = panels.get(diagOpen.id)?.url.textContent || '';
+  const row = (cells, tag = 'td') => {
+    const tr = document.createElement('tr');
+    for (const c of cells) tr.append(Object.assign(document.createElement(tag), { textContent: c }));
+    return tr;
+  };
+  $('#diagParts').replaceChildren(
+    row(['항목', '상태'], 'th'),
+    ...D.PARTS.map((p) => {
+      const tr = row([D.PART_TEXT[p], `${D.MARK[d[p]] || '–'} ${D.STATE_TEXT[d[p]] || D.STATE_TEXT.unknown}`]);
+      tr.lastChild.dataset.state = d[p] || 'unknown';
+      return tr;
+    }),
+    ...(d.limit ? [row(['사용 한도 문구', `"${d.limit}"`])] : []),
+  );
+  $('#diagMsg').textContent = [d.limit ? d.limitHint : d.hint, ...(d.notes || [])].filter(Boolean).join(' · ') || '지금은 문제가 없습니다.';
+  const r = state.remote || {};
+  $('#diagRemote').textContent =
+    `셀렉터: ${r.version ? `원격 v${r.version}${r.updated ? ` (${r.updated})` : ''}` : '앱 내장'}` +
+    `${r.checkedAt ? ` · 마지막 확인 ${fmtTime(r.checkedAt)}` : ''}${r.error ? ` · 확인 실패: ${r.error}` : ''}` +
+    (state.remoteSelectors ? '' : ' · 자동 갱신이 꺼져 있습니다 (설정에서 켜기)');
+  $('#diagRefresh').disabled = !state.remoteSelectors;
+}
+function diagReportText() {
+  const svc = state.services.find((s) => s.id === diagOpen.id);
+  let host_ = '';
+  try {
+    host_ = new URL(panels.get(diagOpen.id)?.url.textContent || '').hostname; // 주소의 경로(대화 id 등)는 넣지 않는다
+  } catch {}
+  return MLA.diag.report({
+    service: { id: diagOpen.id, name: svc?.name },
+    status: diagById[diagOpen.id],
+    remote: state.remote,
+    app: state.update?.current || '',
+    where: host.takeWebAsk ? '크롬 확장' : 'Windows 앱',
+    host: host_,
+  });
+}
+const diagSay = (text, kind = '') => Object.assign($('#diagStatus'), { textContent: text }).setAttribute('data-kind', kind);
+$('#diagClose').addEventListener('click', closeDiag);
+$('#diagModal').addEventListener('click', (e) => e.target === $('#diagModal') && closeDiag());
+$('#diagModal').addEventListener('keydown', (e) => e.key === 'Escape' && (e.stopPropagation(), closeDiag()));
+$('#diagSettings').addEventListener('click', () => {
+  diagOpen = null;
+  $('#diagModal').hidden = true;
+  host.setView('help');
+});
+$('#diagHome').addEventListener('click', () => {
+  const id = diagOpen.id;
+  closeDiag();
+  host.panelAction(id, 'home');
+});
+$('#diagCopy').addEventListener('click', async () => {
+  await host.copyText(diagReportText());
+  diagSay('진단 정보를 복사했습니다 — 질문 · 답변 글은 들어 있지 않습니다', 'ok');
+});
+$('#diagRefresh').addEventListener('click', async () => {
+  const before = state.remote?.version;
+  $('#diagRefresh').disabled = true;
+  diagSay('GitHub에서 셀렉터를 확인하는 중…');
+  const r = (await host.refreshRemote()) || {};
+  $('#diagRefresh').disabled = false;
+  if (r.error) diagSay(`확인 실패: ${r.error}`, 'error');
+  else if (r.version && r.version !== before) diagSay(`새 셀렉터 v${r.version}을 받았습니다 — 다시 확인합니다. 그래도 같으면 [처음 화면으로]`, 'ok');
+  else diagSay('새로 고친 셀렉터가 아직 없습니다 — 패널에서 직접 입력하고, 앱 업데이트를 기다려 주세요');
+  renderDiagModal();
+});
+
+// 원격 셀렉터를 새 버전으로 받으면 툴바 상태줄에 10초 동안 "selectors v13" (v0.21.1)
+let remoteSeen = null;
+let remoteFlashUntil = 0;
+function noteRemote() {
+  const v = state?.remote?.source === 'remote' ? state.remote.version : null;
+  if (v && remoteSeen !== null && v !== remoteSeen) {
+    remoteFlashUntil = Date.now() + 10000;
+    setTimeout(renderStatusLine, 10100);
+  }
+  if (v || remoteSeen === null) remoteSeen = v ?? remoteSeen ?? 0;
 }
 
 // ---------- 로컬 LLM 패널 (v0.16.0) ----------
@@ -505,6 +611,11 @@ function renderStatusLine() {
   const bad = all.some((p) => p.dot.classList.contains('error'));
   el.textContent = all.length ? `${ready}/${all.length} ready` : '';
   el.dataset.state = bad ? 'error' : all.length && ready === all.length ? 'ok' : 'wait';
+  if (Date.now() < remoteFlashUntil && state?.remote?.version) {
+    const rb = span('remote-badge', `selectors v${state.remote.version}`);
+    rb.title = '사이트 셀렉터를 새로 받았습니다 (설정 › 사이트 셀렉터 자동 갱신)';
+    el.append(rb);
+  }
   // 새 버전이 있으면 "update 0.20.1" (누르면 설정 화면의 업데이트 칸)
   const badge = state?.update && MLA.update ? MLA.update.badgeText(state.update) : '';
   if (badge) {
@@ -1553,7 +1664,15 @@ host.on('state', (next) => {
   }
   if (state.mode === 'pick' && modeChanged) renderPick();
   syncPanels();
+  noteRemote();
   renderStatusLine();
+  if (diagOpen) {
+    // Esc 등으로 'dialog' 화면을 떠났으면 창도 닫는다
+    if (diagOpen.dialog && state.chatView !== 'dialog') {
+      diagOpen = null;
+      $('#diagModal').hidden = true;
+    } else renderDiagModal();
+  }
   if (state.chatView === 'help') renderUpdate();
   // 툴바 이름 뒤의 "~/chat" 같은 경로 = 지금 보는 화면
   $('.brand').dataset.path = state.mode === 'chat' ? (state.chatView === 'panels' || state.chatView === 'dialog' ? 'chat' : state.chatView) : state.mode;
