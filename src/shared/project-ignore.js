@@ -98,8 +98,10 @@
   function createMatcher() {
     const l2 = []; // rank 순으로 정렬해 둔다
     const l3 = []; // { ...source, enabled }
+    const l3Cache = new Map(); // l3Would 결과: '켜고 끈 상태|d·f|경로' → 규칙 파일 이름들
 
     function add(src) {
+      l3Cache.clear(); // 규칙이 늘면 앞서 본 L3 결과가 바뀔 수 있다
       if (src.layer === 'L3') l3.push(src);
       else {
         l2.push(src);
@@ -167,12 +169,24 @@
       return hit;
     }
 
-    /** 꺼져 있는 L3 규칙 중 이 경로를 뺄 규칙 파일 이름들 (켜면 몇 개가 더 빠지는지 보여 주려고) */
+    /**
+     * 꺼져 있는 L3 규칙 중 이 경로를 뺄 규칙 파일 이름들 (켜면 몇 개가 더 빠지는지 보여 주려고).
+     * 결과는 경로 + 켜고 끈 상태별로 기억한다 (규칙이 더해지면 add에서 비운다). 꺼진 L3가 없으면 바로 [].
+     */
     function l3Would(path, isDir) {
-      const p = isDir ? `${path}/` : path;
-      const cut = path.lastIndexOf('/');
-      const parent = cut > 0 ? `${path.slice(0, cut)}/` : '';
-      return l3.filter((src) => !src.enabled && test(src, p, parent)?.state === 'ignored').map((src) => src.source);
+      let state = '';
+      for (const src of l3) state += src.enabled ? '1' : '0';
+      if (!state.includes('0')) return [];
+      const key = `${state}|${isDir ? 'd' : 'f'}|${path}`;
+      let hit = l3Cache.get(key);
+      if (!hit) {
+        const p = isDir ? `${path}/` : path;
+        const cut = path.lastIndexOf('/');
+        const parent = cut > 0 ? `${path.slice(0, cut)}/` : '';
+        hit = l3.filter((src) => !src.enabled && test(src, p, parent)?.state === 'ignored').map((src) => src.source);
+        l3Cache.set(key, hit);
+      }
+      return hit.slice(); // 부르는 쪽이 고쳐도 기억한 값은 그대로
     }
 
     const l3Sources = () => l3.map((s) => s.source);

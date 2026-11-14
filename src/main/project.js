@@ -76,23 +76,34 @@ async function resolveSafe(rel) {
   }
 }
 
+// 파일 크기를 알아볼 때 한꺼번에 여는 최대 수 (파일이 많은 폴더에서 하나씩 기다리지 않되, 너무 많이 열지 않게)
+const STAT_CONCURRENCY = 16;
+
 /** 폴더 안의 항목 목록: 이름, 종류(파일·폴더·바로가기), 크기 */
 async function readDir(rel) {
   const abs = await resolveSafe(rel);
   const ents = await fsp.readdir(abs, { withFileTypes: true });
-  const out = [];
-  for (const d of ents) {
-    if (d.isSymbolicLink()) out.push({ name: d.name, kind: 'link', size: 0 });
-    else if (d.isDirectory()) out.push({ name: d.name, kind: 'dir', size: 0 });
-    else if (d.isFile()) {
+  // 순서는 readdir 그대로. 파일 크기만 여러 개를 함께 알아본 뒤 같은 자리에 채운다.
+  const out = new Array(ents.length).fill(null);
+  const files = [];
+  ents.forEach((d, i) => {
+    if (d.isSymbolicLink()) out[i] = { name: d.name, kind: 'link', size: 0 };
+    else if (d.isDirectory()) out[i] = { name: d.name, kind: 'dir', size: 0 };
+    else if (d.isFile()) files.push(i);
+  });
+  let next = 0;
+  const worker = async () => {
+    while (next < files.length) {
+      const i = files[next++];
       let size = 0;
       try {
-        size = (await fsp.stat(path.join(abs, d.name))).size;
+        size = (await fsp.stat(path.join(abs, ents[i].name))).size;
       } catch {}
-      out.push({ name: d.name, kind: 'file', size });
+      out[i] = { name: ents[i].name, kind: 'file', size };
     }
-  }
-  return out;
+  };
+  await Promise.all(Array.from({ length: Math.min(STAT_CONCURRENCY, files.length) }, worker));
+  return out.filter(Boolean); // 그 밖의 종류(장치 파일 등)는 예전처럼 뺀다
 }
 
 /** → { text, size } | { binary, size } | { tooLarge, size } | { missing } */

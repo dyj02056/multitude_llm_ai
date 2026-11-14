@@ -1279,13 +1279,37 @@
     apply.click();
   });
 
+  // 아주 긴 diff는 줄마다 칸을 만들면 창이 느려지므로 처음 DIFF_CHUNK줄만 그리고, 나머지는 "더 보기"로 이어 붙인다.
+  const DIFF_CHUNK = 2000;
+  function appendDiffLines(pre, lines, cls) {
+    let shown = 0;
+    let more = null;
+    const next = () => {
+      const end = Math.min(lines.length, shown + DIFF_CHUNK);
+      const frag = document.createDocumentFragment();
+      for (; shown < end; shown++) frag.append(span(cls(lines[shown]), lines[shown] || ' '));
+      if (more) more.remove();
+      pre.append(frag);
+      if (shown < lines.length) {
+        more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'diff-more';
+        more.textContent = `더 보기 (남은 ${lines.length - shown}줄)`;
+        more.addEventListener('click', (e) => {
+          e.preventDefault(); // 체크 상자가 있는 label 안에 있어도 체크가 바뀌지 않게
+          next();
+        });
+        pre.append(more);
+      } else more = null;
+    };
+    next();
+  }
+
   // 바뀐 줄 보기: 추가된 줄은 초록, 지운 줄은 빨강으로 칠합니다.
   function diffPre(text) {
     const pre = document.createElement('pre');
-    for (const line of text.split('\n')) {
-      if (line.startsWith('---') || line.startsWith('+++')) continue;
-      pre.append(span(line.startsWith('+') ? 'a' : line.startsWith('-') ? 'd' : line.startsWith('@@') ? 'h' : '', line || ' '));
-    }
+    const lines = text.split('\n').filter((line) => !line.startsWith('---') && !line.startsWith('+++'));
+    appendDiffLines(pre, lines, (line) => (line.startsWith('+') ? 'a' : line.startsWith('-') ? 'd' : line.startsWith('@@') ? 'h' : ''));
     return pre;
   }
 
@@ -1293,7 +1317,7 @@
   function hunkPre(h) {
     const pre = document.createElement('pre');
     pre.append(span('h', `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`));
-    for (const line of h.lines) pre.append(span(line.startsWith('+') ? 'a' : line.startsWith('-') ? 'd' : '', line || ' '));
+    appendDiffLines(pre, h.lines, (line) => (line.startsWith('+') ? 'a' : line.startsWith('-') ? 'd' : ''));
     return pre;
   }
 

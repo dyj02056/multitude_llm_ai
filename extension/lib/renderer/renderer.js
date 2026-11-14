@@ -355,12 +355,43 @@ function noteRemote() {
 const localViews = {};
 let localModels = []; // 연결 확인으로 받은 모델 목록 (본체 상태가 새로 와도 남긴다)
 
+const localFrame = {}; // 패널별로 다음 화면 그리기(requestAnimationFrame) 예약 번호
+
+// 답을 받는 중(streaming)에는 글자가 올 때마다 다시 그리지 않고 한 화면(frame)에 한 번만 그린다.
+// 답이 끝나면(streaming 아님) 기다리지 않고 바로 그려서 마지막 모습은 그대로다.
 function renderLocalChat(id, view) {
   localViews[id] = view;
+  if (view.streaming) {
+    if (localFrame[id] == null) {
+      localFrame[id] = requestAnimationFrame(() => {
+        localFrame[id] = null;
+        drawLocalChat(id, localViews[id]);
+      });
+    }
+    return;
+  }
+  if (localFrame[id] != null) {
+    cancelAnimationFrame(localFrame[id]);
+    localFrame[id] = null;
+  }
+  drawLocalChat(id, view);
+}
+
+function drawLocalChat(id, view) {
   const p = panels.get(id);
   if (!p?.localBox) return;
   const box = p.localBox;
-  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  // 스크롤되는 칸은 box가 아니라 그 안의 .local-messages다 (styles.css: overflow: auto)
+  const oldList = box.querySelector('.local-messages');
+  const atBottom = !oldList || oldList.scrollHeight - oldList.scrollTop - oldList.clientHeight < 40;
+  const oldTop = oldList ? oldList.scrollTop : 0;
+  // 새 질문을 보냈으면 위를 읽고 있었어도 맨 아래로 간다
+  const userCount = view.messages.filter((m) => m.role === 'user').length;
+  const asked = userCount > (p.localUserCount ?? userCount);
+  p.localUserCount = userCount;
+  // 이미 그린 답은 글이 같으면 다시 변환하지 않는다 (보통 마지막 답만 바뀐다)
+  const prevMd = p.localMd || [];
+  const nextMd = [];
   const head = document.createElement('div');
   head.className = 'local-head';
   const models = localModels;
@@ -387,14 +418,20 @@ function renderLocalChat(id, view) {
       b.textContent = m.text;
       if (m.images) b.append(span('local-img', ` [img] 이미지 ${m.images}개`));
     } else {
-      b.innerHTML = MLA.exporter.mdToHtml(m.text || (view.streaming ? '…' : '')); // mdToHtml은 모든 글을 이스케이프한다
+      const src = m.text || (view.streaming ? '…' : '');
+      const i = nextMd.length;
+      const html = prevMd[i]?.src === src ? prevMd[i].html : MLA.exporter.mdToHtml(src); // mdToHtml은 모든 글을 이스케이프한다
+      nextMd.push({ src, html });
+      b.innerHTML = html;
     }
     list.append(b);
   }
   if (view.streaming) list.append(span('local-typing', '답하는 중…'));
   else if (view.error && view.messages.length) list.append(span('local-error', `⚠ ${view.error}`));
+  p.localMd = nextMd;
   box.replaceChildren(head, list);
-  if (atBottom || view.streaming) list.scrollTop = list.scrollHeight;
+  // 위를 읽는 중이면 그 자리를 지키고, 맨 아래에 있었으면 새 글을 따라 내려간다
+  list.scrollTop = atBottom || asked ? list.scrollHeight : oldTop;
 }
 
 async function refreshLocalModels(el) {

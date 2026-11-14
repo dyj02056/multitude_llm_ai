@@ -14,6 +14,7 @@
 // 받는 것은 위치를 가리키는 글자(셀렉터)뿐이고, 프로그램 코드는 받지 않아 안전합니다.
 
 const fs = require('fs');
+const fsp = fs.promises;
 const path = require('path');
 const { net } = require('electron');
 const { DEFAULT_URL, sanitize: sanitizeData, snapshotBase, apply: applyTo } = require('../shared/remote-core');
@@ -30,6 +31,7 @@ const sanitize = (data) => sanitizeData(data, services);
 const apply = (overrides) => applyTo(services, base, overrides);
 
 /** 앱을 켤 때: 앱에 들어 있던 원래 값을 기억해 두고, 지난번에 받아 둔 목록이 있으면 먼저 적용합니다. */
+// 받아 둔 목록 읽기는 동기로 둔다: 첫 창 · 패널이 뜨기 전에 셀렉터가 적용돼 있어야 한다 (작은 파일 한 번).
 function init(userDataDir, serviceList, { remoteUrl } = {}) {
   services = serviceList;
   cacheFile = path.join(userDataDir, 'remote-selectors.json');
@@ -46,7 +48,7 @@ function init(userDataDir, serviceList, { remoteUrl } = {}) {
 
 /** 목록 파일을 내려받습니다. 8초 안에 응답이 없으면 포기합니다 (개발 중에는 PC의 파일 경로도 받음). */
 async function download() {
-  if (!/^https?:\/\//.test(url)) return JSON.parse(fs.readFileSync(url, 'utf8')); // 개발용: 로컬 파일 경로
+  if (!/^https?:\/\//.test(url)) return JSON.parse(await fsp.readFile(url, 'utf8')); // 개발용: 로컬 파일 경로
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -60,6 +62,14 @@ async function download() {
   }
 }
 
+// 받아 둔 목록 쓰기는 비동기로, 한 줄로 세워서 한다 (갱신이 겹쳐도 먼저 시작한 쓰기가 나중 것을 덮지 않게)
+let cacheWrite = Promise.resolve();
+function saveCache(text) {
+  const file = cacheFile;
+  cacheWrite = cacheWrite.then(() => fsp.writeFile(file, text)).catch(() => {});
+  return cacheWrite;
+}
+
 /** 원격 셀렉터를 받아 적용한다. 실패하면 지금 쓰는 값(캐시 또는 내장)을 그대로 둔다. */
 async function refresh() {
   const checkedAt = Date.now();
@@ -68,9 +78,7 @@ async function refresh() {
     const clean = sanitize(data);
     if (!clean) throw new Error('형식이 올바르지 않습니다');
     apply(clean.overrides);
-    try {
-      fs.writeFileSync(cacheFile, JSON.stringify(data));
-    } catch {}
+    await saveCache(JSON.stringify(data));
     status = {
       source: 'remote',
       version: clean.version,

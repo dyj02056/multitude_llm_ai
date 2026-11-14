@@ -157,13 +157,21 @@ function closeLocalPanel() {
   localChat = null;
 }
 
-/** 지금 설정(prefs)을 파일에 씁니다. 실패해도 앱은 계속 돌아가고, 터미널에 이유만 남깁니다. */
+// 설정 · 라이브러리 저장: 0.3초 모았다가 비동기로 쓴다 (v0.23). 앱을 끌 때 will-quit에서 flush()로 동기로 마저 쓴다.
+const prefsSaver = history.createSecureSaver({
+  file: prefsFile,
+  writeSync: () => secure.store().writeJson(prefsFile(), prefs),
+  onError: (err) => console.error('[prefs] 설정을 저장하지 못했습니다:', err.message),
+});
+const librarySaver = history.createSecureSaver({
+  file: libraryFile,
+  writeSync: (data) => secure.store().writeJson(libraryFile(), data),
+  onError: (err) => console.error('[library] 저장하지 못했습니다:', err.message),
+});
+
+/** 지금 설정(prefs)을 저장하도록 예약합니다. 실패해도 앱은 계속 돌아가고, 터미널에 이유만 남깁니다. */
 function savePrefs() {
-  try {
-    secure.store().writeJson(prefsFile(), prefs);
-  } catch (err) {
-    console.error('[prefs] 설정을 저장하지 못했습니다:', err.message);
-  }
+  prefsSaver.save(prefs);
 }
 
 // ---------- 세션 ----------
@@ -974,14 +982,15 @@ ipcMain.handle('shortcuts:list', () => shortcutList());
 // 프롬프트 라이브러리·스킬: 모양을 검사하고 길이를 잘라서 이 PC에만 저장한다 (shared/prompt-lib.js)
 ipcMain.handle('library:load', () => {
   try {
-    return normalizeLibrary(secure.store().readJson(libraryFile(), {}));
+    const pending = librarySaver.current(); // 아직 파일에 안 들어갔을 수도 있는 마지막 저장본이 먼저
+    return normalizeLibrary(pending !== undefined ? pending : secure.store().readJson(libraryFile(), {}));
   } catch {
     return normalizeLibrary({});
   }
 });
 ipcMain.handle('library:save', (_e, data) => {
   try {
-    secure.store().writeJson(libraryFile(), normalizeLibrary(data));
+    librarySaver.save(normalizeLibrary(data)); // 쓰기 실패는 librarySaver가 터미널에 남긴다
     return true;
   } catch (err) {
     console.error('[library] 저장하지 못했습니다:', err.message);
@@ -1062,7 +1071,10 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on('window-all-closed', () => app.quit());
   app.on('will-quit', () => {
-    history.flush(); // 0.5초 뒤로 미뤄 둔 기록 저장을 지금 한다 (파일 쓰기는 동기라 끄기 전에 끝난다)
+    // 미뤄 둔 기록 · 설정 · 라이브러리 저장을 지금 한다 (여기서는 동기 쓰기라 끄기 전에 끝난다)
+    history.flush();
+    prefsSaver.flush();
+    librarySaver.flush();
     cleanupTemp();
     gitConsole?.stop();
     devTest?.stop();

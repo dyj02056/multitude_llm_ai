@@ -23,13 +23,8 @@
   --bright: #f0f6fc;
   /* 강조색은 하나(파랑)만 */
   --accent: #58a6ff;
-  --accent-2: #58a6ff;
-  --accent-3: #58a6ff;
   --accent-text: #79c0ff;
   --accent-soft: rgba(88, 166, 255, .10);
-  --accent-glow: transparent;
-  --grad: var(--text);
-  --grad-hover: var(--bright);
   /* 상태 색 */
   --ok: #3fb950;
   --warn: #d29922;
@@ -43,12 +38,10 @@
   /* 모서리 · 그림자 (CLI: 거의 각지게, 그림자 없음) */
   --r-sm: 2px;
   --r: 3px;
-  --r-lg: 4px;
   --shadow: none;
   --shadow-lg: 0 12px 32px rgba(1, 4, 9, .6);
   /* 움직임: 짧고 차분하게 */
   --ease: cubic-bezier(.2, 0, 0, 1);
-  --ease-spring: var(--ease);
   --t-fast: .1s;
   --t: .16s;
   --mono: "Cascadia Mono", "D2Coding", "JetBrains Mono", Consolas, "Malgun Gothic", monospace;
@@ -236,7 +229,6 @@ input[type="checkbox"] { accent-color: var(--text-2); }
 .feature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 4px 0 26px; border: 1px solid var(--border); }
 .feature { position: relative; padding: 10px 12px; background: transparent; }
 .feature + .feature { border-left: 1px solid var(--border); }
-.feature-icon { display: none; }
 .feature-step { font-size: 11px; color: var(--muted); }
 .feature h3 { margin: 2px 0 4px; font-size: 13px; font-weight: 700; color: var(--bright); }
 .feature p { margin: 0; font-size: 12px; line-height: 1.55; color: var(--text-2); }
@@ -288,7 +280,8 @@ input[type="checkbox"] { accent-color: var(--text-2); }
 .status[data-state="send-error"] { color: var(--err-text); }
 .status[data-state="answer-answering"] { color: var(--warn-text); animation: soft-blink 1.6s ease-in-out infinite; }
 .status[data-state="answer-done"] { color: var(--ok-text); }
-.status[data-state="answer-timeout"], .status[data-state="answer-no-answer"] { color: var(--err-text); }
+.status[data-state="answer-timeout"] { color: var(--warn-text); } /* 시간 초과여도 계속 기다리는 중이라 경고색 */
+.status[data-state="answer-no-answer"] { color: var(--err-text); }
 .status[data-state="flash"] { color: var(--bright); }
 
 /* ---------- 교차검토(종합) ---------- */
@@ -483,7 +476,6 @@ kbd {
 }
 /* 설정 아래 설명 = 왼쪽에 회색 줄이 있는 안내 문구 */
 .muted.small { font-size: 11.5px; margin: 0 0 16px; padding: 2px 0 2px 10px; border-left: 1px solid var(--border-strong); line-height: 1.6; }
-.status[data-state="answer-timeout"] { color: var(--warn-text); }
 
 .check-label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .setting-row .row-actions { display: flex; gap: 6px; align-items: center; font-weight: 400; }
@@ -681,6 +673,7 @@ body.project-open[data-mode="chat"][data-view="editor"] .project-side { display:
 .pf pre .a { background: rgba(46, 160, 67, .15); color: #aff5b4; }
 .pf pre .d { background: rgba(248, 81, 73, .15); color: #ffdcd7; }
 .pf pre .h { color: var(--accent-text); }
+.pf pre .diff-more { display: block; margin: 4px 10px; padding: 0 8px; font: 11.5px var(--mono); } /* 긴 diff의 "더 보기 (남은 N줄)" */
 .pf pre.code { padding: 6px 10px; white-space: pre; color: var(--text); }
 /* 덩어리(hunk) 단위 적용 (v0.12.0) */
 .pf-head .op.hunks { font-size: 11px; padding: 0 6px; border-radius: var(--r-sm); border: 1px solid var(--border); color: var(--text-2); }

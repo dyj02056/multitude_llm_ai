@@ -38,7 +38,22 @@
   ]);
   const SEP = '__';
 
-  const bytesOf = (text) => new TextEncoder().encode(text).length;
+  // UTF-8 바이트 수를 글자 코드로 바로 센다 (TextEncoder를 만들거나 바이트 배열을 만들지 않는다).
+  // 서로게이트 쌍은 4바이트, 짝 없는 서로게이트는 TextEncoder처럼 U+FFFD(3바이트)로 센다.
+  function bytesOf(text) {
+    const s = text === undefined ? '' : String(text); // TextEncoder.encode()와 같게 (undefined → 빈 글)
+    let n = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c < 0x80) n += 1;
+      else if (c < 0x800) n += 2;
+      else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length && (s.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+        n += 4;
+        i++;
+      } else n += 3;
+    }
+    return n;
+  }
   const baseName = (path) => path.split('/').pop();
 
   /** 개별 파일로 올릴 이름: 폴더 구분 / → __, 받지 않을 수 있는 확장자는 .txt를 붙인다 */
@@ -62,12 +77,24 @@
     return stripped !== restored && !(ext && SAFE_EXT.has(ext)) ? [stripped, restored] : [restored];
   }
 
-  /** 같은 이름이 있으면 "이름 (2).확장자"로 바꾼다 */
+  /**
+   * 같은 이름이 있으면 "이름 (2).확장자"로 바꾼다 (대소문자 무시, 빈 번호 중 가장 작은 것).
+   * 이름마다 다음에 볼 번호를 기억해 같은 이름이 많아도 처음부터 다시 세지 않는다
+   * (쓴 이름은 늘기만 하므로 앞에서 찬 번호는 계속 차 있다 — 결과는 처음부터 세는 것과 같다).
+   */
   function uniqueNames(names) {
     const used = new Set();
+    const nextNo = new Map(); // 원래 이름 → 다음에 볼 번호
     return names.map((n) => {
       let out = n;
-      for (let i = 2; used.has(out.toLowerCase()); i++) out = n.replace(/(\.[^.]*)?$/, (ext) => ` (${i})${ext || ''}`);
+      if (used.has(n.toLowerCase())) {
+        const m = /(\.[^.]*)?$/.exec(n);
+        const stem = n.slice(0, m.index);
+        const ext = m[0];
+        let i = nextNo.get(n) || 2;
+        for (out = `${stem} (${i})${ext}`; used.has(out.toLowerCase()); ) out = `${stem} (${++i})${ext}`;
+        nextNo.set(n, i + 1);
+      }
       used.add(out.toLowerCase());
       return out;
     });
@@ -108,12 +135,28 @@
         curBytes = n;
         continue;
       }
-      for (const ch of line) {
-        const c = bytesOf(ch);
-        if (curBytes + c > limit) push();
-        cur += ch;
+      // 한 줄이 한도보다 길면 글자 경계에서 자른다: 바이트를 누적하며 한 번만 훑고, 자를 때만 slice한다.
+      // 서로게이트 쌍은 한 글자(4바이트)로 묶어 가운데서 자르지 않는다.
+      let start = 0;
+      for (let i = 0; i < line.length; ) {
+        const code = line.charCodeAt(i);
+        let c;
+        let w = 1;
+        if (code < 0x80) c = 1;
+        else if (code < 0x800) c = 2;
+        else if (code >= 0xd800 && code <= 0xdbff && i + 1 < line.length && (line.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+          c = 4;
+          w = 2;
+        } else c = 3;
+        if (curBytes + c > limit && i > start) {
+          out.push(line.slice(start, i));
+          start = i;
+          curBytes = 0;
+        }
         curBytes += c;
+        i += w;
       }
+      cur = line.slice(start);
     }
     push();
     return out.length ? out : [''];
@@ -145,13 +188,13 @@
     let cur = '';
     let curBytes = 0;
     for (const b of blocks) {
-      const n = bytesOf(b) + (cur ? 1 : 0);
-      if (cur && curBytes + n > limit) {
+      const bn = bytesOf(b);
+      if (cur && curBytes + bn + 1 > limit) {
         chunks.push(cur);
         cur = '';
         curBytes = 0;
       }
-      curBytes += bytesOf(b) + (cur ? 1 : 0);
+      curBytes += bn + (cur ? 1 : 0);
       cur += (cur ? '\n' : '') + b;
     }
     chunks.push(cur);
