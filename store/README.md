@@ -31,14 +31,16 @@ npx electron scripts/store-tile.js
 - EN: Open up to 6 of 11 AI web chats (Gemini, ChatGPT, Claude...) in one tab, ask them all at once and compare the answers.
 - KO: Gemini · ChatGPT · Claude 등 11개 AI 웹 채팅을 한 탭에 최대 6개 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.
 
-**Category:** Productivity (Tools도 가능) · **Language:** English (Korean 추가)
+**Category:** 생산성 › **도구 (Tools)** ("생산성"은 묶음 제목이라 직접 고를 수 없음) · **Language:** English (Korean 추가)
+
+> 설명에 서비스 이름을 길게 늘어놓으면 **키워드 스팸**으로 반려됩니다 (실제 반려: "Yellow Argon", 서비스 11개 이름 나열). 이름은 manifest 요약의 세 개 정도만 쓰고, 전체 목록은 GitHub 페이지로 안내합니다.
 
 **Description — English**
 
 ```
 Ask several AI chats the same question at once — then compare, merge and apply.
 
-Multitude LLM opens up to 6 AI web chats side by side in one tab: Gemini, ChatGPT, Claude, DeepSeek, Perplexity, Grok, Mistral, Qwen, Z.ai, Genspark and Duck.ai. Type once, every panel answers. It uses each service's own website with the account you are already signed in to, so no API keys are needed.
+Multitude LLM opens up to 6 AI chat websites side by side in one tab and sends your question to all of them at once. Type once, every panel answers. It uses each service's own website with the account you are already signed in to, so no API keys are needed. The full list of supported services is on the project page.
 
 WHAT YOU CAN DO
 • Ask all at once — one input box, file attachments, prompt templates with variables, reusable skills
@@ -47,7 +49,7 @@ WHAT YOU CAN DO
 • Code work — open a local folder, send files, compare each AI's code changes, preview, apply and undo; only changed files are sent on follow-ups
 • Side panel — two AIs next to the page you are reading; the page text goes with your question
 • Right-click any page — ask about the selected text or the whole page
-• Local LLM — add Ollama / LM Studio running on your own PC as a panel
+• Local LLM — add an AI model running on your own PC (any OpenAI-compatible local server) as a panel
 • History, Markdown / HTML export, response stats and answer ratings
 
 PRIVACY
@@ -64,7 +66,7 @@ NOTES
 ```
 여러 AI 채팅에 같은 질문을 한 번에 — 비교하고, 종합하고, 적용까지.
 
-Multitude LLM은 한 탭에 AI 웹 채팅을 최대 6개 나란히 띄웁니다: Gemini, ChatGPT, Claude, DeepSeek, Perplexity, Grok, Mistral, Qwen, Z.ai, Genspark, Duck.ai. 한 번 입력하면 모든 패널이 답합니다. 각 서비스 사이트를 이미 로그인된 계정 그대로 쓰므로 API 키가 필요 없습니다.
+Multitude LLM은 한 탭에 AI 채팅 사이트를 최대 6개 나란히 띄우고, 같은 질문을 한 번에 보냅니다. 한 번 입력하면 모든 패널이 답합니다. 각 서비스 사이트를 이미 로그인된 계정 그대로 쓰므로 API 키가 필요 없습니다. 지원하는 서비스 목록은 프로젝트 페이지에 있습니다.
 
 할 수 있는 것
 • 동시 질문 — 입력창 하나, 파일 첨부, 변수 템플릿, 스킬
@@ -73,7 +75,7 @@ Multitude LLM은 한 탭에 AI 웹 채팅을 최대 6개 나란히 띄웁니다:
 • 코드 작업 — 로컬 폴더를 열어 파일을 보내고, AI별 수정안 비교 · 미리보기 · 적용 · 되돌리기, 후속 질문은 바뀐 파일만
 • 사이드탭 — 보고 있는 페이지 옆에 AI 2개, 페이지 본문을 함께 보냄
 • 오른쪽 클릭 — 선택한 글이나 페이지 본문으로 질문
-• 로컬 LLM — 이 PC의 Ollama · LM Studio를 패널로
+• 로컬 LLM — 이 PC에서 돌리는 AI 모델(OpenAI 호환 로컬 서버)을 패널로
 • 기록, Markdown · HTML 내보내기, 응답 통계와 답변 평가
 
 개인정보
@@ -115,7 +117,8 @@ Send one question to several AI chat websites that the user opens side by side i
 > The extension downloads `remote/selectors.json` from its GitHub repository. It is a signed (Ed25519) JSON data file of CSS selectors and text patterns; no code is downloaded or executed.
 
 **Data usage (체크할 항목)**
-- 체크: **Website content** (사용자가 고른 페이지 글을 AI 패널로 보냄), **User activity**는 체크하지 않음
+- 체크: **Personal communications** (질문을 AI 채팅으로 보내고 질문 · 답변을 기록에 저장), **Website content** (사용자가 고른 페이지 글을 AI 패널로 보냄)
+- 체크하지 않음: 개인 식별 · 건강 · 금융 · 인증 정보(쿠키 · 토큰은 브라우저 밖으로 나가지 않음) · 위치 · 웹 기록 · 사용자 활동
 - 아래 세 가지 확인란은 모두 체크:
   - I do not sell or transfer user data to third parties, outside of the approved use cases
   - I do not use or transfer user data for purposes that are unrelated to my item's single purpose
