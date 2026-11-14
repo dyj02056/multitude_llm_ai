@@ -1,5 +1,7 @@
 # Multitude LLM (multitude_llm_ai)
 
+**한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
+
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
 ![version](https://img.shields.io/badge/version-0.23.1-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
@@ -159,6 +161,8 @@ multitude_llm_ai/
 | 데이터가 어디로 가는지, 권한이 왜 필요한지 궁금한 분 | [보안](docs/security.md) |
 | 빌드 · 개발하려는 분 | [설치 · 빌드 · 개발](docs/setup.md) · [PLAN.md](PLAN.md) |
 | 사이트 화면이 바뀌어 고치려는 분 | [remote/README.md](remote/README.md) |
+| 스토어에 올리려는 분 | [store/README.md](store/README.md) (등록 글 · 권한 설명 · 그림) · [PRIVACY.md](PRIVACY.md) |
+| English readers | [README.en.md](README.en.md) · [English user guide](docs/en/guide.md) |
 | 버전별로 뭐가 바뀌었는지 | [변경 사항](docs/changelog.md) · [릴리스 노트](docs/release-notes) |
 
 ## 최근 변경

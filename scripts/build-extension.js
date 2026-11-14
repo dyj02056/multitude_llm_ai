@@ -58,6 +58,11 @@ function buildFiles() {
 
   files['app.html'] = buildAppHtml(read('src/renderer/index.html'));
   files['manifest.json'] = `${JSON.stringify(buildManifest(), null, 2)}\n`;
+  // 확장 이름 · 설명 · 툴바 제목 · 단축키 설명을 크롬 언어에 맞춰 (영어 기본, 한국어 크롬은 한국어) — 크롬 웹 스토어용
+  for (const [lang, msgs] of Object.entries(manifestMessages())) {
+    const body = Object.fromEntries(Object.entries(msgs).map(([k, message]) => [k, { message }]));
+    files[`_locales/${lang}/messages.json`] = `${JSON.stringify(body, null, 2)}\n`;
+  }
   for (const size of ICON_SIZES) files[`icons/icon-${size}.png`] = renderPng(size);
   return files;
 }
@@ -104,6 +109,25 @@ function buildAppHtml(html) {
   return html;
 }
 
+// manifest.json의 __MSG_…__ 글 (스토어 설명은 132자까지라 앞의 세 서비스만 이름을 쓴다)
+function manifestMessages() {
+  const first3 = SERVICES.slice(0, 3).map((s) => s.name);
+  return {
+    en: {
+      appName: 'Multitude LLM',
+      appDesc: `Open up to ${MAX_SELECTED} of ${SERVICES.length} AI web chats (${first3.join(', ')}...) in one tab, ask them all at once and compare the answers.`,
+      actionTitle: 'Open Multitude LLM',
+      cmdSidePanel: 'Open the side panel with the current page',
+    },
+    ko: {
+      appName: 'Multitude LLM',
+      appDesc: `${first3.join(' · ')} 등 ${SERVICES.length}개 AI 웹 채팅을 한 탭에 최대 ${MAX_SELECTED}개 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.`,
+      actionTitle: 'Multitude LLM 열기',
+      cmdSidePanel: '사이드탭 열기 · 지금 페이지 가져오기',
+    },
+  };
+}
+
 // manifest.json = 크롬에게 "이 확장은 무엇이고 어떤 권한·사이트가 필요한지" 알려 주는 신분증 파일
 function buildManifest() {
   const hosts = [...new Set(SERVICES.flatMap((s) => s.hosts))];
@@ -113,15 +137,16 @@ function buildManifest() {
   const bridgeMatches = matchesOf((s) => s.jsCookies || s.tokenBridge);
   return {
     manifest_version: 3,
-    name: 'Multitude LLM',
+    name: '__MSG_appName__',
     // 크롬은 숫자 버전만 받는다 (예: 0.2.0)
     version: pkg.version.replace(/[^0-9.].*$/, ''),
-    // 스토어 설명은 132자까지라 앞의 세 서비스만 이름을 쓴다
-    description: `${SERVICES.slice(0, 3).map((s) => s.name).join(' · ')} 등 ${SERVICES.length}개 AI 웹 채팅을 한 탭에 최대 ${MAX_SELECTED}개 띄워 같은 질문을 동시에 보내고 답변을 비교합니다.`,
+    // 이름 · 설명은 _locales/<언어>/messages.json (영어 기본, 한국어 크롬은 한국어)
+    description: '__MSG_appDesc__',
+    default_locale: 'en',
     minimum_chrome_version: '116',
     icons: Object.fromEntries(ICON_SIZES.map((s) => [s, `icons/icon-${s}.png`])),
     action: {
-      default_title: 'Multitude LLM 열기',
+      default_title: '__MSG_actionTitle__',
       default_icon: Object.fromEntries([16, 32].map((s) => [s, `icons/icon-${s}.png`])),
     },
     background: { service_worker: 'background.js' },
@@ -129,7 +154,7 @@ function buildManifest() {
     side_panel: { default_path: 'sidepanel.html' },
     // 단축키를 누르면 사이드탭을 열고 지금 탭의 본문을 가져온다 (단축키도 그 탭 한 번 권한(activeTab)을 준다)
     commands: {
-      'open-side-panel': { suggested_key: { default: 'Alt+Shift+S' }, description: '사이드탭 열기 · 지금 페이지 가져오기' },
+      'open-side-panel': { suggested_key: { default: 'Alt+Shift+S' }, description: '__MSG_cmdSidePanel__' },
     },
     // browsingData: 패널을 막는 서비스 워커 등록만 지운다 (host.js clearServiceWorkers)
     // cookies: 앱 탭 iframe의 WebSocket 연결에 그 사이트 쿠키를 붙이려고 읽는다 (background.js syncWsCookies)

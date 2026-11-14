@@ -13,7 +13,10 @@ const { chatPage } = S;
 const { SERVICES } = require('../../src/shared/services');
 
 const ROOT = path.join(__dirname, '..', '..');
-const OUT = path.join(ROOT, 'docs', 'screenshots');
+// --store: 크롬 웹 스토어용 1280×800 스크린샷을 store/screenshots에 (문서용 docs/screenshots는 그대로)
+//   npm run screenshots -- --store 02-ask-all 13-analysis 11-patch-preview 19-local-llm 24-side-panel
+const STORE = process.argv.includes('--store');
+const OUT = path.join(ROOT, ...(STORE ? ['store', 'screenshots'] : ['docs', 'screenshots']));
 
 // 앱 화면: 1400×860, 사이드탭: 420×860 (크롬 사이드 패널 폭)
 const SCENES = [
@@ -79,8 +82,8 @@ app.whenReady().then(async () => {
   const only = process.argv.slice(2).filter((a) => !a.startsWith('-') && !a.endsWith('.js'));
   for (const scene of SCENES.filter((s) => !only.length || only.includes(s.name))) {
     const win = new BrowserWindow({
-      width: scene.width || 1400,
-      height: 860,
+      width: STORE ? 1280 : scene.width || 1400,
+      height: STORE ? 800 : 860,
       show: false,
       useContentSize: true,
       backgroundColor: '#0d1117',

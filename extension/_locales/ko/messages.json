@@ -1,0 +1,14 @@
+{
+  "appName": {
+    "message": "Multitude LLM"
+  },
+  "appDesc": {
+    "message": "Gemini · ChatGPT · Claude 등 11개 AI 웹 채팅을 한 탭에 최대 6개 띄워 같은 질문을 동시에 보내고 답변을 비교합니다."
+  },
+  "actionTitle": {
+    "message": "Multitude LLM 열기"
+  },
+  "cmdSidePanel": {
+    "message": "사이드탭 열기 · 지금 페이지 가져오기"
+  }
+}

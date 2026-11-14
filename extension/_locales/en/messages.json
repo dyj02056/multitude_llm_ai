@@ -1,0 +1,14 @@
+{
+  "appName": {
+    "message": "Multitude LLM"
+  },
+  "appDesc": {
+    "message": "Open up to 6 of 11 AI web chats (Gemini, ChatGPT, Claude...) in one tab, ask them all at once and compare the answers."
+  },
+  "actionTitle": {
+    "message": "Open Multitude LLM"
+  },
+  "cmdSidePanel": {
+    "message": "Open the side panel with the current page"
+  }
+}
