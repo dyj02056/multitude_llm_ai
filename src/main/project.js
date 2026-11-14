@@ -22,6 +22,9 @@ const { dialog, app } = require('electron');
 const { looksBinary, MAX_FILE_BYTES } = require('../shared/project-ignore');
 const { safeRelPath, isGitInternal } = require('../shared/patch');
 
+// 화면이 읽기 한도(maxBytes)를 정해 보낼 때 앱 쪽에서 허용하는 최대값 (수정안 · 테스트 실행 원본 읽기가 5MB를 쓴다)
+const READ_MAX_BYTES = 5 * 1024 * 1024;
+
 let root = null; // 고른 폴더 (절대 경로)
 let realRoot = null; // 바로가기 링크를 푼 실제 경로
 
@@ -140,8 +143,45 @@ async function writeFile(rel, text) {
   await fsp.mkdir(path.dirname(abs), { recursive: true });
   await resolveSafe(rel); // 폴더를 만든 뒤에도 안쪽인지 다시 본다
   const target = await recheckTarget(abs, rel); // 쓰기 바로 직전: 실제 상위 폴더 기준 경로
-  await fsp.writeFile(target, text, 'utf8');
+  await atomicWrite(target, text);
   return true;
+}
+
+// 쓰는 도중 임시 파일 이름: 같은 폴더의 ".<이름>.mla-tmp-<무작위>" (다 쓰면 원래 이름으로 바꾼다)
+const TMP_MARK = '.mla-tmp-';
+const tmpNameFor = (target) => path.join(path.dirname(target), `.${path.basename(target)}${TMP_MARK}${crypto.randomBytes(6).toString('hex')}`);
+
+/**
+ * 한 번에 바꿔 쓰기: 같은 폴더의 임시 파일에 다 쓴 뒤 이름 바꾸기(rename)로 원래 파일을 덮는다.
+ * 쓰다가 멈추거나 디스크가 꽉 차도 원래 파일은 반쯤 쓴 상태로 남지 않는다. 실패하면 임시 파일을 지운다.
+ */
+async function atomicWrite(target, text) {
+  const tmp = tmpNameFor(target);
+  try {
+    // 원래 파일의 권한(실행 권한 등)은 그대로 둔다 (Windows에서는 의미 없음)
+    let mode;
+    try {
+      mode = (await fsp.stat(target)).mode & 0o7777;
+    } catch {}
+    // 'wx': 같은 이름이 이미 있으면(링크 바꿔치기 포함) 쓰지 않는다
+    await fsp.writeFile(tmp, text, { encoding: 'utf8', flag: 'wx', ...(mode === undefined ? {} : { mode }) });
+    await renameRetry(tmp, target);
+  } catch (err) {
+    await fsp.unlink(tmp).catch(() => {});
+    throw err;
+  }
+}
+
+/** Windows에서는 다른 프로그램(백신 · 편집기)이 잠깐 파일을 잡고 있으면 이름 바꾸기가 실패하므로 몇 번 다시 해 본다 */
+async function renameRetry(from, to, tries = 5) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fsp.rename(from, to);
+    } catch (err) {
+      if (i >= tries - 1 || !['EPERM', 'EACCES', 'EBUSY'].includes(err.code)) throw err;
+      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+    }
+  }
 }
 
 /** 파일 지우기 (휴지통이 아니라 바로 지워짐 — 화면은 지우기 전에 확인을 받고, 적용 기록으로 되돌릴 수 있게 원본을 남깁니다). */
@@ -187,4 +227,4 @@ async function saveState(id, data) {
   return true;
 }
 
-module.exports = { pick, open, close, info, readDir, readFile, writeFile, deleteFile, globalExclude, loadState, saveState };
+module.exports = { READ_MAX_BYTES, TMP_MARK, pick, open, close, info, readDir, readFile, writeFile, deleteFile, globalExclude, loadState, saveState };

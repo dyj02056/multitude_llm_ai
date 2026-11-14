@@ -168,15 +168,23 @@ function trialWarnings(changes, risk = () => null) {
   return { scriptLines, riskLines };
 }
 
-/** 화면에서 받은 임시 적용 목록 검사: [{ path, after(문자열 | null=삭제) }] 최대 200개 */
+// 임시 적용 한도: 파일 수 · 파일 하나 · 전체 크기
+const TRIAL_MAX_FILES = 200;
+const TRIAL_MAX_FILE_BYTES = 5 * 1024 * 1024;
+const TRIAL_MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+
+/** 화면에서 받은 임시 적용 목록 검사: [{ path, after(문자열 | null=삭제) }] 최대 200개, 전체 50MB */
 function checkTrialChanges(changes) {
-  if (!Array.isArray(changes) || !changes.length || changes.length > 200) return null;
+  if (!Array.isArray(changes) || !changes.length || changes.length > TRIAL_MAX_FILES) return null;
   const out = [];
   const seen = new Set();
+  let total = 0;
   for (const c of changes) {
     if (!c || typeof c.path !== 'string' || !c.path || c.path.length > 1000 || seen.has(c.path)) return null;
     if (!(typeof c.after === 'string' || c.after === null)) return null;
-    if (typeof c.after === 'string' && c.after.length > 5 * 1024 * 1024) return null;
+    if (typeof c.after === 'string' && c.after.length > TRIAL_MAX_FILE_BYTES) return null;
+    total += typeof c.after === 'string' ? c.after.length : 0;
+    if (total > TRIAL_MAX_TOTAL_BYTES) return null; // 하나하나는 작아도 합치면 너무 큰 경우
     seen.add(c.path);
     out.push({ path: c.path, after: c.after });
   }
@@ -192,6 +200,9 @@ module.exports = {
   buildTestSpawn,
   isAllowedTestSpawn,
   summarizeTestOutput,
+  TRIAL_MAX_FILES,
+  TRIAL_MAX_FILE_BYTES,
+  TRIAL_MAX_TOTAL_BYTES,
   checkTrialChanges,
   trialWarnings,
 };

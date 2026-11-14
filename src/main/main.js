@@ -40,6 +40,7 @@ const history = require('./history');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
 const project = require('./project');
+const guard = require('./ipc-guard'); // 화면이 넘긴 값 다시 검사 (첨부 파일 · 읽기 옵션 · 로컬 LLM 주소)
 const { setupGitConsole } = require('./gitconsole');
 const { setupDevTest } = require('./devtest');
 const { createUpdater } = require('./updater');
@@ -679,29 +680,16 @@ const rounds = createRounds({
   log,
 });
 
-/** 화면에서 받은 첨부 파일을 검사한다. 모양이 틀리거나 한도를 넘으면 null */
-function checkFiles(files) {
-  if (files === undefined) return [];
-  if (!Array.isArray(files) || files.length > ATTACH_LIMITS.maxFiles) return null;
-  let total = 0;
-  const out = [];
-  for (const f of files) {
-    if (!f || typeof f.name !== 'string' || !(f.data instanceof ArrayBuffer || ArrayBuffer.isView(f.data))) return null;
-    const size = f.data.byteLength;
-    total += size;
-    if (size > ATTACH_LIMITS.maxFileBytes || total > ATTACH_LIMITS.maxTotalBytes) return null;
-    out.push({ name: f.name.slice(0, 200), type: String(f.type || ''), size, lastModified: Number(f.lastModified) || Date.now(), data: f.data });
-  }
-  return out;
-}
+/** 화면에서 받은 첨부 파일을 검사한다 (main/ipc-guard.js) → { ok, files } | { ok: false, error } */
+const checkFiles = (files) => guard.checkFiles(files, ATTACH_LIMITS);
 
 // 공통 입력창: 고른 패널들에 같은 질문(과 첨부 파일)을 동시에 보낸다.
 ipcMain.handle('prompt:send', async (_e, { text, targets, files, opts }) => {
   if (typeof text !== 'string' || !Array.isArray(targets)) return [];
   const checked = checkFiles(files);
-  if (checked && !text.trim() && !checked.length) return [];
-  if (!checked) return targets.map((id) => ({ id, ok: false, error: '첨부 파일이 한도를 넘었습니다' }));
-  return rounds.sendAll(text, targets, checked, sendOpts(opts));
+  if (!checked.ok) return targets.map((id) => ({ id, ok: false, error: checked.error }));
+  if (!text.trim() && !checked.files.length) return [];
+  return rounds.sendAll(text, targets, checked.files, sendOpts(opts));
 });
 
 ipcMain.handle('synth:run', (_e, judgeId, kind) =>
@@ -733,8 +721,8 @@ function sendOpts(opts) {
 ipcMain.handle('prompt:followup', async (_e, { id, text, files, opts }) => {
   if (typeof id !== 'string' || typeof text !== 'string' || !text.trim()) return { ok: false, error: '보낼 내용이 없습니다' };
   const checked = checkFiles(files);
-  if (!checked) return { id, ok: false, error: '첨부 파일이 한도를 넘었습니다' };
-  return rounds.sendFollowUp(id, text, checked, sendOpts(opts));
+  if (!checked.ok) return { id, ok: false, error: checked.error };
+  return rounds.sendFollowUp(id, text, checked.files, sendOpts(opts));
 });
 
 // ---------- 프로젝트 모드 (로컬 폴더 읽기·쓰기는 project.js, 처리는 화면 쪽 공통 모듈) ----------
@@ -800,7 +788,8 @@ ipcMain.handle('project:close', projectCall(async () => {
   return true;
 }));
 ipcMain.handle('project:readDir', projectCall((rel) => project.readDir(String(rel))));
-ipcMain.handle('project:readFile', projectCall((rel, opts) => project.readFile(String(rel), opts || {})));
+// 읽기 한도(maxBytes)는 앱 쪽 최대값(project.READ_MAX_BYTES)을 넘지 못하게 자르고, 그 밖의 옵션은 버린다
+ipcMain.handle('project:readFile', projectCall((rel, opts) => project.readFile(String(rel), guard.readFileOpts(opts, project.READ_MAX_BYTES))));
 ipcMain.handle('project:writeFile', projectCall((rel, text) => (notDuringTest(), project.writeFile(String(rel), text))));
 ipcMain.handle('project:deleteFile', projectCall((rel) => (notDuringTest(), project.deleteFile(String(rel)))));
 ipcMain.handle('project:globalExclude', projectCall(() => project.globalExclude()));
@@ -932,10 +921,13 @@ ipcMain.handle('local:setPrefs', (_e, next = {}) => {
 });
 // 연결 확인: 그 주소의 모델 목록 (/v1/models)
 ipcMain.handle('local:models', async (_e, baseUrl) => {
+  // 화면이 준 주소도 이 PC 주소인지 앱 쪽에서 다시 본다 (아니면 요청을 보내지 않는다)
+  const base = baseUrl === undefined || baseUrl === null ? prefs.local.baseUrl : guard.localBaseUrl(baseUrl);
+  if (!base) return { ok: false, error: '주소는 이 PC(localhost · 127.0.0.1 · [::1])의 http(s) 주소만 쓸 수 있습니다' };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5000);
   try {
-    return { ok: true, models: await L.listModels((u, o) => net.fetch(u, o), typeof baseUrl === 'string' ? baseUrl : prefs.local.baseUrl, { signal: ctrl.signal }) };
+    return { ok: true, models: await L.listModels((u, o) => net.fetch(u, o), base, { signal: ctrl.signal }) };
   } catch (err) {
     return { ok: false, error: err.name === 'AbortError' ? '5초 안에 답이 없습니다 (서버가 켜져 있는지 확인하세요)' : err.message };
   } finally {

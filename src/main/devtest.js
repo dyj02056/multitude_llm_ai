@@ -137,7 +137,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
     busy = true; // 확인 창·파일 읽기를 기다리는 동안 두 번째 실행이 끼어들지 않게 바로 잡아 둔다 (취소·오류에서도 finally가 푼다)
     try {
       const changes = R.checkTrialChanges(rawChanges);
-      if (!changes) return { ok: false, error: '테스트할 수정안이 올바르지 않습니다' };
+      if (!changes) return { ok: false, error: '테스트할 수정안이 올바르지 않거나 너무 큽니다 (파일 200개 · 파일당 5MB · 전체 50MB까지)' };
       const info = await scriptInfo();
       if (!info.ok) return info;
 

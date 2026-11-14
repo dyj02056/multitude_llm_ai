@@ -106,7 +106,12 @@
   const EDIT_END = /^\s*>{7}\s*(?:바꾸기|replace)(?![a-z]).*$/i;
   const looksLikeEdits = (body) => body.split(/\r?\n/).some((l) => EDIT_START.test(l));
 
-  /** 블록 글 → { edits: [{ search, replace }], complete: 마지막 블록까지 닫혔는지 } */
+  /**
+   * 블록 글 → { edits: [{ search, replace, candidates? }], complete: 마지막 블록까지 닫혔는지 }
+   * 찾을 코드나 바꿀 코드 자체에 ======= 줄(마크다운 제목 밑줄 · 구분선 등)이 있으면 어느 것이 구분선인지 글만으로는 모른다.
+   * 그때는 search · replace에 예전처럼 첫 ======= 기준으로 나눈 것을 두고, candidates에 ======= 줄마다 나눈 경우를 모두 담아
+   * 적용할 때(applyEdits) 지금 파일과 맞춰 보고 고른다. ======= 줄이 하나뿐이면 candidates는 없다 (예전과 같음).
+   */
   function parseEdits(body) {
     const lines = String(body).replace(/\r\n/g, '\n').split('\n');
     const edits = [];
@@ -117,24 +122,72 @@
         i++;
         continue;
       }
-      const search = [];
-      const replace = [];
-      i++;
-      while (i < lines.length && !EDIT_MID.test(lines[i])) search.push(lines[i++]);
+      const start = i + 1;
+      i = start;
+      while (i < lines.length && !EDIT_MID.test(lines[i])) i++;
       if (i >= lines.length) {
         complete = false;
         break;
       }
+      const mids = [i];
       i++;
-      while (i < lines.length && !EDIT_END.test(lines[i])) replace.push(lines[i++]);
+      while (i < lines.length && !EDIT_END.test(lines[i])) {
+        if (EDIT_MID.test(lines[i])) mids.push(i);
+        i++;
+      }
       if (i >= lines.length) {
         complete = false;
         break;
       }
+      const end = i;
       i++;
-      edits.push({ search: search.join('\n'), replace: replace.join('\n') });
+      const split = (mid) => ({ search: lines.slice(start, mid).join('\n'), replace: lines.slice(mid + 1, end).join('\n') });
+      const edit = split(mids[0]);
+      if (mids.length > 1) edit.candidates = mids.map(split);
+      edits.push(edit);
     }
     return { edits, complete };
+  }
+
+  const MATCH_VARIANTS = [(s) => s, (s) => s.replace(/\s+$/, ''), (s) => s.trim()];
+
+  /** 찾을 글이 지금 줄들의 어디에 있는지 → { want: 앞뒤 빈 줄을 뺀 찾을 줄들, hits: 시작 줄 번호들 } (줄 끝 · 앞뒤 공백은 차례로 너그럽게) */
+  function findSearch(lines, search) {
+    const want = search.split('\n');
+    while (want.length && !want[want.length - 1].trim()) want.pop(); // 끝 빈 줄은 무시
+    while (want.length && !want[0].trim()) want.shift();
+    let hits = [];
+    if (!want.length) return { want, hits };
+    for (const norm of MATCH_VARIANTS) {
+      const w = want.map(norm);
+      hits = [];
+      for (let i = 0; i + w.length <= lines.length; i++) {
+        let ok = true;
+        for (let k = 0; k < w.length && ok; k++) ok = norm(lines[i + k]) === w[k];
+        if (ok) hits.push(i);
+      }
+      if (hits.length) break;
+    }
+    return { want, hits };
+  }
+
+  /**
+   * ======= 줄이 여러 개인 찾기/바꾸기에서 실제 구분선을 고른다 → { edit: { search, replace } } | { error }
+   * 찾을 부분이 지금 파일에 딱 한 곳 맞는 경우만 후보로 삼는다. 그런 후보가 여럿이면 찾을 부분이 가장 긴 것
+   * (= 파일에 실제로 있는 ======= 줄까지 찾을 부분에 넣은 것)을 쓴다. 하나도 없으면 틀리게 고치지 않고 실패로 알린다.
+   */
+  function pickCandidate(lines, edit, n) {
+    const unique = [];
+    let multi = 0;
+    for (const c of edit.candidates) {
+      const { want, hits } = findSearch(lines, c.search);
+      if (!want.length) continue;
+      if (hits.length === 1) unique.push({ c, len: want.length });
+      else if (hits.length > 1) multi = Math.max(multi, hits.length);
+    }
+    if (unique.length) return { edit: unique.reduce((a, b) => (b.len > a.len ? b : a)).c };
+    if (multi) return { error: `찾기/바꾸기 ${n + 1}번은 ======= 줄이 여러 개인데, 어느 줄로 나눠도 찾을 부분이 파일에 한 곳만 맞지 않습니다 (${multi}곳 이상 — 앞뒤 줄을 더 넣어 달라고 하세요)` };
+    return { error: `찾기/바꾸기 ${n + 1}번은 ======= 줄이 여러 개인데, 어느 줄로 나눠도 찾을 부분을 지금 파일에서 찾지 못했습니다` };
   }
 
   /**
@@ -143,24 +196,17 @@
    */
   function applyEdits(text, edits) {
     let lines = text.split('\n');
-    const variants = [(s) => s, (s) => s.replace(/\s+$/, ''), (s) => s.trim()];
     for (let n = 0; n < edits.length; n++) {
-      const { search, replace } = edits[n];
-      const want = search.split('\n');
-      while (want.length && !want[want.length - 1].trim()) want.pop(); // 끝 빈 줄은 무시
-      while (want.length && !want[0].trim()) want.shift();
-      if (!want.length) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분이 비어 있습니다` };
-      let hits = [];
-      for (const norm of variants) {
-        const w = want.map(norm);
-        hits = [];
-        for (let i = 0; i + w.length <= lines.length; i++) {
-          let ok = true;
-          for (let k = 0; k < w.length && ok; k++) ok = norm(lines[i + k]) === w[k];
-          if (ok) hits.push(i);
-        }
-        if (hits.length) break;
+      let edit = edits[n];
+      if (Array.isArray(edit.candidates) && edit.candidates.length > 1) {
+        // ======= 줄이 여러 개: 지금 파일과 맞춰 실제 구분선을 고른다
+        const picked = pickCandidate(lines, edit, n);
+        if (picked.error) return { error: picked.error };
+        edit = picked.edit;
       }
+      const { search, replace } = edit;
+      const { want, hits } = findSearch(lines, search);
+      if (!want.length) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분이 비어 있습니다` };
       if (!hits.length) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분을 지금 파일에서 찾지 못했습니다` };
       if (hits.length > 1) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분이 파일에 ${hits.length}곳 있어 어디를 바꿀지 모릅니다 (앞뒤 줄을 더 넣어 달라고 하세요)` };
       // 바꿀 내용도 찾을 부분처럼 앞뒤 빈 줄은 뺀다 (AI가 표시 줄 옆에 붙이는 빈 줄). 비어 있으면 찾은 부분을 지운다.
@@ -213,12 +259,28 @@
           out.push(`--- a/${fallbackPath}`, `+++ b/${fallbackPath}`);
           sawHeader = true;
         }
+        // 헤더에 줄 수가 있으면("@@ -3,4 +3,5 @@") 남은 줄 수를 센다. 지운 줄 "-- 주석" · 더한 줄 "++ x"는 diff에서 "--- …" · "+++ …"가 되어
+        // 파일 헤더처럼 보이는데, 아직 줄 수가 남아 있으면 내용 줄로 본다. 단 바로 뒤에 "@@"가 오면 진짜 다음 파일 헤더로 본다
+        // (AI가 줄 수를 크게 틀려도 다음 파일을 삼키지 않게). 줄 수가 없는 "@@"는 예전처럼 헤더 모양이면 끊는다.
+        const counts = line.match(/^@@\s*-\d+(?:,(\d+))?\s+\+\d+(?:,(\d+))?\s*@@/);
+        let leftOld = counts ? (counts[1] === undefined ? 1 : Number(counts[1])) : 0;
+        let leftNew = counts ? (counts[2] === undefined ? 1 : Number(counts[2])) : 0;
+        const isHeaderAt = (k) => {
+          if (!(src[k].startsWith('--- ') && (src[k + 1] || '').startsWith('+++ '))) return false;
+          if (!counts || (leftOld <= 0 && leftNew <= 0)) return true;
+          return /^@@/.test(src[k + 2] || '') || /^diff --git /.test(src[k + 2] || '');
+        };
         const body = [];
         i++;
-        while (i < src.length && !/^@@/.test(src[i]) && !(src[i].startsWith('--- ') && (src[i + 1] || '').startsWith('+++ ')) && !/^diff --git /.test(src[i])) {
+        while (i < src.length && !/^@@/.test(src[i]) && !isHeaderAt(i) && !/^diff --git /.test(src[i])) {
           let l = src[i];
           if (l === '') l = ' ';
           if (!/^[ +\-\\]/.test(l)) l = ` ${l}`; // 앞 기호가 빠진 문맥 줄
+          if (l[0] === ' ') {
+            leftOld--;
+            leftNew--;
+          } else if (l[0] === '-') leftOld--;
+          else if (l[0] === '+') leftNew--;
           body.push(l);
           i++;
         }

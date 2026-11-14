@@ -48,6 +48,7 @@
     '.aws/',
     '.ssh/',
     'secrets/',
+    '.*.mla-tmp-*', // 앱이 파일을 안전하게 쓰는 동안 잠깐 만드는 임시 파일 (앱이 꺼지면 남을 수 있음)
     '*.zip', '*.7z', '*.rar', '*.tar', '*.tar.*', '*.tgz', '*.gz',
     '*.exe', '*.dll', '*.so', '*.dylib', '*.bin', '*.class', '*.jar', '*.o', '*.a', '*.lib', '*.pyc',
     '*.png', '*.jpg', '*.jpeg', '*.gif', '*.webp', '*.bmp', '*.ico', '*.svgz', '*.psd',

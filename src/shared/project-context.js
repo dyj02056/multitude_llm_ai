@@ -7,11 +7,25 @@
 //   - "이런 형식으로 답해 줘"라는 답변 규칙(RULES)을 덧붙입니다.
 //   - AI 답변 끝의 "NEED_FILES: a.js, b.js"(더 보고 싶은 파일)를 읽어 냅니다.
 (function (root, factory) {
-  const api = factory();
+  const api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.MLA = root.MLA || {}).projectContext = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
   'use strict';
+
+  // 경로 정리(프로젝트 밖 · 위험한 이름 거르기)는 patch.js의 safeRelPath를 쓴다. 화면에서는 patch.js가 이 파일보다 늦게
+  // 읽히므로 쓸 때 찾는다. 못 찾으면(patch.js 없이 쓰는 경우) 그대로 둔다 — 파일을 읽고 쓰는 쪽에서 한 번 더 거른다.
+  function safePath(p) {
+    let P = root && root.MLA && root.MLA.patch;
+    if (!P && typeof require === 'function') {
+      try {
+        P = require('./patch');
+      } catch {
+        P = null;
+      }
+    }
+    return P && typeof P.safeRelPath === 'function' ? P.safeRelPath(p) : p;
+  }
 
   const INLINE_LIMIT = 100000; // 본문에 넣는 최대 글자 수 (업로드를 못 할 때 본문으로 보내는 글 — project-upload.js의 inlineText)
   const TREE_LINE_LIMIT = 3000; // 구조 목록이 이보다 길면 자른다
@@ -40,6 +54,7 @@
     '(바꾼 내용)',
     '>>>>>>> 바꾸기',
     '```',
+    '   코드 자체에 ======= 만 있는 줄이 있으면, 찾을 부분이 파일에서 한 곳만 맞도록 앞뒤 줄을 넉넉히 넣어 줘.',
     '3) 지워야 하는 파일이 있으면 한 줄로 적어 줘: DELETE_FILES: 경로1, 경로2',
     '4) 내용을 더 봐야 하는 파일이 있으면 답변 맨 끝에 한 줄로 적어 줘: NEED_FILES: 경로1, 경로2',
   ].join('\n');
@@ -153,7 +168,9 @@
       for (let j = i + 1; j < lines.length && /^\s*[-*]\s+\S/.test(lines[j]); j++) items.push(lines[j].replace(/^\s*[-*]\s+/, ''));
       for (let p of items) {
         p = p.replace(/^[`'"*(\[]+|[`'"*)\].,;]+$/g, '').replace(/\\/g, '/').replace(/^\.\//, '');
-        if (p && /[\w-]/.test(p) && !out.includes(p)) out.push(p);
+        if (!p || !/[\w-]/.test(p)) continue;
+        p = safePath(p); // 프로젝트 밖(../x) · 절대 경로 · 위험한 이름은 버린다
+        if (p && !out.includes(p)) out.push(p);
       }
     }
     return out;
@@ -193,8 +210,10 @@
       const m = line.match(/^\s*[*_`>-]*\s*PLAN_FILES\s*[*_`]*\s*[:：]\s*(.*)$/i);
       if (!m) continue;
       for (const item of m[1].split(/[,\s]+/)) {
-        const p = clean(item);
-        if (p && /[\w-]/.test(p) && !out.some((x) => x.path === p)) out.push({ path: p, note: notes.get(p) || '' });
+        const raw = clean(item);
+        if (!raw || !/[\w-]/.test(raw)) continue;
+        const p = safePath(raw); // 프로젝트 밖(../x) · 절대 경로 · 위험한 이름은 버린다
+        if (p && !out.some((x) => x.path === p)) out.push({ path: p, note: notes.get(raw) || notes.get(p) || '' });
       }
     }
     return out.slice(0, MAX_PLAN_FILES);
