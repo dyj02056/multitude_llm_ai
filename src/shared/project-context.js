@@ -244,7 +244,153 @@
   }
   const suggestSplitTokens = (tokens) => tokens > SPLIT_TOKENS;
 
+  // ---------- 증분 전송 (v0.23.0) ----------
+  // AI마다 받은 파일의 내용 지문(해시)을 기억해 두고, 다음 질문에는 그 뒤로 내용이 바뀐 파일만 다시 올린다.
+  // 나머지는 "앞서 보낸 그대로" 목록으로만 알려 AI가 그 파일이 아직 있다는 것을 알게 한다.
+
+  /**
+   * 내용 지문: cyrb53 (53비트 문자열 해시, 암호용 아님) + 글자 수. 줄바꿈(CRLF/LF) 차이는 같은 내용으로 본다.
+   * null · undefined(지워진 파일)는 null.
+   */
+  function hashText(text) {
+    if (text === null || text === undefined) return null;
+    const s = String(text).replace(/\r\n/g, '\n');
+    let h1 = 0xdeadbeef;
+    let h2 = 0x41c6ce57;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return `${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}.${s.length.toString(36)}`;
+  }
+
+  /** 줄 수 (빈 파일은 0, 끝 줄바꿈은 세지 않음) */
+  function lineCount(text) {
+    if (text === null || text === undefined) return 0;
+    const s = String(text).replace(/\r\n/g, '\n').replace(/\n$/, '');
+    return s ? s.split('\n').length : 0;
+  }
+
+  /** AI가 받은 기록 하나: { hash, lines } (지워진 파일은 null) */
+  const sentEntry = (text) => (text === null || text === undefined ? null : { hash: hashText(text), lines: lineCount(text) });
+
+  /**
+   * 이번 질문에 무엇을 올릴지 고른다. 여러 패널에 같은 첨부를 보내므로 패널마다 바뀐 파일을 모아 합친다.
+   *   ids: 프로젝트 파일을 보낼 패널 id
+   *   files: [{ path, text, checked }] 지금 내용 — checked는 사이드바에서 고른 파일, 아니면 지난번에 보낸 파일(followList)
+   *   knownById: Map(id → Map(경로 → { hash, lines } | null)) 그 AI가 마지막으로 받은 내용
+   *   treeById: Map(id → 구조 목록 지문), treeHash: 지금 구조 목록 지문
+   *   missing: [경로] 지난번에 보냈는데 지금은 없는 파일 (followList일 때만 알림)
+   *   followList: 지난번에 보낸 파일도 후보에 넣는다 (바뀌었으면 다시 올리고, 아니면 목록에 줄 수와 함께)
+   * → { allFresh, union: [{ path, text }] 올릴 파일, includeTree, byId: { id: { fresh, plain, send, same, gone } } }
+   *   plain: 올릴 것이 없는 패널 (질문과 "앞서 보낸 그대로" 목록만 보냄)
+   *   same: [{ path, lines }] 그 패널에 다시 보내지 않는 파일 (union에 없는 것 — 그 패널은 이미 지금 내용을 안다)
+   */
+  function planIncremental({ ids, files, knownById, treeById, treeHash, missing = [], followList = false }) {
+    const hashOf = new Map(files.map((f) => [f.path, hashText(f.text)]));
+    const getKnown = (id) => (knownById && knownById.get(id)) || null;
+    const per = {};
+    const need = new Set();
+    let includeTree = false;
+    for (const id of ids) {
+      const known = getKnown(id);
+      const tree = treeById ? treeById.get(id) : undefined;
+      const fresh = tree === undefined;
+      const cands = files.filter((f) => f.checked || (followList && known && known.get(f.path)));
+      const send = cands.filter((f) => {
+        const k = known && known.get(f.path);
+        return !k || k.hash !== hashOf.get(f.path);
+      });
+      const gone = followList && known ? missing.filter((p) => known.get(p)) : [];
+      const needTree = tree !== treeHash;
+      const plain = !send.length && !needTree;
+      if (!plain) {
+        for (const f of send) need.add(f.path);
+        if (needTree) includeTree = true;
+      }
+      per[id] = { fresh, plain, cands, gone };
+    }
+    const union = files.filter((f) => need.has(f.path)).map(({ path, text }) => ({ path, text }));
+    const byId = {};
+    for (const id of ids) {
+      const { fresh, plain, cands, gone } = per[id];
+      const known = getKnown(id);
+      const same = cands
+        .filter((f) => plain || !need.has(f.path))
+        .map((f) => ({ path: f.path, lines: lineCount(f.text) || (known && known.get(f.path) && known.get(f.path).lines) || 0 }));
+      byId[id] = { fresh, plain, send: plain ? [] : union.map((f) => f.path), same, gone };
+    }
+    return { allFresh: ids.length > 0 && ids.every((id) => byId[id].fresh), union, includeTree, byId };
+  }
+
+  // ---------- 적용 트랜잭션 (v0.23.0) ----------
+
+  /**
+   * 여러 파일을 한 번에 쓴다. 중간에 하나라도 쓰기 · 지우기에 실패하면 이미 쓴 파일을 원래대로 되돌린다
+   * (고친 파일은 원래 내용으로, 지운 파일은 다시 만들고, 새로 만든 파일은 지운다).
+   *   ops: [{ path, op: 'write' | 'delete', after, before? }] — before(원래 내용, 없던 파일은 null)를 모르면 read로 읽는다
+   *   io: { read(path) → 내용 | null(없음), write(path, text), remove(path) }
+   * → { ok, done: [{ path, before, after }], failed?: { path, op, error }, restored: [경로], restoreFailed: [{ path, error }] }
+   *   실패하면 done은 빈 목록 (되돌렸으므로 쓴 것이 없다)
+   */
+  async function applyTransaction(ops, io) {
+    const done = [];
+    const msg = (e) => (e && e.message) || String(e);
+    // 하나를 원래대로: 없던 파일은 지우고(이미 없으면 그대로), 있던 파일은 원래 내용으로 쓴다
+    const undoOne = async (f) => {
+      if (f.before === null) await io.remove(f.path).catch((e) => (/found|ENOENT|없/i.test(msg(e)) ? null : Promise.reject(e)));
+      else await io.write(f.path, f.before);
+    };
+    for (const o of ops) {
+      let before = o.before;
+      try {
+        if (before === undefined) before = await io.read(o.path);
+        if (o.op === 'delete') await io.remove(o.path);
+        else await io.write(o.path, o.after);
+        done.push({ path: o.path, before, after: o.op === 'delete' ? null : o.after });
+      } catch (err) {
+        const failed = { path: o.path, op: o.op, error: msg(err) };
+        // 실패한 파일도 반쯤 쓰였을 수 있어 원래대로 돌려 본다 (여기서 또 실패해도 알리지 않음 — 처음부터 쓰지 못한 파일)
+        if (o.op !== 'delete' && before !== undefined) await undoOne({ path: o.path, before }).catch(() => {});
+        const restored = [];
+        const restoreFailed = [];
+        for (const f of [...done].reverse()) {
+          try {
+            await undoOne(f);
+            restored.unshift(f.path);
+          } catch (e) {
+            restoreFailed.unshift({ path: f.path, error: msg(e) });
+          }
+        }
+        return { ok: false, done: [], failed, restored, restoreFailed };
+      }
+    }
+    return { ok: true, done, restored: [], restoreFailed: [] };
+  }
+
+  /** 트랜잭션 실패 안내: "a.js 쓰기 실패 — 같이 적용한 3개 파일을 원래대로 되돌렸습니다" */
+  function transactionMessage(r) {
+    if (!r || r.ok || !r.failed) return '';
+    const what = `${r.failed.path} ${r.failed.op === 'delete' ? '지우기' : '쓰기'} 실패`;
+    const lines = [];
+    if (r.restored.length) lines.push(`${what} — 같이 적용한 ${r.restored.length}개 파일을 원래대로 되돌렸습니다`);
+    else if (!r.restoreFailed.length) lines.push(`${what} — 쓴 파일이 없어 바뀐 것은 없습니다`);
+    else lines.push(what);
+    lines.push(`(이유: ${r.failed.error})`);
+    if (r.restoreFailed.length) lines.push(`되돌리지 못한 파일 — 직접 확인해 주세요:\n${r.restoreFailed.map((f) => `- ${f.path}: ${f.error}`).join('\n')}`);
+    return lines.join('\n');
+  }
+
   return {
+    hashText,
+    lineCount,
+    sentEntry,
+    planIncremental,
+    applyTransaction,
+    transactionMessage,
     INLINE_LIMIT,
     CONTEXT_FILE,
     EDIT_LINES,

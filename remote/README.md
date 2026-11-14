@@ -69,3 +69,25 @@ ChatGPT·Gemini 같은 서비스 화면이 바뀌어 **입력창·보내기 버�
 4. **이 파일 고치기** — `selectors.json`의 그 서비스 항목만 바꾸고 `version`을 올리고 `updated`를 오늘 날짜로 합니다. 버튼 셀렉터(`send` 등)처럼 보안상 원격으로 바꾸지 않는 항목은 무시되므로 앱 업데이트로 고칩니다.
 5. **확인** — 개발 실행에서 `MLA_REMOTE_URL=remote/selectors.json npm start`로 로컬 파일을 먼저 시험합니다.
 6. **올리기** — main에 커밋 · 푸시합니다. 사용자 앱은 6시간 안에(또는 자가진단 창의 **셀렉터 지금 확인**으로 바로) 받고, 툴바에 `selectors v<번호>`가 잠깐 뜹니다.
+
+## 서명
+
+GitHub 계정이나 저장소가 털려도 셀렉터를 바꿀 수 없게, `selectors.json`에 Ed25519 서명(`selectors.json.sig`)을 붙입니다. 앱(`src/shared/remote-core.js`의 `SELECTORS_PUBLIC_KEY`)에 공개 키가 들어 있으면 서명이 맞는 파일만 적용하고, 틀리면 적용하지 않고 지금 쓰는 값을 그대로 둡니다(설정 화면에 `확인 실패: 서명 확인 실패`). 공개 키가 비어 있으면 서명을 보지 않습니다.
+
+1. **처음 한 번** — 키를 만듭니다. 개인 키는 저장소 밖 `%USERPROFILE%\.multitude-llm\selectors-signing-key.pem`에 생기고, 공개 키는 `remote-core.js`에 들어갑니다.
+
+   ```powershell
+   npm run selectors:keygen
+   ```
+
+2. **`selectors.json`을 고칠 때마다** — 서명하고 두 파일을 같이 커밋합니다.
+
+   ```powershell
+   npm run selectors:sign
+   git add remote/selectors.json remote/selectors.json.sig
+   ```
+
+3. **배포 순서** — 공개 키가 들어간 앱 · 확장 버전을 내기 **전에** `.sig`를 main에 먼저 푸시합니다. `.sig`가 없거나 틀리면 그 버전은 원격 셀렉터를 받지 않고 내장 값을 씁니다(서명 없는 예전 캐시도 버립니다).
+4. **개인 키** — 저장소에 올리지 말고 다른 곳(비밀번호 관리자, 암호화한 USB 등)에 백업합니다. 잃어버리면 새 키를 만들어 앱을 다시 배포해야 합니다. 다른 경로에 두었으면 `MLA_SIGNING_KEY`로 알려 줍니다.
+
+서명은 파일 바이트 그대로에 대한 것이라 줄바꿈 하나만 달라도 맞지 않습니다. 서명한 뒤에 파일을 고쳤으면 다시 서명합니다.

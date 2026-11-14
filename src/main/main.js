@@ -635,6 +635,9 @@ function sendSynthStatus(patch) {
 // 질문 보내기·답변 감시·종합은 크롬 확장 프로그램과 같이 쓰는 shared/rounds.js가 한다.
 // rounds = 질문 보내기·답변 기다리기·종합을 맡는 공통 부품입니다 (src/shared/rounds.js).
 // 크롬 확장 프로그램과 같은 코드를 쓰기 때문에, "패널을 다루는 방법"만 Windows 앱 식으로 넘겨줍니다.
+// 답변 평가 (v0.23): 지금 라운드(공통 입력창으로 마지막에 보낸 질문)의 기록 id. rounds가 기록을 만들 때 받아 둔다.
+let roundHistoryId = null;
+const roundHistory = { ...history, add: (rec) => (roundHistoryId = history.add(rec)) };
 const rounds = createRounds({
   get services() {
     return allServices(); // 로컬 LLM을 켜고 끌 때마다 바뀐다
@@ -673,7 +676,7 @@ const rounds = createRounds({
   },
   sendPanel,
   sendSynthStatus,
-  history,
+  history: roundHistory,
   prefs: () => prefs,
   diag,
   // 사용 한도 안내 찾기 (shared/page.js pageLimitCheck) — 답변이 끝나지 않았거나 아주 짧을 때만 rounds가 부른다
@@ -844,6 +847,10 @@ ipcMain.on('view:set', (_e, value) => {
 ipcMain.handle('history:list', (_e, query) => history.list(typeof query === 'string' ? query : ''));
 ipcMain.handle('history:get', (_e, id) => history.get(id));
 ipcMain.handle('history:stats', () => history.stats());
+// 답변 평가: 지금 라운드 기록의 그 AI 답변에 1(좋았음) · -1(별로였음) · 0(지우기) → 남긴 값 | null
+ipcMain.handle('history:feedback', (_e, svcId, value) =>
+  roundHistoryId && typeof svcId === 'string' && [1, -1, 0].includes(value) ? history.setFeedback(roundHistoryId, svcId, value) : null,
+);
 ipcMain.handle('history:delete', (_e, id) => history.remove(id));
 ipcMain.handle('history:clear', () => history.clear());
 ipcMain.handle('clipboard:write', (_e, text) => {

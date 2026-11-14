@@ -107,6 +107,8 @@
       <label class="check ps-split" title="고칠 파일이 많거나 길 때: 먼저 고칠 파일 목록(계획)만 받고, 한 파일씩 차례로 물어 모읍니다 — 답이 출력 한도로 끊기지 않게 (v0.18.0)"><input type="checkbox" id="psSplit" /> 큰 작업 — 계획 먼저 · 파일별로 받기</label>
       <label class="check ps-split ps-sub" title="계획 답이 오면 [▶ 파일별로 받기 시작]을 누르지 않아도 바로 한 파일씩 받기 시작합니다 (v0.22.0)"><input type="checkbox" id="psAutoRun" /> 계획이 오면 바로 시작</label>
       <label class="check ps-split" title="답이 출력 한도로 끊긴 파일이 있으면 [↪ 이어서 받기]를 누르지 않아도 같은 AI에게 나머지를 부탁합니다 — 한 파일 최대 3번 (v0.22.0)"><input type="checkbox" id="psAutoCont" /> 잘리면 자동으로 이어 받기</label>
+      <label class="check ps-split" title="첫 질문 뒤에는 그 AI에게 보낸 뒤로 내용이 바뀐 파일만 다시 올리고, 나머지는 &quot;앞서 보낸 그대로&quot; 목록으로만 알립니다 (v0.23.0)"><input type="checkbox" id="psIncremental" /> 바뀐 파일만 보내기</label>
+      <label class="check ps-split ps-sub" title="이어지는 질문에 지난번에 보낸 파일 목록(경로 · 줄 수)을 붙이고, 그중 바뀐 파일은 다시 올립니다 — 고른 파일이 없어도 (v0.23.0)"><input type="checkbox" id="psFollowList" /> 이어지는 질문에 지난 파일 목록 붙이기</label>
       <button id="psGit" title="이 프로젝트 폴더에서 git 명령을 실행합니다 (Windows 앱 전용)" hidden>git 콘솔</button>
       <button id="psSync" class="primary" hidden></button>
       <span id="psSummary" class="muted-label"></span>
@@ -392,7 +394,7 @@
       <table id="diagTable" class="diag-table"></table>
       <p class="muted small" id="diagHint"></p>
       <h2>AI별 응답 통계</h2>
-      <p class="muted small">공통 입력창으로 보낸 질문의 기록에서 셉니다: 답변 완료 비율, 시간 초과 · 답변 없음, 보내기 실패, 사용 한도에 걸린 횟수, 첫 응답과 완료까지 걸린 시간(중앙값), 평균 글자 수. 프로젝트가 열려 있으면 이 프로젝트에서 AI별로 수정안을 적용 · 되돌린 수도 보여 줍니다.</p>
+      <p class="muted small">공통 입력창으로 보낸 질문의 기록에서 셉니다: 답변 완료 비율, 시간 초과 · 답변 없음, 보내기 실패, 사용 한도에 걸린 횟수, 첫 응답과 완료까지 걸린 시간(중앙값), 평균 글자 수, 만족도(답변이 끝난 패널 머리줄의 <b>[+1]</b> 좋았음 · <b>[-1]</b> 별로였음). 프로젝트가 열려 있으면 이 프로젝트에서 AI별로 수정안을 적용 · 되돌린 수도 보여 줍니다.</p>
       <div class="stats-wrap"><table id="statsTable" class="diag-table stats-table"></table></div>
       <p class="muted small" id="statsNote"></p>
       <h2>단축키</h2>

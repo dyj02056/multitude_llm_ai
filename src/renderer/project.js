@@ -40,6 +40,8 @@
     split: false, // 큰 작업: 계획 먼저 받고 파일별로 차례로 받기 (v0.18.0)
     autoRun: false, // 계획 답이 오면 바로 파일별로 받기 시작 (v0.22.0)
     autoContinue: false, // 잘린 파일은 자동으로 이어 받기 — 한 파일 최대 PX.MAX_CONTINUE번 (v0.22.0)
+    incremental: true, // 바뀐 파일만 보내기: 이어지는 질문에는 내용이 바뀐 파일만 다시 올림 (v0.23.0)
+    followList: false, // 이어지는 질문에 지난 파일 목록 붙이기: 지난번에 보낸 파일 목록(줄 수)을 붙이고 바뀐 것은 다시 올림 (v0.23.0)
     l3Enabled: [],
     checked: new Set(), // 내용을 보낼 파일
     allowSecret: new Set(), // 비밀 정보 경고를 보고도 보내기로 한 파일
@@ -47,7 +49,9 @@
     expanded: new Set(['']), // 펼친 폴더
     log: [], // 적용 기록 [{ id, at, ai, files: [{ path, before, after }], reverted }]
     need: new Map(), // 패널 id -> 요청한 파일 목록
-    sent: new Map(), // 패널 id -> Map(경로 -> 그 AI가 마지막으로 받은 내용, 지워진 파일은 null)
+    sent: new Map(), // 패널 id -> Map(경로 -> 그 AI가 마지막으로 받은 내용의 지문 { hash, lines }, 지워진 파일은 null)
+    sentTree: new Map(), // 패널 id -> 그 AI가 마지막으로 받은 프로젝트 구조 목록의 지문
+    sentEpoch: new Map(), // 패널 id -> 기록할 때의 패널 세대 (panelEpoch) — 새 대화 · 패널을 다시 열면 달라져 기록을 버린다
     stale: [], // ⟳ 뒤 AI가 아는 내용과 달라진 파일 [{ id, name, files: [{ path, text }], deleted: [경로] }]
     blocked: new Set(), // 이 프로젝트의 파일을 보내지 않을 서비스 id (질문 글만 보냄)
     uploadOk: new Set(), // 이 프로젝트의 파일을 올려도 된다고 확인한 서비스 id
@@ -76,11 +80,71 @@
         split: project.split,
         autoRun: project.autoRun,
         autoContinue: project.autoContinue,
+        incremental: project.incremental,
+        followList: project.followList,
+        sent: sentToState(),
         blocked: [...project.blocked],
         uploadOk: [...project.uploadOk],
         log: project.log.slice(0, MAX_LOG),
       })
       .catch((err) => console.warn('[project] 상태를 저장하지 못했습니다:', err.message));
+  }
+
+  // AI가 받은 내용 기록(sent)은 이번 실행 동안만 이어 쓴다: 앱을 다시 켜면 패널이 새 대화로 열리므로 버린다.
+  // 같은 실행 안에서 프로젝트를 닫았다 다시 열면 그대로 이어진다 (패널 세대가 같을 때만).
+  const RUN_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  // 패널 세대: 새 대화를 열거나 패널을 닫으면(다시 열면 새 대화로 열린다) 오른다. 프로젝트가 닫혀 있을 때도 센다.
+  const panelClears = new Map(); // 패널 id -> 세대
+  const panelEpoch = (id) => String(panelClears.get(id) || 0);
+  const bumpPanel = (id) => panelClears.set(id, (panelClears.get(id) || 0) + 1);
+  let openPanels = null; // 지난번 state.selected (고른 패널) — 빠진 패널은 닫힌 것
+  function notePanels() {
+    const now = new Set(Array.isArray(state?.selected) ? state.selected : []);
+    if (openPanels) {
+      for (const id of openPanels) {
+        if (now.has(id)) continue;
+        bumpPanel(id);
+        if (project.sent.has(id) || project.sentTree.has(id)) {
+          forgetSent(id);
+          saveState();
+        }
+      }
+    }
+    openPanels = now;
+  }
+  /** id 패널의 기록이 지금 패널(같은 대화)의 것인지. 아니면 버리고 false */
+  function sentValid(id) {
+    if (!project.sent.has(id) && !project.sentTree.has(id)) return false;
+    if (project.sentEpoch.get(id) === panelEpoch(id)) return true;
+    forgetSent(id);
+    return false;
+  }
+  function forgetSent(id) {
+    project.sent.delete(id);
+    project.sentTree.delete(id);
+    project.sentEpoch.delete(id);
+  }
+  function sentToState() {
+    const out = {};
+    for (const id of new Set([...project.sent.keys(), ...project.sentTree.keys()])) {
+      const files = [...(project.sent.get(id) || [])].map(([p, e]) => (e ? [p, e.hash, e.lines] : [p, null]));
+      out[id] = { epoch: project.sentEpoch.get(id) || '', tree: project.sentTree.get(id) ?? null, files };
+    }
+    return { run: RUN_ID, panels: out };
+  }
+  function sentFromState(s) {
+    project.sent.clear();
+    project.sentTree.clear();
+    project.sentEpoch.clear();
+    if (!s || s.run !== RUN_ID || !s.panels || typeof s.panels !== 'object') return;
+    for (const [id, v] of Object.entries(s.panels)) {
+      if (!v || !Array.isArray(v.files) || v.epoch !== panelEpoch(id)) continue;
+      const m = new Map();
+      for (const f of v.files) if (Array.isArray(f) && typeof f[0] === 'string') m.set(f[0], typeof f[1] === 'string' ? { hash: f[1], lines: Number(f[2]) || 0 } : null);
+      project.sent.set(id, m);
+      if (typeof v.tree === 'string') project.sentTree.set(id, v.tree);
+      project.sentEpoch.set(id, v.epoch);
+    }
   }
 
   async function loadState() {
@@ -93,6 +157,9 @@
     project.split = s.split === true;
     project.autoRun = s.autoRun === true;
     project.autoContinue = s.autoContinue === true;
+    project.incremental = s.incremental !== false;
+    project.followList = s.followList === true;
+    sentFromState(s.sent);
     project.blocked = new Set(Array.isArray(s.blocked) ? s.blocked : []);
     project.uploadOk = new Set(Array.isArray(s.uploadOk) ? s.uploadOk : []);
     project.log = Array.isArray(s.log) ? s.log : [];
@@ -107,6 +174,8 @@
     project.scan = null;
     project.need.clear();
     project.sent.clear();
+    project.sentTree.clear();
+    project.sentEpoch.clear();
     project.stale = [];
     project.expanded = new Set(['']);
     project.touched.clear();
@@ -202,6 +271,17 @@
     saveState();
     notice(project.autoContinue ? `잘린 파일은 자동으로 이어 받습니다 (한 파일 최대 ${PX.MAX_CONTINUE}번)` : '잘린 파일은 [↪ 이어서 받기]를 눌러 받습니다');
   });
+  $('#psIncremental').addEventListener('change', (e) => {
+    project.incremental = e.target.checked;
+    saveState();
+    render();
+    notice(project.incremental ? '이어지는 질문에는 내용이 바뀐 파일만 다시 올립니다' : '질문마다 고른 파일을 모두 다시 올립니다');
+  });
+  $('#psFollowList').addEventListener('change', (e) => {
+    project.followList = e.target.checked;
+    saveState();
+    notice(project.followList ? '이어지는 질문에 지난번에 보낸 파일 목록을 붙이고, 그중 바뀐 파일은 다시 올립니다' : '이어지는 질문에는 고른 파일만 봅니다');
+  });
   $('#projectInclude').addEventListener('change', (e) => {
     project.include = e.target.checked;
     saveState();
@@ -237,6 +317,9 @@
     $('#psAutoRun').checked = project.autoRun;
     $('#psAutoRun').disabled = !project.split; // 큰 작업을 켰을 때만 의미가 있다
     $('#psAutoCont').checked = project.autoContinue;
+    $('#psIncremental').checked = project.incremental;
+    $('#psFollowList').checked = project.followList;
+    $('#psFollowList').disabled = !project.incremental; // 바뀐 파일만 보낼 때만 의미가 있다
     if (!has()) {
       $('#psTree').replaceChildren();
       $('#psRulesBody').replaceChildren();
@@ -466,8 +549,10 @@
     const files = [];
     const skipped = [];
     const risky = [];
+    const missing = []; // 지금은 없는 파일 (지난번에 보낸 파일 목록에서 "지워진 파일"로 알린다)
     for (const path of paths) {
       const r = await host.project.readFile(path).catch((err) => ({ error: err.message }));
+      if (r.missing) missing.push(path);
       if (typeof r.text !== 'string') {
         skipped.push({ path, reason: r.binary ? '바이너리 파일' : r.tooLarge ? '1MB 초과' : r.missing ? '파일이 없습니다' : r.error || '읽지 못함' });
         continue;
@@ -487,7 +572,7 @@
         }
       } else for (const x of risky) project.allowSecret.add(x.path);
     }
-    return { files, skipped };
+    return { files, skipped, missing };
   }
 
   const toAttachment = ({ name, type, text }) => {
@@ -532,7 +617,22 @@
     const plainIds = targetIds.filter((id) => project.blocked.has(id));
     if (!withProject.length) return payload; // 모두 보내지 않기로 한 서비스 — 질문만 보낸다
     if (!confirmUpload(withProject, project.checked.size)) return null;
-    const { files } = await readChosen([...project.checked]);
+    for (const id of withProject) sentValid(id); // 새 대화 · 다시 연 패널의 기록은 버린다
+    // 바뀐 파일만 보내기 (v0.23.0): 지난 파일 목록을 붙일 때는 지난번에 보낸 파일도 다시 읽어 바뀐 것을 찾는다 (followList)
+    const chosen = [...project.checked];
+    const extra = [];
+    if (project.incremental && project.followList) {
+      const seen = new Set(chosen);
+      for (const id of withProject) {
+        for (const [path, e] of project.sent.get(id) || []) {
+          if (!e || seen.has(path)) continue;
+          seen.add(path);
+          extra.push(path);
+        }
+      }
+    }
+    const read = await readChosen([...chosen, ...extra]);
+    const files = read.files.filter((f) => project.checked.has(f.path));
     const budget = budgetAfter(payload.files, withProject.filter(acceptsDocs));
     // 큰 작업(v0.18.0): 이번 답은 계획(PLAN_FILES)만 받는다. 꺼져 있는데 고른 파일이 많거나 길면 한 번 권한다.
     const lineCount = files.reduce((n, f) => n + String(f.text).split('\n').length, 0);
@@ -541,27 +641,94 @@
       notice(`고른 파일이 ${files.length}개 · ${lineCount.toLocaleString()}줄입니다 — 답이 끊기면 사이드바의 "큰 작업"을 켜 보세요`);
     }
     const request = project.split ? `${payload.text || '(요청 없음)'}\n\n${PC.PLAN_FIRST}` : payload.text;
-    const pack = PU.packContext({ project: { name: project.info.name, paths: sendablePaths() }, files, request, mode: project.uploadMode, budget });
-    const ups = pack.attachments.map(toAttachment);
-    const room = ups.length <= budget.files && ups.reduce((n, f) => n + f.data.byteLength, 0) <= budget.bytes;
-    // 직접 올린 파일 때문에 자리가 없으면 프로젝트 내용은 본문으로 보낸다
-    if (!room) notice('첨부 한도가 모자라 프로젝트 내용은 본문으로 보냅니다');
+    const projInfo = { name: project.info.name, paths: sendablePaths() };
+    const treeHash = PC.hashText(PC.buildTree(projInfo.paths));
+    const plan = project.incremental
+      ? PC.planIncremental({
+          ids: withProject,
+          files: read.files.map((f) => ({ ...f, checked: project.checked.has(f.path) })),
+          knownById: project.sent,
+          treeById: project.sentTree,
+          treeHash,
+          missing: read.missing.filter((p) => !project.checked.has(p)),
+          followList: project.followList,
+        })
+      : null;
     const textById = {};
-    // 문서 첨부를 받지 않는 서비스(예: Duck.ai)에는 내용을 본문으로 넣는다 (넘치는 만큼 잘라서).
-    for (const id of withProject) if (!room || !acceptsDocs(id)) textById[id] = pack.inlineText;
     // 보내지 않기로 한 서비스에는 원래 질문과 사용자가 직접 올린 파일만 (plainIds · userFileCount)
     for (const id of plainIds) textById[id] = payload.text;
-    if (pack.note) notice(pack.note);
-    pendingSent = files; // 보내기에 성공한 패널만 renderer.js가 onProjectSent로 알려 준다
+
+    // 처음 보내는 질문(또는 "바뀐 파일만 보내기"를 껐을 때): 예전처럼 구조와 고른 파일을 모두 올린다
+    if (!plan || plan.allFresh) {
+      const pack = PU.packContext({ project: projInfo, files, request, mode: project.uploadMode, budget });
+      const ups = pack.attachments.map(toAttachment);
+      const room = ups.length <= budget.files && ups.reduce((n, f) => n + f.data.byteLength, 0) <= budget.bytes;
+      // 직접 올린 파일 때문에 자리가 없으면 프로젝트 내용은 본문으로 보낸다
+      if (!room) notice('첨부 한도가 모자라 프로젝트 내용은 본문으로 보냅니다');
+      // 문서 첨부를 받지 않는 서비스(예: Duck.ai)에는 내용을 본문으로 넣는다 (넘치는 만큼 잘라서).
+      for (const id of withProject) if (!room || !acceptsDocs(id)) textById[id] = pack.inlineText;
+      if (pack.note) notice(pack.note);
+      // 보내기에 성공한 패널만 renderer.js가 onProjectSent로 알려 준다
+      pendingSent = { files, treeHash, tree: new Set(withProject), plain: new Set(), gone: {} };
+      return {
+        text: pack.text,
+        files: room ? [...payload.files, ...ups] : [...payload.files],
+        opts: {
+          ...payload.opts,
+          question: `${payload.text || '(첨부 파일만)'}\n\n[프로젝트 ${project.info.name} · 파일 ${files.length}개 내용 포함]`,
+          textById,
+          fallbackText: pack.inlineText,
+          plainIds,
+          userFileCount: payload.files.length,
+        },
+      };
+    }
+
+    // 이어지는 질문: 패널마다 바뀐 파일을 모아 한 번에 올리고(첨부는 모든 패널이 같다), 나머지는 "앞서 보낸 그대로" 목록으로만 알린다.
+    // 올릴 것이 없는 패널은 질문 글과 목록만 보낸다 (plainIds — 사용자가 직접 올린 파일만 첨부).
+    const packFor = (id) => {
+      const b = plan.byId[id];
+      return PU.packIncremental({
+        project: projInfo,
+        files: b.plain ? [] : plan.union,
+        same: b.same,
+        gone: b.gone,
+        includeTree: !b.plain && plan.includeTree,
+        showLines: project.followList,
+        first: b.fresh,
+        request,
+        mode: project.uploadMode,
+        budget,
+      });
+    };
+    const packs = Object.fromEntries(withProject.map((id) => [id, packFor(id)]));
+    const upIds = withProject.filter((id) => !plan.byId[id].plain);
+    const quiet = withProject.filter((id) => plan.byId[id].plain);
+    const base = packs[upIds[0] || quiet[0]];
+    const ups = upIds.length ? base.attachments.map(toAttachment) : [];
+    const room = ups.length <= budget.files && ups.reduce((n, f) => n + f.data.byteLength, 0) <= budget.bytes;
+    if (!room) notice('첨부 한도가 모자라 프로젝트 내용은 본문으로 보냅니다');
+    for (const id of upIds) textById[id] = !room || !acceptsDocs(id) ? packs[id].inlineText : packs[id].text;
+    for (const id of quiet) textById[id] = packs[id].text;
+    const sameCount = Math.max(0, ...withProject.map((id) => plan.byId[id].same.length));
+    const what = `바뀐 파일 ${plan.union.length}개 올림${sameCount ? ` · ${sameCount}개는 앞서 보낸 그대로` : ''}`;
+    notice(base.note || what);
+    pendingSent = {
+      files: plan.union,
+      treeHash,
+      tree: new Set(plan.includeTree ? upIds : []),
+      plain: new Set(quiet),
+      gone: Object.fromEntries(withProject.map((id) => [id, plan.byId[id].gone])),
+    };
     return {
-      text: pack.text,
+      text: base.text,
       files: room ? [...payload.files, ...ups] : [...payload.files],
       opts: {
         ...payload.opts,
-        question: `${payload.text || '(첨부 파일만)'}\n\n[프로젝트 ${project.info.name} · 파일 ${files.length}개 내용 포함]`,
+        question: `${payload.text || '(첨부 파일만)'}\n\n[프로젝트 ${project.info.name} · ${what}]`,
         textById,
-        fallbackText: pack.inlineText,
-        plainIds,
+        fallbackText: base.inlineText,
+        plainIds: [...plainIds, ...quiet],
         userFileCount: payload.files.length,
       },
     };
@@ -582,29 +749,41 @@
 
   let pendingSent = null; // projectPrepareSend가 붙인 파일 (보내기 결과를 기다리는 중)
 
-  const sameText = (a, b) => (a === null || b === null ? a === b : a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n'));
+  // AI가 아는 내용(지문)과 지금 내용이 같은지. 지워진 파일은 null끼리 같다. 줄바꿈 차이는 무시 (hashText)
+  const sameKnown = (entry, text) => (entry === null || text === null ? entry === text : PC.hashText(text) === entry.hash);
 
-  /** id 패널의 AI가 files 내용을 받았다고 기록한다. files: [{ path, text(지워졌으면 null) }] */
-  // "이 AI는 이 파일을 이 내용으로 알고 있다"를 기억합니다. 나중에 파일이 바뀌면 그 AI에게 바뀐 내용을 보내 주려고.
-  function remember(id, files) {
-    if (!files.length) return;
+  /** id 패널의 AI가 files 내용을 받았다고 기록한다. files: [{ path, text(지워졌으면 null) }], tree: 구조 목록 지문(받았을 때) */
+  // "이 AI는 이 파일을 이 내용으로 알고 있다"를 내용 지문으로 기억합니다. 나중에 파일이 바뀌면 그 AI에게 바뀐 내용을 보내 주려고.
+  function remember(id, files, tree) {
+    if (!files.length && tree === undefined) return;
+    sentValid(id);
     if (!project.sent.has(id)) project.sent.set(id, new Map());
     const known = project.sent.get(id);
-    for (const f of files) known.set(f.path, f.text);
+    for (const f of files) known.set(f.path, PC.sentEntry(f.text));
+    if (tree !== undefined) project.sentTree.set(id, tree);
+    project.sentEpoch.set(id, panelEpoch(id));
+    saveState(); // 같은 실행 안에서 프로젝트를 다시 열어도 이어지게
   }
 
   window.onProjectSent = (okIds) => {
-    const files = pendingSent;
+    const sent = pendingSent;
     pendingSent = null;
-    if (!files || !has()) return;
-    for (const id of okIds) if (!project.blocked.has(id)) remember(id, files);
+    if (!sent || !has()) return;
+    for (const id of okIds) {
+      if (project.blocked.has(id)) continue;
+      const gone = (sent.gone[id] || []).map((path) => ({ path, text: null }));
+      remember(id, sent.plain.has(id) ? gone : [...sent.files, ...gone], sent.tree.has(id) ? sent.treeHash : undefined);
+    }
   };
 
   // 새 대화를 열면 그 AI는 이전 내용을 모른다.
   window.onPanelCleared = (id) => {
     continuing.delete(id); // 새 대화에서는 이어 받을 앞부분이 없다
     runs.delete(id); // 파일별로 받던 것도 멈춘다 (새 대화의 AI는 계획을 모른다)
-    project.sent.delete(id);
+    bumpPanel(id); // 프로젝트를 닫아 둔 동안에도 센다 — 저장된 기록을 다시 열 때 버리게
+    const had = project.sent.has(id) || project.sentTree.has(id);
+    forgetSent(id);
+    if (had) saveState();
     project.stale = project.stale.filter((s) => s.id !== id);
     renderSync();
   };
@@ -618,13 +797,13 @@
       if (!now.has(path)) now.set(path, await currentText(path).catch(() => undefined));
       return now.get(path);
     };
-    for (const [id, known] of project.sent) {
-      if (!panels.has(id)) continue;
+    for (const [id, known] of [...project.sent]) {
+      if (!panels.has(id) || !sentValid(id)) continue;
       const files = [];
       const deleted = [];
-      for (const [path, text] of known) {
+      for (const [path, entry] of known) {
         const cur = await read(path);
-        if (cur === undefined || sameText(cur, text)) continue; // 읽지 못한 파일(바이너리·너무 큼)은 건너뛴다
+        if (cur === undefined || sameKnown(entry, cur)) continue; // 읽지 못한 파일(바이너리·너무 큼)은 건너뛴다
         if (cur === null) deleted.push(path);
         else files.push({ path, text: cur });
       }
@@ -1516,10 +1695,15 @@
     box.replaceChildren(head, cols);
   }
 
-  /** 적용: 쓰기 직전에 파일이 바뀌었으면 다시 계산한다. 원본은 적용 기록에 남긴다. { entry(적용 기록 항목, 못 썼으면 null), text } */
+  /**
+   * 적용: 쓰기 직전에 파일이 바뀌었으면 다시 계산한다. 원본은 적용 기록에 남긴다. { entry(적용 기록 항목, 못 썼으면 null), text }
+   * 여러 파일은 한 묶음(트랜잭션)으로 쓴다 (v0.23.0): 쓰기 · 지우기가 하나라도 실패하면 이 묶음에서 이미 쓴 파일을
+   * 원래대로 되돌린다 (되돌리기와 같은 원본 — 고친 파일은 원래 내용, 지운 파일은 다시 만들고, 새로 만든 파일은 지움).
+   * 그사이 파일이 바뀌어 다시 계산할 수 없는 파일은 예전처럼 그 파일만 빼고 쓴다.
+   */
   async function applyPlans(ai, plans) {
-    const done = [];
     const failed = [];
+    const ready = [];
     for (const plan of plans) {
       try {
         let p = plan;
@@ -1531,13 +1715,24 @@
           p = PX.planChange(change, now);
           if (!p.ok) throw new Error(`그사이 파일이 바뀌어 적용할 수 없습니다 (${p.error})`);
         }
-        if (p.op === 'delete') await host.project.deleteFile(p.path);
-        else await host.project.writeFile(p.path, p.after);
-        done.push({ path: p.path, before: p.before, after: p.after });
+        ready.push({ path: p.path, op: p.op === 'delete' ? 'delete' : 'write', before: p.before, after: p.after });
       } catch (err) {
         failed.push(`${plan.path}: ${err.message}`);
       }
     }
+    const tx = await PC.applyTransaction(ready, {
+      read: (path) => currentText(path),
+      write: (path, text) => host.project.writeFile(path, text),
+      remove: (path) => host.project.deleteFile(path),
+    });
+    if (!tx.ok) {
+      // 묶음이 실패했다: 쓴 파일은 되돌렸으므로 적용 기록 · 바는 그대로 두고 알린다
+      if (tx.restored.length || tx.restoreFailed.length) await rescan().catch(() => {});
+      const msg = PC.transactionMessage(tx);
+      alert(failed.length ? `${msg}\n\n적용하지 못한 파일:\n${failed.join('\n')}` : msg);
+      return { entry: null, text: `${tx.failed.path} ${tx.failed.op === 'delete' ? '지우기' : '쓰기'} 실패 — 적용하지 않았습니다` };
+    }
+    const done = tx.done;
     let entry = null;
     if (done.length) {
       // 수정안을 낸 AI는 적용한 결과를 이미 안다. 다른 AI에게는 ⟳ 뒤 "바뀐 파일"로 보인다.
@@ -1878,6 +2073,7 @@
   // ---------- 화면 상태 ----------
 
   window.onProjectState = () => {
+    notePanels(); // 닫은 패널은 다시 열면 새 대화이므로 그 AI가 받은 기록을 버린다
     modal.onViewChanged();
     render();
   };

@@ -165,12 +165,24 @@ function createPanel(svc) {
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
   const focusBtn = button('⤢', '이 패널만 크게 보기', () => host.setFocus(svc.id));
+  // 답변 평가 (v0.23): 공통 입력창 질문의 답변이 끝나면 띄운다. 같은 것을 다시 누르면 지운다.
+  const goodBtn = button('[+1]', '이 답변이 좋았음', () => setFeedback(svc.id, 1));
+  const badBtn = button('[-1]', '이 답변이 별로였음', () => setFeedback(svc.id, -1));
+  for (const b of [goodBtn, badBtn]) {
+    b.classList.add('fb-btn');
+    b.setAttribute('aria-pressed', 'false');
+    b.hidden = true;
+  }
+  goodBtn.dataset.fb = 'good';
+  badBtn.dataset.fb = 'bad';
 
   head.append(
     dot,
     span('name', svc.name),
     url,
     status,
+    goodBtn,
+    badBtn,
     attachBadge,
     diagBadge,
     collectBtn,
@@ -213,11 +225,54 @@ function createPanel(svc) {
   head.addEventListener('dblclick', (e) => {
     if (!e.target.closest('button')) host.setFocus(svc.id); // 머리줄 빈 곳을 두 번 누르면 크게 보기 / 돌아오기
   });
-  const p = { el, dot, url, status, loginBtn, attachBadge, diagBadge, needBtn, collectBtn, focusBtn, changeBar, localBox };
+  const p = { el, dot, url, status, loginBtn, attachBadge, diagBadge, needBtn, collectBtn, focusBtn, goodBtn, badBtn, changeBar, localBox };
   panels.set(svc.id, p);
+  renderFeedback(svc.id);
   renderDiagBadge(svc.id);
   if (localBox) renderLocalChat(svc.id, localViews[svc.id] || { messages: [], streaming: false, model: state.local?.model || '', error: '' });
   return p;
+}
+
+// ---------- 답변 평가 (v0.23) ----------
+// 공통 입력창으로 보낸 질문(라운드)마다 AI별 [+1] 좋았음 / [-1] 별로였음을 기록(record.feedback)에 남긴다.
+// 버튼은 그 라운드에 보낸 패널의 답변이 끝났을 때만 보이고, 새 질문을 보내면 지워진다. 설정의 응답 통계에 만족도로 나온다.
+const feedback = { targets: new Set(), done: new Set(), value: {} }; // 지금 라운드: 보낸 AI · 답이 끝난 AI · { id: 1 | -1 }
+
+function renderFeedback(id) {
+  const p = panels.get(id);
+  if (!p) return;
+  const show = feedback.targets.has(id) && feedback.done.has(id);
+  const v = feedback.value[id] || 0;
+  for (const [b, on] of [
+    [p.goodBtn, v === 1],
+    [p.badBtn, v === -1],
+  ]) {
+    b.hidden = !show;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+}
+
+/** 새 질문을 보냈다: 평가를 지우고 이번에 보낸 AI만 기억한다 */
+function resetFeedback(ids) {
+  feedback.targets = new Set(ids);
+  feedback.done = new Set();
+  feedback.value = {};
+  for (const id of panels.keys()) renderFeedback(id);
+}
+
+async function setFeedback(id, value) {
+  const next = feedback.value[id] === value ? 0 : value; // 같은 것을 다시 누르면 지운다
+  const r = await host.history.feedback?.(id, next).catch(() => null);
+  if (r === null || r === undefined) {
+    const p = panels.get(id);
+    if (p) flash(p.status, '평가를 남기지 못했습니다');
+    return;
+  }
+  if (next) feedback.value[id] = next;
+  else delete feedback.value[id];
+  renderFeedback(id);
+  if (state?.chatView === 'help') renderStatsTable();
 }
 
 // ---------- 셀렉터 자가진단 ----------
@@ -579,6 +634,11 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
   }
   if (answer === 'done') window.onPanelAnswerDone?.(id); // 파일 모아보기 버튼, 프로젝트 모드: NEED_FILES 확인
   if (answer) {
+    // 답변 평가 버튼: 이번 라운드에 보낸 패널의 답이 끝나면 띄우고, 다시 답하는 중이거나 새 대화면 내린다
+    if (answer === 'clear') feedback.targets.delete(id);
+    if (answer === 'done') feedback.done.add(id);
+    else feedback.done.delete(id);
+    renderFeedback(id);
     if (answer === 'answering') {
       p.answerStart = Date.now();
       setChangeBar(id, false); // 페이지에서 직접 물어본 경우에도 지난 답변의 변경 바는 내린다
@@ -602,6 +662,8 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     p.status.textContent = send === 'error' ? `${SEND_TEXT.error}: ${error}` : SEND_TEXT[send];
     p.status.dataset.state = `send-${send}`;
     if (send === 'sending') {
+      feedback.done.delete(id);
+      renderFeedback(id);
       p.attachBadge.hidden = true;
       p.needBtn.hidden = true;
       p.collectBtn.hidden = true;
@@ -1262,12 +1324,19 @@ $('#remoteRefresh').addEventListener('click', async () => {
 const fmtSec = (ms) => (ms == null ? '–' : ms >= 60000 ? `${Math.floor(ms / 60000)}분 ${Math.round((ms % 60000) / 1000)}초` : `${(ms / 1000).toFixed(1)}초`);
 const pct = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : '–');
 
+// 만족도 (v0.23): "75% (3/4)" — 평가가 하나도 없으면 "—"
+const fmtSatisfaction = (r) => {
+  const good = Number.isFinite(r?.good) ? r.good : 0;
+  const n = good + (Number.isFinite(r?.bad) ? r.bad : 0);
+  return n ? `${Math.round((good / n) * 100)}% (${good}/${n})` : '—';
+};
+
 async function renderStatsTable() {
   const st = await host.history.stats?.().catch(() => null);
   const table = $('#statsTable');
   if (!table) return;
   const apply = window.projectApplyStats?.() || null; // 이 프로젝트의 적용 기록 { AI 이름: { applied, reverted } }
-  const cols = ['서비스', '질문', '답변 완료', '시간 초과 · 답 없음', '보내기 실패', '사용 한도', '첫 응답 (중앙값)', '완료까지 (중앙값)', '평균 글자 수'];
+  const cols = ['서비스', '질문', '답변 완료', '시간 초과 · 답 없음', '보내기 실패', '사용 한도', '첫 응답 (중앙값)', '완료까지 (중앙값)', '평균 글자 수', '만족도'];
   if (apply) cols.push('수정안 적용 · 되돌림');
   const head = document.createElement('tr');
   for (const t of cols) head.append(Object.assign(document.createElement('th'), { textContent: t }));
@@ -1294,6 +1363,7 @@ async function renderStatsTable() {
     cell(fmtSec(r.firstMedianMs));
     cell(fmtSec(r.doneMedianMs));
     cell(r.charsAvg == null ? '–' : r.charsAvg.toLocaleString());
+    cell(fmtSatisfaction(r), '패널 머리줄의 [+1] 좋았음 / [-1] 별로였음으로 센 만족도: 좋았음 / (좋았음 + 별로였음)');
     if (apply) {
       const a = apply[svc?.name || r.name];
       cell(a ? `${a.applied} · ${a.reverted}` : '–', '이 프로젝트의 적용 기록에서 센 수 (적용 · 그중 되돌린 것)');
@@ -1644,6 +1714,7 @@ async function send() {
     const skill = window.libSkillPrefix?.(ids);
     if (skill?.cancel) return; // 지침이 너무 길어 사용자가 보내기를 멈췄다 (입력 내용은 남김)
     if (skill) payload = { ...payload, opts: { ...payload.opts, prefixById: skill.prefixById } };
+    resetFeedback(ids); // 새 질문 = 새 기록: 지난 답변의 평가 버튼을 내린다
     const results = await host.sendPrompt(payload.text, ids, payload.files, payload.opts);
     window.onSkillSent?.(skill, results.filter((r) => r.ok).map((r) => r.id));
     const failed = results.filter((r) => !r.ok);

@@ -7,6 +7,7 @@
 // 받는 것은 CSS 셀렉터·정규식 "문자열"뿐이다. 코드는 받지도 실행하지도 않는다 (검사·적용은 shared/remote-core.js).
 // 마지막으로 받은 정상 데이터는 사용자 데이터 폴더(remote-selectors.json)에 저장해 두고
 // 다음 실행 때 네트워크 없이도 먼저 적용한다.
+// remote-core.js에 공개 키가 들어 있으면 selectors.json.sig 서명이 맞는 파일만 적용한다 (remote/README.md "서명").
 
 // [쉽게 말하면]
 // AI 사이트가 디자인을 바꾸면 앱이 입력창이나 답변 위치를 못 찾게 됩니다.
@@ -16,8 +17,13 @@
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
+const crypto = require('crypto');
 const { net } = require('electron');
-const { DEFAULT_URL, sanitize: sanitizeData, snapshotBase, apply: applyTo } = require('../shared/remote-core');
+const core = require('../shared/remote-core');
+const { DEFAULT_URL, sanitize: sanitizeData, snapshotBase, apply: applyTo } = core;
+
+const verifier = core.nodeVerifier(crypto);
+const SIG_FAILED = '서명 확인 실패';
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -38,7 +44,11 @@ function init(userDataDir, serviceList, { remoteUrl } = {}) {
   if (remoteUrl) url = remoteUrl;
   base = snapshotBase(services);
   try {
-    const cached = sanitize(JSON.parse(fs.readFileSync(cacheFile, 'utf8')));
+    // 받아 둔 바이트와 서명을 다시 확인한다. 서명 없는 예전 캐시는 공개 키가 있으면 버린다 (내장 값을 씀).
+    const packed = core.unpackCache(JSON.parse(fs.readFileSync(cacheFile, 'utf8')));
+    if (!packed) return;
+    if (!core.verify(packed.bytes, packed.sig, verifier).ok) return;
+    const cached = sanitize(core.parseBytes(packed.bytes));
     if (cached) {
       apply(cached.overrides);
       status = { source: 'cache', version: cached.version, updated: cached.updated };
@@ -46,20 +56,30 @@ function init(userDataDir, serviceList, { remoteUrl } = {}) {
   } catch {}
 }
 
-/** 목록 파일을 내려받습니다. 8초 안에 응답이 없으면 포기합니다 (개발 중에는 PC의 파일 경로도 받음). */
-async function download() {
-  if (!/^https?:\/\//.test(url)) return JSON.parse(await fsp.readFile(url, 'utf8')); // 개발용: 로컬 파일 경로
+/** 파일 하나를 바이트 그대로 내려받습니다. 8초 안에 응답이 없으면 포기합니다 (개발 중에는 PC의 파일 경로도 받음). */
+async function fetchBytes(target) {
+  if (!/^https?:\/\//.test(target)) return new Uint8Array(await fsp.readFile(target)); // 개발용: 로컬 파일 경로
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
     // 리다이렉트는 따라가지 않는다 (정해 둔 주소의 파일만 받는다. 다른 곳으로 보내면 실패로 보고 지금 값을 유지)
-    const res = await net.fetch(url, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
+    const res = await net.fetch(target, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
     if (res.redirected) throw new Error('리다이렉트된 응답은 받지 않습니다');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    return new Uint8Array(await res.arrayBuffer());
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * 목록 파일과 (공개 키가 있으면) 서명 파일을 받습니다: { bytes, sig }.
+ * 서명은 JSON으로 읽기 전에, 받은 바이트 그대로에 대해 확인한다.
+ */
+async function download() {
+  const bytes = await fetchBytes(url);
+  const sig = core.SELECTORS_PUBLIC_KEY ? new TextDecoder().decode(await fetchBytes(`${url}.sig`)).trim() : '';
+  return { bytes, sig };
 }
 
 // 받아 둔 목록 쓰기는 비동기로, 한 줄로 세워서 한다 (갱신이 겹쳐도 먼저 시작한 쓰기가 나중 것을 덮지 않게)
@@ -74,11 +94,17 @@ function saveCache(text) {
 async function refresh() {
   const checkedAt = Date.now();
   try {
-    const data = await download();
-    const clean = sanitize(data);
+    const { bytes, sig } = await download();
+    const check = core.verify(bytes, sig, verifier);
+    if (!check.ok) {
+      // 서명이 틀리면 적용하지 않고 캐시도 그대로 둔다 (지금 쓰는 값 유지)
+      console.warn('[remote] 서명 확인 실패', check.detail || '');
+      throw new Error(SIG_FAILED);
+    }
+    const clean = sanitize(core.parseBytes(bytes));
     if (!clean) throw new Error('형식이 올바르지 않습니다');
     apply(clean.overrides);
-    await saveCache(JSON.stringify(data));
+    await saveCache(JSON.stringify(core.packCache(bytes, sig)));
     status = {
       source: 'remote',
       version: clean.version,

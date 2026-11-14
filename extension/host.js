@@ -429,6 +429,9 @@
     }
   }
 
+  // 답변 평가 (v0.23): 지금 라운드(공통 입력창으로 마지막에 보낸 질문)의 기록 id. rounds가 기록을 만들 때 받아 둔다.
+  let roundHistoryId = null;
+  const roundHistory = { ...history, add: (rec) => (roundHistoryId = history.add(rec)) };
   const rounds = createRounds({
     get services() {
       return allServices();
@@ -470,7 +473,7 @@
     },
     sendPanel,
     sendSynthStatus: (patch) => emit('synth:status', patch),
-    history,
+    history: roundHistory,
     prefs: () => prefs,
     diag,
     checkLimit: async (id, { scope, answer } = {}) => {
@@ -545,6 +548,31 @@
 
   const remoteBase = remoteCore.snapshotBase(SERVICES);
   let remoteStatus = { source: 'builtin' };
+  // 서명 확인 (remote-core.js에 공개 키가 있을 때만). 이 크롬이 Ed25519를 지원하지 않으면 실패로 보고 지금 값을 유지한다.
+  const remoteVerifier = remoteCore.subtleVerifier(crypto.subtle);
+  const SIG_FAILED = '서명 확인 실패';
+
+  // 바이트 그대로 받는다 (서명은 JSON으로 읽기 전에 확인). 리다이렉트는 따라가지 않는다 (정해 둔 주소의 파일만 받는다)
+  async function fetchRemoteBytes(url, signal) {
+    const res = await fetch(url, { cache: 'no-store', redirect: 'error', signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
+  // 시작할 때: 저장해 둔 바이트 · 서명을 다시 확인하고 적용한다. 서명 없는 예전 캐시는 공개 키가 있으면 버린다 (내장 값).
+  async function loadRemoteCache() {
+    if (!prefs.remoteSelectors) return;
+    try {
+      const packed = remoteCore.unpackCache(await load('remoteSelectors', null));
+      if (!packed) return;
+      const check = await remoteCore.verify(packed.bytes, packed.sig, remoteVerifier);
+      if (!check.ok) return console.warn('[remote] 저장해 둔 셀렉터 서명 확인 실패', check.detail || '');
+      const cached = remoteCore.sanitize(remoteCore.parseBytes(packed.bytes), SERVICES);
+      if (!cached) return;
+      remoteCore.apply(SERVICES, remoteBase, cached.overrides);
+      remoteStatus = { source: 'cache', version: cached.version, updated: cached.updated };
+    } catch {}
+  }
 
   // 사이트 셀렉터 원격 갱신 (Windows 앱의 remote.js와 같은 일). 받은 값은 확장 저장소에 기억합니다.
   async function refreshRemote() {
@@ -553,14 +581,20 @@
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
     try {
-      // 리다이렉트는 따라가지 않는다 (정해 둔 주소의 파일만 받는다)
-      const res = await fetch(remoteCore.DEFAULT_URL, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const clean = remoteCore.sanitize(data, SERVICES);
+      const bytes = await fetchRemoteBytes(remoteCore.DEFAULT_URL, ctrl.signal);
+      const sig = remoteCore.SELECTORS_PUBLIC_KEY
+        ? new TextDecoder().decode(await fetchRemoteBytes(remoteCore.SIG_URL, ctrl.signal)).trim()
+        : '';
+      const check = await remoteCore.verify(bytes, sig, remoteVerifier);
+      if (!check.ok) {
+        // 서명이 틀리면 적용하지 않고 저장해 둔 값도 그대로 둔다
+        console.warn('[remote]', SIG_FAILED, check.detail || '');
+        throw new Error(SIG_FAILED);
+      }
+      const clean = remoteCore.sanitize(remoteCore.parseBytes(bytes), SERVICES);
       if (!clean) throw new Error('형식이 올바르지 않습니다');
       remoteCore.apply(SERVICES, remoteBase, clean.overrides);
-      store('remoteSelectors', data);
+      store('remoteSelectors', remoteCore.packCache(bytes, sig));
       // 새 셀렉터를 받았으면 자가진단 기록을 지우고 다시 확인한다
       if (clean.version !== remoteStatus.version) {
         diag.reset();
@@ -715,6 +749,9 @@
       },
       get: async (id) => history.get(id) || sideHistory.get(id),
       stats: async () => history.stats(),
+      // 답변 평가 (Windows 앱 history:feedback과 같음): 지금 라운드 기록의 그 AI 답변에 1 · -1 · 0(지우기) → 남긴 값 | null
+      feedback: async (svcId, value) =>
+        roundHistoryId && typeof svcId === 'string' && [1, -1, 0].includes(value) ? history.setFeedback(roundHistoryId, svcId, value) : null,
       remove: async (id) => (history.get(id) ? history.remove(id) : sideHistory.remove(id)),
       clear: async () => {
         history.clear();
@@ -861,11 +898,7 @@
     history.load(await load('history', []));
     sideHistory.load(await load('history:side', []));
     // 마지막으로 받은 원격 셀렉터를 먼저 적용한다 (새로 받아 오는 것은 아래에서).
-    const cached = prefs.remoteSelectors && remoteCore.sanitize(await load('remoteSelectors', null), SERVICES);
-    if (cached) {
-      remoteCore.apply(SERVICES, remoteBase, cached.overrides);
-      remoteStatus = { source: 'cache', version: cached.version, updated: cached.updated };
-    }
+    await loadRemoteCache();
 
     const me = await chrome.tabs.getCurrent();
     tabId = me?.id ?? null;

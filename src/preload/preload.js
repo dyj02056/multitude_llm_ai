@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('host', {
     list: (query) => ipcRenderer.invoke('history:list', query),
     get: (id) => ipcRenderer.invoke('history:get', id),
     stats: () => ipcRenderer.invoke('history:stats'),
+    // 답변 평가: 지금 라운드 기록의 그 AI 답변에 1 · -1 · 0(지우기) → 남긴 값 | null
+    feedback: (svcId, value) => ipcRenderer.invoke('history:feedback', svcId, value),
     remove: (id) => ipcRenderer.invoke('history:delete', id),
     clear: () => ipcRenderer.invoke('history:clear'),
   },

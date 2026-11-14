@@ -11,6 +11,8 @@
     "dist": "electron-builder --win nsis --x64 --publish never",
     "build:ext": "node scripts/build-extension.js",
     "check:ext": "node scripts/build-extension.js --check",
+    "selectors:keygen": "node scripts/selectors-keygen.js",
+    "selectors:sign": "node scripts/sign-selectors.js",
     "test": "node --test \"test/**/*.test.js\"",
     "screenshots": "electron scripts/screenshots/run.js"
   },

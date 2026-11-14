@@ -330,7 +330,64 @@
     return { mode: 'bundle', text: ask(`첨부한 ${name}의`), attachments: [md(name, `${PC.fileBlock(path, content)}\n`)], inlineText };
   }
 
+  const CHANGED_FILE = 'changed-files.md';
+
+  /**
+   * 이어지는 질문 — 바뀐 파일만 보내기 (v0.23.0). 같은 첨부를 여러 패널에 보내므로 files(올릴 파일)는 모든 패널이 같고,
+   * 본문의 목록(same · gone)만 패널마다 다를 수 있다. 첨부는 files · includeTree · mode · budget으로만 정해진다.
+   *   files: [{ path, text }] 바뀌었거나 처음 보내는 파일, same: [{ path, lines }] 앞서 보낸 그대로인 파일,
+   *   gone: [경로] 앞서 보냈는데 지금은 없는 파일, includeTree: 구조 목록을 다시 보낼지, showLines: 목록에 줄 수를 붙일지
+   * → packContext와 같은 모양 { mode, text, attachments, inlineText, note? }
+   */
+  function packIncremental({ project, files, same = [], gone = [], includeTree = false, showLines = false, first = false, request, mode = DEFAULT_MODE, budget }) {
+    // first: 이 패널에는 처음 보냄 (다른 패널은 이어지는 질문이라 같은 첨부를 함께 쓴다)
+    const head = first
+      ? `[프로젝트: ${project.name}] (제외 규칙을 통과한 파일 ${project.paths.length}개 중 ${files.length}개 내용 포함)`
+      : `[프로젝트: ${project.name}] (이어지는 질문 — 바뀌었거나 처음 보내는 파일 ${files.length}개만 올림${same.length ? ` · ${same.length}개는 앞서 보낸 그대로` : ''})`;
+    // 첨부 안의 머리글은 패널마다 같아야 한다 (같은 첨부를 여러 패널에 보낸다)
+    const fileHead = `[프로젝트: ${project.name}] (제외 규칙을 통과한 파일 ${project.paths.length}개의 구조 · 파일 ${files.length}개 내용)`;
+    const tree = includeTree ? PC.buildTree(project.paths) : '';
+    const sameLines = same.length
+      ? ['[앞서 보낸 그대로] (내용이 바뀌지 않아 다시 올리지 않음 — 이전에 받은 내용을 그대로 써 줘)', ...same.map((f) => `- ${f.path}${showLines ? ` (${f.lines}줄)` : ''}`), '']
+      : [];
+    const goneLines = gone.length ? ['[지워진 파일] (앞서 보냈지만 지금은 없음)', ...gone.map((p) => `- ${p}`), ''] : [];
+    const tail = `[요청]\n${request || '(요청 없음 — 첨부한 내용을 검토해 줘)'}\n\n${PC.RULES}`;
+    const treeBlock = includeTree ? [`[프로젝트 구조]\n${tree}`, ''] : [];
+    const inlineText = cutInline(
+      [head, '', ...treeBlock, ...files.map((f) => `${PC.fileBlock(f.path, f.text)}\n`), ...sameLines, ...goneLines, tail].join('\n'),
+    );
+    if (!files.length && !includeTree) {
+      const text = [head, '', ...sameLines, ...goneLines, tail].join('\n');
+      return { mode, text, attachments: [], inlineText: text };
+    }
+    if (mode === 'files') {
+      const { attachments, map } = eachFile(files);
+      const treeInBody = tree.length <= TREE_IN_BODY;
+      if (includeTree && !treeInBody) attachments.push(md('project-structure.md', `${fileHead}\n\n[프로젝트 구조]\n${tree}\n`));
+      if (fits(attachments, budget)) {
+        const text = [
+          head,
+          '',
+          files.length ? `[올린 파일 ${files.length}개 → 실제 경로]\n${map}` : '(내용을 올린 파일 없음)',
+          files.length ? FILES_RULE : '',
+          '',
+          ...(includeTree ? [treeInBody ? `[프로젝트 구조]\n${tree}` : '[프로젝트 구조] 첨부한 project-structure.md에 있습니다.', ''] : []),
+          ...sameLines,
+          ...goneLines,
+          tail,
+        ].join('\n');
+        return { mode: 'files', text, attachments, inlineText };
+      }
+    }
+    const attachments = bundle(includeTree ? PC.CONTEXT_FILE : CHANGED_FILE, includeTree ? `${fileHead}\n\n[프로젝트 구조]\n${tree}\n` : '', files, budget);
+    const names = attachments.map((a) => a.name).join(', ');
+    const what = [includeTree ? '프로젝트 구조' : '', files.length ? `${first ? '' : '바뀐 '}파일 ${files.length}개의 지금 내용` : ''].filter(Boolean).join('와 ');
+    const text = [head, `첨부한 ${names}에 ${what}${files.length ? '이' : '가'} 있습니다.`, '', ...sameLines, ...goneLines, tail].join('\n');
+    const note = mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined;
+    return { mode: 'bundle', text, attachments, inlineText, note };
+  }
+
   const normalizeMode = (m) => (MODES.includes(m) ? m : DEFAULT_MODE);
 
-  return { MODES, DEFAULT_MODE, BUNDLE_CHUNK, BUNDLE_BYTES, bytesOf, splitBytes, uploadName, restorePaths, uniqueNames, packContext, packFollowUp, packUpdate, packRefetch, normalizeMode };
+  return { MODES, DEFAULT_MODE, BUNDLE_CHUNK, BUNDLE_BYTES, bytesOf, splitBytes, uploadName, restorePaths, uniqueNames, packContext, packFollowUp, packUpdate, packRefetch, packIncremental, normalizeMode };
 });

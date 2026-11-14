@@ -16,6 +16,15 @@
 
   const DEFAULT_URL = 'https://raw.githubusercontent.com/dyj02056/multitude_llm_ai/main/remote/selectors.json';
 
+  // 셀렉터 파일 서명 (Ed25519). selectors.json 옆의 selectors.json.sig에 저장소 주인 키로 만든 서명이 있다.
+  // 공개 키(32바이트를 base64로)가 비어 있으면 서명 확인을 하지 않는다 (예전 동작).
+  // 키가 들어 있으면 받은 파일 바이트 그대로에 맞는 서명이 있을 때만 적용한다 —
+  // GitHub 계정·저장소가 털려도 개인 키 없이는 셀렉터를 바꿀 수 없게.
+  // 이 줄은 scripts/selectors-keygen.js가 그대로 찾아 바꾼다 (모양을 바꾸지 말 것).
+  const SELECTORS_PUBLIC_KEY = '';
+  const SIG_URL = DEFAULT_URL + '.sig';
+  const SIG_ERROR = '서명이 맞지 않습니다';
+
   // 원격으로 바꿀 수 있는 필드와 모양.
   // 보안상 "읽기"에 쓰는 것(입력창·답변·중지·로그인 상태·첨부 확인 표시)과 그 서비스 도메인 안의 새 대화 주소만 받는다.
   // 페이지에서 무언가를 "누르거나 파일을 넣는" 셀렉터(보내기·로그인 버튼, 파일 선택 칸 등)는 원격으로 바꾸지 않는다 —
@@ -156,5 +165,112 @@
     }
   }
 
-  return { DEFAULT_URL, sanitize, snapshotBase, apply, riskyRegex };
+  // ---------- 서명 확인 ----------
+  // 어느 환경에서나 쓰도록 암호 기능은 쓰는 쪽이 넘긴다 (Electron: node:crypto / 확장: crypto.subtle).
+
+  function b64ToBytes(b64) {
+    const bin = atob(String(b64).trim());
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function bytesToB64(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  const toBytes = (b) => (b instanceof Uint8Array ? b : new Uint8Array(b));
+
+  function verdict(good) {
+    return good === true ? { ok: true } : { ok: false, error: SIG_ERROR };
+  }
+
+  /**
+   * 받은 파일 바이트(bytes)와 서명(sigB64)을 확인한다. verifier(bytes, sig, publicKeyB64)는 true/false(또는 그 Promise)를 돌려준다.
+   * - 공개 키가 비어 있으면 확인하지 않는다: { ok: true, unsigned: true }
+   * - 서명이 없거나 틀리거나 확인 중 오류가 나면: { ok: false, error: '서명이 맞지 않습니다', detail }
+   * verifier가 동기면 결과도 동기로, Promise면 Promise로 돌려준다 (Electron 시작 때 캐시는 동기로 확인).
+   * publicKey는 시험용으로만 넘긴다. 앱은 SELECTORS_PUBLIC_KEY를 쓴다.
+   */
+  function verify(bytes, sigB64, verifier, publicKey = SELECTORS_PUBLIC_KEY) {
+    if (!publicKey) return { ok: true, unsigned: true };
+    const fail = (err) => ({ ok: false, error: SIG_ERROR, detail: err ? String(err.message || err) : '' });
+    try {
+      if (typeof sigB64 !== 'string' || !sigB64.trim()) return fail('서명 없음');
+      const sig = b64ToBytes(sigB64);
+      if (sig.length !== 64) return fail('서명 길이가 맞지 않음');
+      const r = verifier(toBytes(bytes), sig, publicKey);
+      if (r && typeof r.then === 'function') return r.then(verdict, fail);
+      return verdict(r);
+    } catch (err) {
+      return fail(err);
+    }
+  }
+
+  /** node:crypto로 확인하는 verifier (Electron 본체). 공개 키 32바이트를 JWK(OKP/Ed25519)로 읽는다. */
+  function nodeVerifier(nodeCrypto) {
+    return (bytes, sig, publicKeyB64) => {
+      const x = String(publicKeyB64).trim().replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const key = nodeCrypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x }, format: 'jwk' });
+      return nodeCrypto.verify(null, bytes, key, sig);
+    };
+  }
+
+  /** WebCrypto(crypto.subtle)로 확인하는 verifier (크롬 확장). Ed25519를 지원하지 않는 크롬이면 오류 → 실패로 본다. */
+  function subtleVerifier(subtle) {
+    return async (bytes, sig, publicKeyB64) => {
+      const key = await subtle.importKey('raw', b64ToBytes(publicKeyB64), { name: 'Ed25519' }, false, ['verify']);
+      return subtle.verify({ name: 'Ed25519' }, key, sig, bytes);
+    };
+  }
+
+  /** 받은 바이트를 JSON으로 읽는다 (서명 확인은 이 전에 바이트 그대로 한다). */
+  function parseBytes(bytes) {
+    return JSON.parse(new TextDecoder('utf-8').decode(toBytes(bytes)));
+  }
+
+  /**
+   * 저장해 둘 캐시 모양: { format: 2, data: 파일 바이트 base64, sig: 서명 base64 }.
+   * 다음 실행 때 같은 확인을 다시 하려고 바이트와 서명을 그대로 둔다.
+   */
+  function packCache(bytes, sigB64) {
+    return { format: 2, data: bytesToB64(toBytes(bytes)), sig: typeof sigB64 === 'string' ? sigB64.trim() : '' };
+  }
+
+  /**
+   * 저장해 둔 캐시를 꺼낸다: { bytes, sig } 또는 null.
+   * 예전 버전이 쓴 캐시(셀렉터 JSON 그대로, 서명 없음)는 공개 키가 있으면 버리고(null → 내장 값), 없으면 예전처럼 쓴다.
+   */
+  function unpackCache(cached, publicKey = SELECTORS_PUBLIC_KEY) {
+    if (!cached || typeof cached !== 'object') return null;
+    if (cached.format === 2 && typeof cached.data === 'string') {
+      try {
+        return { bytes: b64ToBytes(cached.data), sig: typeof cached.sig === 'string' ? cached.sig : '' };
+      } catch {
+        return null;
+      }
+    }
+    if (publicKey) return null;
+    return { bytes: new TextEncoder().encode(JSON.stringify(cached)), sig: '' };
+  }
+
+  return {
+    DEFAULT_URL,
+    SIG_URL,
+    SELECTORS_PUBLIC_KEY,
+    sanitize,
+    snapshotBase,
+    apply,
+    riskyRegex,
+    verify,
+    nodeVerifier,
+    subtleVerifier,
+    parseBytes,
+    packCache,
+    unpackCache,
+    b64ToBytes,
+    bytesToB64,
+  };
 });

@@ -159,6 +159,11 @@ button.ghost:hover { background: var(--field-hover); border-color: var(--border)
 .panel-head { overflow: hidden; }
 .panel-head button, .panel-head .name { flex: none; white-space: nowrap; }
 .panel-head .status { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* 답변 평가 [+1] / [-1] (v0.23): 누른 쪽만 색과 테두리 (aria-pressed) */
+.panel-head .fb-btn[hidden] { display: none; }
+.panel-head .fb-btn { padding: 0 4px; color: var(--muted); }
+.panel-head .fb-btn[data-fb="good"][aria-pressed="true"] { color: var(--ok-text); border-color: var(--ok); background: var(--ok-soft); }
+.panel-head .fb-btn[data-fb="bad"][aria-pressed="true"] { color: var(--err-text); border-color: var(--err); background: var(--err-soft); }
 
 /* ---------- 화면 전환 ---------- */
 .only-pick, .only-chat, .only-auth { display: none; }
