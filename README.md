@@ -1,7 +1,7 @@
 # Multitude LLM (multitude_llm_ai)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.22.1-58a6ff)
+![version](https://img.shields.io/badge/version-0.23.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -165,6 +165,7 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.23.0** | 바뀐 파일만 보내기 · 적용 실패 시 자동 되돌림 · 답변 `[+1]`/`[-1]` 만족도 · 원격 셀렉터 서명 · 버그 9건과 보안 · 성능 보강 |
 | **v0.22.1** | Windows 앱 **로컬 데이터 암호화**(DPAPI) — 기록 · 설정 · 라이브러리 · 프로젝트 상태 |
 | **v0.22.0** | 큰 작업 자동 시작 · 잘리면 자동 이어받기 · 보낼 양 토큰 어림 |
 | **v0.21.1** | 자가진단 창 — 셀렉터 지금 확인 · 처음 화면으로 · 진단 정보 복사 |

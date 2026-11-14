@@ -112,6 +112,7 @@ window.host = {
     stats: async () => ({ rows: answers.answers.map((a, i) => ({ id: a.id, name: a.name, asked: 24 - i, sent: 24 - i, done: 22 - i, timeout: i % 2, noAnswer: 0, sendFail: 0, limit: i === 3 ? 1 : 0, firstMedianMs: 2100 + i * 900, doneMedianMs: 9000 + i * 2500, charsAvg: 1400 - i * 120 })) }),
     remove: async () => true,
     clear: async () => true,
+    feedback: async (_id, value) => value,
   },
   copyText: async () => true,
   saveFile: async () => ({ ok: true }),
@@ -144,8 +145,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   push();
   for (const id of selected) emit('panel:status', { id, login: 'ready', url: svc(id).url });
   if (scene === '02-ask-all') {
+    // 실제처럼 공통 입력창으로 보낸 뒤 답이 끝나게 한다 (그래야 패널 머리줄에 [+1]/[-1] 평가 버튼이 뜬다)
+    $('#prompt').value = S.QUESTION;
+    click('#sendBtn');
+    await sleep(150);
     for (const id of ['gemini', 'chatgpt', 'deepseek']) emit('panel:status', { id, answer: 'done', chars: S.ANSWERS[id].length });
     emit('panel:status', { id: 'perplexity', answer: 'answering' });
+    await sleep(50);
+    $('.fb-btn[data-fb="good"]:not([hidden])')?.click(); // 첫 패널에 [+1]을 누른 모습
   }
   if (LOCAL) {
     emit('panel:status', { id: LL.LOCAL_ID, login: 'ready', local: { messages: [{ role: 'user', text: S.QUESTION }, { role: 'assistant', text: S.ANSWERS.claude.replace('둘 다', '로컬 모델 답: 둘 다') }], streaming: false, model: 'qwen2.5:7b', error: '' } });
