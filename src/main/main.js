@@ -777,7 +777,8 @@ const notDuringTest = () => {
 ipcMain.handle('project:pick', projectCall(async () => {
   notDuringTest();
   const picked = await project.pick(win);
-  if (picked) gitConsole?.stop();
+  if (!picked) return null; // 폴더 고르기를 취소하면 지금 기억해 둔 프로젝트를 지우지 않는다
+  gitConsole?.stop();
   return rememberProject(picked);
 }));
 // Windows 앱은 접근 허용을 다시 받을 필요가 없어 restore·reconnect가 같다.
@@ -1069,6 +1070,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on('window-all-closed', () => app.quit());
   app.on('will-quit', () => {
+    history.flush(); // 0.5초 뒤로 미뤄 둔 기록 저장을 지금 한다 (파일 쓰기는 동기라 끄기 전에 끝난다)
     cleanupTemp();
     gitConsole?.stop();
     devTest?.stop();

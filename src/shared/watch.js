@@ -43,7 +43,21 @@
     while (isCurrent()) {
       await sleep(late ? LATE_POLL_MS : POLL_MS);
       const snap = await getSnap();
-      if (!snap || !isCurrent()) continue;
+      if (!isCurrent()) continue;
+      if (!snap) {
+        // 페이지를 읽지 못해도(패널이 죽었거나 다른 페이지로 넘어감) 시간 기준 판단은 해야 한다.
+        // 그렇지 않으면 0.7초마다 영원히 지켜보게 된다.
+        const elapsed = Date.now() - startAt;
+        if (!started) {
+          if (elapsed > startMs) return onState('no-answer');
+        } else if (!late && elapsed > maxMs) {
+          late = true;
+          onState('timeout');
+        } else if (late && elapsed > maxMs + LATE_EXTRA_MS) {
+          return;
+        }
+        continue;
+      }
 
       if (!started) {
         const changed = snap.count > (before?.count ?? 0) || (snap.text && snap.text !== (before?.text ?? ''));

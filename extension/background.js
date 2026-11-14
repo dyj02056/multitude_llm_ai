@@ -137,9 +137,9 @@ const owners = new Map(); // tabId -> 지금 주인인 앱 화면 번호
 const SIDE_TAB = -1; // 사이드 패널 iframe 요청의 탭 번호 (어느 탭 소속도 아님)
 const SIDE_RULE_ID = 999999999; // 사이드 패널 iframe 규칙 번호 (탭 번호 · WebSocket 규칙 번호와 겹치지 않게)
 const sidePages = new Set(); // 열려 있는 사이드 패널 화면 번호 (창마다 하나씩)
-const WS_RULE_BASE = 1000000000; // WebSocket 쿠키 규칙 번호 = 이 값 + 탭마다 붙이는 순번 (iframe 규칙 번호 = 탭 번호와 겹치지 않게)
-let wsSeq = 0;
-const wsRules = new Map(); // tabId -> [규칙 번호]
+const WS_RULE_BASE = 1000000000; // WebSocket 쿠키 규칙 번호 = 이 값 이상에서 비어 있는 번호 (iframe 규칙 번호 = 탭 번호와 겹치지 않게)
+// 규칙 번호는 메모리에 따로 두지 않고, 걸 때마다 크롬에 남아 있는 세션 규칙을 읽어서 고른다.
+// (백그라운드가 잠들었다 깨면 메모리는 비지만 세션 규칙은 남아 있어서, 순번을 메모리에 두면 번호가 겹치거나 옛 규칙이 남는다)
 let queue = Promise.resolve();
 const serial = (fn) => (queue = queue.then(fn, fn).catch((err) => console.warn('[background] 규칙 작업 실패:', err.message)));
 
@@ -173,11 +173,22 @@ const addRule = (tabId) =>
 async function removeRule(tabId) {
   const rules = await chrome.declarativeNetRequest.getSessionRules();
   const ids = rules.filter((r) => r.id === tabId || r.condition?.tabIds?.[0] === tabId).map((r) => r.id);
-  wsRules.delete(tabId);
   if (ids.length) await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: ids });
 }
 
 /** 서비스 도메인마다, 크롬이 가진 쿠키를 그 탭의 WebSocket 요청에 붙이는 규칙을 새로 건다 */
+/** 쓰고 있는 번호(usedIds)를 피해 WS_RULE_BASE부터 비어 있는 번호 n개를 고른다 */
+function freeWsRuleIds(usedIds, n) {
+  const used = new Set(usedIds);
+  const out = [];
+  for (let id = WS_RULE_BASE; out.length < n; id++) if (!used.has(id)) out.push(id);
+  return out;
+}
+globalThis.freeWsRuleIds = freeWsRuleIds; // 테스트용
+
+/** 그 탭(또는 사이드 패널)의 WebSocket 쿠키 규칙 번호들 */
+const wsRuleIdsOf = (rules, tabId) => rules.filter((r) => r.id >= WS_RULE_BASE && r.condition?.tabIds?.[0] === tabId).map((r) => r.id);
+
 async function syncWsCookies(tabId) {
   const addRules = [];
   for (const host of DOMAINS) {
@@ -188,14 +199,18 @@ async function syncWsCookies(tabId) {
     if (!cookies.length) continue;
     const value = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
     addRules.push({
-      id: WS_RULE_BASE + (wsSeq = (wsSeq + 1) % 100000000),
+      id: 0, // 아래에서 비어 있는 번호로 채운다
       priority: 2,
       action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'set', value }] },
       condition: { tabIds: [tabId], resourceTypes: ['websocket'], requestDomains: [host], ...sideOnly(tabId, DOMAINS) },
     });
   }
-  await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: wsRules.get(tabId) || [], addRules });
-  wsRules.set(tabId, addRules.map((r) => r.id));
+  // 이 탭의 옛 규칙은 지우고(번호 재사용 가능), 다른 탭 · 사이드 패널이 쓰는 번호는 피한다
+  const rules = await chrome.declarativeNetRequest.getSessionRules();
+  const removeRuleIds = wsRuleIdsOf(rules, tabId);
+  const ids = freeWsRuleIds(rules.map((r) => r.id).filter((id) => !removeRuleIds.includes(id)), addRules.length);
+  addRules.forEach((r, i) => (r.id = ids[i]));
+  if (removeRuleIds.length || addRules.length) await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds, addRules });
 }
 
 // ---------- 화면 스크립트용 쿠키 복사 (jsCookies) ----------

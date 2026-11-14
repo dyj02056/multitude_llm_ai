@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 const { dialog } = require('electron');
-const { checkCommand, FORCED_PREFIX, FORCED_ENV, maskOutput } = require('./git-rules');
+const { checkCommand, FORCED_PREFIX, FORCED_ENV, createLineMasker } = require('./git-rules');
 const { PATTERNS } = require('../shared/secret-scan');
 
 const MAX_OUTPUT = 2 * 1024 * 1024;
@@ -53,7 +53,7 @@ function killTree(child) {
  */
 // git 콘솔이 쓰는 요청 통로(git:info, git:run, git:stop, git:openTerminal)를 등록합니다.
 function setupGitConsole({ ipcMain, getWin, getRoot }) {
-  let running = null; // { child, timer }
+  let running = null; // { child, timer } | { pending: true } (확인 창을 기다리는 중)
 
   const send = (channel, data) => {
     const win = getWin();
@@ -92,68 +92,86 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
     const root = getRoot();
     if (!root) return { ok: false, error: '프로젝트가 열려 있지 않습니다' };
     if (running) return { ok: false, error: '이미 실행 중인 명령이 있습니다 (끝나거나 중지한 뒤 실행하세요)' };
-    if (typeof line !== 'string' || line.length > 4000) return { ok: false, error: '명령이 너무 깁니다' };
-    const exe = gitPath();
-    if (!exe) return { ok: false, error: 'git을 찾지 못했습니다' };
-    const cmd = checkCommand(line);
-    if (!cmd.ok) return cmd;
-    if (cmd.danger) {
-      const win = getWin();
-      const { response } = await dialog.showMessageBox(win, {
-        type: 'warning',
-        buttons: ['실행', '취소'],
-        defaultId: 1,
-        cancelId: 1,
-        title: 'git 명령 확인',
-        message: `${cmd.danger}. 실행할까요?`,
-        detail: `${line.trim()}\n\n폴더: ${root}`,
-      });
-      if (response !== 0) return { ok: false, error: '취소했습니다', cancelled: true };
-    }
-
-    const started = Date.now();
-    const child = spawn(exe, [...FORCED_PREFIX, ...cmd.args], {
-      cwd: root,
-      env: { ...process.env, ...FORCED_ENV },
-      windowsHide: true,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let size = 0;
-    let cut = false;
-    const onData = (stream) => (buf) => {
-      if (cut) return;
-      size += buf.length;
-      if (size > MAX_OUTPUT) {
-        cut = true;
-        send('git:output', { stream: 'info', text: '\n… 출력이 2MB를 넘어 나머지는 보이지 않습니다\n' });
-        return;
+    // 확인 창을 기다리는 동안 두 번째 실행이 끼어들지 않게 자리를 먼저 잡아 둔다 (실행하지 못하고 끝나면 finally에서 푼다)
+    running = { pending: true };
+    let launched = false;
+    try {
+      if (typeof line !== 'string' || line.length > 4000) return { ok: false, error: '명령이 너무 깁니다' };
+      const exe = gitPath();
+      if (!exe) return { ok: false, error: 'git을 찾지 못했습니다' };
+      const cmd = checkCommand(line);
+      if (!cmd.ok) return cmd;
+      if (cmd.danger) {
+        const win = getWin();
+        const { response } = await dialog.showMessageBox(win, {
+          type: 'warning',
+          buttons: ['실행', '취소'],
+          defaultId: 1,
+          cancelId: 1,
+          title: 'git 명령 확인',
+          message: `${cmd.danger}. 실행할까요?`,
+          detail: `${line.trim()}\n\n폴더: ${root}`,
+        });
+        if (response !== 0) return { ok: false, error: '취소했습니다', cancelled: true };
       }
-      send('git:output', { stream, text: maskOutput(buf.toString('utf8'), PATTERNS) });
-    };
-    child.stdout.on('data', onData('out'));
-    child.stderr.on('data', onData('err'));
-    const limit = NETWORK.has(cmd.args[0]) ? 120000 : 60000;
-    const timer = setTimeout(() => {
-      send('git:output', { stream: 'info', text: `\n시간 제한(${limit / 1000}초)을 넘어 멈췄습니다\n` });
-      killTree(child);
-    }, limit);
-    running = { child, timer };
-    return new Promise((resolve) => {
-      const finish = (code, error) => {
-        clearTimeout(timer);
-        running = null;
-        send('git:done', { code, ms: Date.now() - started, error });
-        resolve({ ok: true, code, error });
+
+      const started = Date.now();
+      const child = spawn(exe, [...FORCED_PREFIX, ...cmd.args], {
+        cwd: root,
+        env: { ...process.env, ...FORCED_ENV },
+        windowsHide: true,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let size = 0;
+      let cut = false;
+      // 스트림마다 줄 단위로 모아 가린다 (조각 경계의 한글·토큰이 깨지거나 새지 않게)
+      const maskers = { out: createLineMasker(PATTERNS), err: createLineMasker(PATTERNS) };
+      const onData = (stream) => (buf) => {
+        if (cut) return;
+        size += buf.length;
+        if (size > MAX_OUTPUT) {
+          cut = true;
+          send('git:output', { stream: 'info', text: '\n… 출력이 2MB를 넘어 나머지는 보이지 않습니다\n' });
+          return;
+        }
+        const text = maskers[stream].push(buf);
+        if (text) send('git:output', { stream, text });
       };
-      child.on('error', (err) => finish(null, err.message));
-      child.on('close', (code) => finish(code));
-    });
+      child.stdout.on('data', onData('out'));
+      child.stderr.on('data', onData('err'));
+      const limit = NETWORK.has(cmd.args[0]) ? 120000 : 60000;
+      const timer = setTimeout(() => {
+        send('git:output', { stream: 'info', text: `\n시간 제한(${limit / 1000}초)을 넘어 멈췄습니다\n` });
+        killTree(child);
+      }, limit);
+      running = { child, timer };
+      launched = true;
+      return new Promise((resolve) => {
+        const finish = (code, error) => {
+          clearTimeout(timer);
+          running = null;
+          // 줄바꿈 없이 남은 마지막 글자도 가려서 내보낸다
+          if (!cut) {
+            for (const stream of ['out', 'err']) {
+              const text = maskers[stream].end();
+              if (text) send('git:output', { stream, text });
+            }
+          }
+          send('git:done', { code, ms: Date.now() - started, error });
+          resolve({ ok: true, code, error });
+        };
+        child.on('error', (err) => finish(null, err.message));
+        child.on('close', (code) => finish(code));
+      });
+    } finally {
+      if (!launched) running = null;
+    }
   });
 
   // 중지 버튼
   ipcMain.handle('git:stop', () => {
-    if (!running) return false;
+    if (!running?.child) return false; // 확인 창을 기다리는 중(아직 실행 전)이면 멈출 것이 없다
     send('git:output', { stream: 'info', text: '\n중지했습니다\n' });
     killTree(running.child);
     return true;
@@ -177,7 +195,7 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
     }
   });
 
-  return { stop: () => running && killTree(running.child) };
+  return { stop: () => running?.child && killTree(running.child) };
 }
 
 module.exports = { setupGitConsole, resolveExe, killTree };

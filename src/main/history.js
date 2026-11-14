@@ -24,4 +24,5 @@ function init(userDataDir) {
   history.load(Array.isArray(data) ? data : []);
 }
 
+// flush(): 미뤄 둔 저장을 바로 한다 (앱을 끌 때 main.js가 부른다). writeJson은 동기 쓰기다.
 module.exports = { init, ...history };

@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { StringDecoder } = require('string_decoder');
 const { dialog } = require('electron');
 const R = require('./test-rules');
 const { killTree } = require('./gitconsole');
@@ -59,7 +60,9 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
       let out = '';
       let size = 0;
       let cut = false;
-      const onData = (buf) => {
+      // 스트림마다 따로 풀어 조각 경계에 걸린 한글(UTF-8 여러 바이트)이 깨지지 않게 한다
+      const decoders = [new StringDecoder('utf8'), new StringDecoder('utf8')];
+      const onData = (decoder) => (buf) => {
         if (cut) return;
         size += buf.length;
         if (size > R.MAX_OUTPUT) {
@@ -67,10 +70,10 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
           out += '\n… 출력이 2MB를 넘어 나머지는 보이지 않습니다\n';
           return;
         }
-        out += buf.toString('utf8');
+        out += decoder.write(buf);
       };
-      child.stdout.on('data', onData);
-      child.stderr.on('data', onData);
+      child.stdout.on('data', onData(decoders[0]));
+      child.stderr.on('data', onData(decoders[1]));
       let timedOut = false;
       const timer = setTimeout(() => {
         timedOut = true;
@@ -79,6 +82,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
       const finish = (code, error) => {
         clearTimeout(timer);
         running = null;
+        if (!cut) for (const d of decoders) out += d.end();
         const output = maskOutput(out, PATTERNS);
         resolve({
           ok: !error && !timedOut && !run.stopped && code === 0,
@@ -130,40 +134,40 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
 
   ipcMain.handle('devtest:trial', async (_e, rawChanges) => {
     if (busy) return { ok: false, error: '이미 테스트를 실행하고 있습니다' };
-    const changes = R.checkTrialChanges(rawChanges);
-    if (!changes) return { ok: false, error: '테스트할 수정안이 올바르지 않습니다' };
-    const info = await scriptInfo();
-    if (!info.ok) return info;
-
-    const scripts = [info.pre && `pretest: ${info.pre}`, `test: ${info.script}`, info.post && `posttest: ${info.post}`].filter(Boolean);
-    // 수정안이 실행 방식(package.json의 test 등 · 실행 영향 파일)을 바꾸면 "적용 후"에는 그것이 돈다 — 확인 창에 따로 보여 준다
-    const withBefore = [];
-    for (const c of changes) {
-      const r = await project.readFile(c.path, { maxBytes: 5 * 1024 * 1024 }).catch(() => ({ missing: true }));
-      withBefore.push({ ...c, before: r.missing ? null : typeof r.text === 'string' ? r.text : null });
-    }
-    const warn = R.trialWarnings(withBefore, executionRisk);
-    const warnText = [
-      ...(warn.scriptLines.length ? ['', '⚠ 수정안이 테스트 스크립트를 바꿉니다 — "적용 후" 실행에서는 바뀐 스크립트가 돕니다:', ...warn.scriptLines] : []),
-      ...(warn.riskLines.length ? ['', '⚠ 실행에 영향을 주는 파일이 들어 있습니다:', ...warn.riskLines] : []),
-    ].join('\n');
-    const { response } = await dialog.showMessageBox(getWin(), {
-      type: 'warning',
-      buttons: ['테스트 실행', '취소'],
-      defaultId: 0,
-      cancelId: 1,
-      title: '테스트 실행 확인',
-      message: '이 PC에서 프로젝트의 테스트를 실행합니다',
-      detail:
-        `${scripts.join('\n')}\n\n` +
-        `1) 지금 파일 그대로 실행 → 2) 체크한 수정안 ${changes.length}개 파일을 잠깐 써 두고 실행 → 3) 원래 파일로 되돌림\n` +
-        `AI가 고친 코드(테스트 코드 포함)가 실제로 실행됩니다. 시간 제한 ${R.TEST_TIMEOUT_MS / 60000}분.${warnText ? `\n${warnText}` : ''}\n\n폴더: ${root()}`,
-    });
-    if (response !== 0) return { ok: false, error: '취소했습니다', cancelled: true };
-
-    busy = true;
-    const backup = [];
+    busy = true; // 확인 창·파일 읽기를 기다리는 동안 두 번째 실행이 끼어들지 않게 바로 잡아 둔다 (취소·오류에서도 finally가 푼다)
     try {
+      const changes = R.checkTrialChanges(rawChanges);
+      if (!changes) return { ok: false, error: '테스트할 수정안이 올바르지 않습니다' };
+      const info = await scriptInfo();
+      if (!info.ok) return info;
+
+      const scripts = [info.pre && `pretest: ${info.pre}`, `test: ${info.script}`, info.post && `posttest: ${info.post}`].filter(Boolean);
+      // 수정안이 실행 방식(package.json의 test 등 · 실행 영향 파일)을 바꾸면 "적용 후"에는 그것이 돈다 — 확인 창에 따로 보여 준다
+      const withBefore = [];
+      for (const c of changes) {
+        const r = await project.readFile(c.path, { maxBytes: 5 * 1024 * 1024 }).catch(() => ({ missing: true }));
+        withBefore.push({ ...c, before: r.missing ? null : typeof r.text === 'string' ? r.text : null });
+      }
+      const warn = R.trialWarnings(withBefore, executionRisk);
+      const warnText = [
+        ...(warn.scriptLines.length ? ['', '⚠ 수정안이 테스트 스크립트를 바꿉니다 — "적용 후" 실행에서는 바뀐 스크립트가 돕니다:', ...warn.scriptLines] : []),
+        ...(warn.riskLines.length ? ['', '⚠ 실행에 영향을 주는 파일이 들어 있습니다:', ...warn.riskLines] : []),
+      ].join('\n');
+      const { response } = await dialog.showMessageBox(getWin(), {
+        type: 'warning',
+        buttons: ['테스트 실행', '취소'],
+        defaultId: 0,
+        cancelId: 1,
+        title: '테스트 실행 확인',
+        message: '이 PC에서 프로젝트의 테스트를 실행합니다',
+        detail:
+          `${scripts.join('\n')}\n\n` +
+          `1) 지금 파일 그대로 실행 → 2) 체크한 수정안 ${changes.length}개 파일을 잠깐 써 두고 실행 → 3) 원래 파일로 되돌림\n` +
+          `AI가 고친 코드(테스트 코드 포함)가 실제로 실행됩니다. 시간 제한 ${R.TEST_TIMEOUT_MS / 60000}분.${warnText ? `\n${warnText}` : ''}\n\n폴더: ${root()}`,
+      });
+      if (response !== 0) return { ok: false, error: '취소했습니다', cancelled: true };
+
+      const backup = [];
       const before = await runOnce(info.npmCli, 'before', info.nodeExe);
       if (before.stopped) return { ok: true, script: info.script, before, after: null };
 

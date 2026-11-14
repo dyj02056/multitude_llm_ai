@@ -160,4 +160,36 @@ function maskOutput(text, patterns = []) {
   return s;
 }
 
-module.exports = { SUBCOMMANDS, splitArgs, checkCommand, FORCED_PREFIX, FORCED_ENV, maskOutput };
+const MAX_PENDING_LINE = 64 * 1024; // 줄바꿈 없이 이만큼 쌓이면 그냥 내보낸다
+
+/**
+ * 출력 조각(Buffer)을 줄 단위로 모아 가려 주는 도우미 (스트림마다 하나씩).
+ * 조각 경계에 걸린 한글(UTF-8 여러 바이트)이 깨지지 않게 StringDecoder로 풀고,
+ * 조각 경계에 걸린 토큰도 가려지도록 완성된 줄(\n 또는 \r까지)만 가려서 내보낸다. 남은 끝 줄은 end()에서 내보낸다.
+ * → { push(buf): 가린 글자(없으면 ''), end(): 남은 글자를 가려서 }
+ */
+function createLineMasker(patterns = []) {
+  const { StringDecoder } = require('string_decoder');
+  const decoder = new StringDecoder('utf8');
+  let pending = '';
+  return {
+    push(buf) {
+      const text = pending + decoder.write(buf);
+      const cut = Math.max(text.lastIndexOf('\n'), text.lastIndexOf('\r')) + 1;
+      if (!cut && text.length < MAX_PENDING_LINE) {
+        pending = text;
+        return '';
+      }
+      const done = cut ? text.slice(0, cut) : text;
+      pending = cut ? text.slice(cut) : '';
+      return maskOutput(done, patterns);
+    },
+    end() {
+      const text = pending + decoder.end();
+      pending = '';
+      return text ? maskOutput(text, patterns) : '';
+    },
+  };
+}
+
+module.exports = { SUBCOMMANDS, splitArgs, checkCommand, FORCED_PREFIX, FORCED_ENV, maskOutput, createLineMasker };

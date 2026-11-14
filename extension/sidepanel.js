@@ -470,25 +470,31 @@
     }
     sending = true;
     $('#spSend').disabled = true;
-    hint(`보내는 중… (${ids.length}개)`);
-    const tpl = currentTemplate();
-    const asked = SP.applyTemplate(text, tpl, PL);
-    const hid = sideHistory.add({
-      question: text,
-      targets: ids,
-      files: useCtx ? [{ name: 'page.md', size: ctx.text.length }] : [],
-      source: 'side',
-      page: useCtx ? { title: ctx.title, url: ctx.url } : undefined,
-    });
-    const results = await Promise.all(ids.map((id) => sendOne(id, asked, useCtx ? ctx : null, hid)));
-    sending = false;
-    $('#spSend').disabled = false;
-    const bad = results.filter((r) => !r.ok);
-    if (!bad.length) {
-      $('#spPrompt').value = '';
-      const how = results.map((r) => r.how).find(Boolean);
-      hint(`보냄 → ${ids.map((id) => svcOf(id).name).join(' · ')}${how ? ` · ${how}` : useCtx ? '' : ' · 페이지 없이 (Alt+Shift+S로 가져오기)'}`, useCtx || how ? 'ok' : 'error');
-    } else hint(bad.map((r) => `${svcOf(r.id).name}: ${r.error}`).join(' · '), 'error');
+    // 중간에 오류가 나도 보내기 버튼이 잠긴 채로 남지 않게 한다
+    try {
+      hint(`보내는 중… (${ids.length}개)`);
+      const tpl = currentTemplate();
+      const asked = SP.applyTemplate(text, tpl, PL);
+      const hid = sideHistory.add({
+        question: text,
+        targets: ids,
+        files: useCtx ? [{ name: 'page.md', size: ctx.text.length }] : [],
+        source: 'side',
+        page: useCtx ? { title: ctx.title, url: ctx.url } : undefined,
+      });
+      const results = await Promise.all(ids.map((id) => sendOne(id, asked, useCtx ? ctx : null, hid)));
+      const bad = results.filter((r) => !r.ok);
+      if (!bad.length) {
+        $('#spPrompt').value = '';
+        const how = results.map((r) => r.how).find(Boolean);
+        hint(`보냄 → ${ids.map((id) => svcOf(id).name).join(' · ')}${how ? ` · ${how}` : useCtx ? '' : ' · 페이지 없이 (Alt+Shift+S로 가져오기)'}`, useCtx || how ? 'ok' : 'error');
+      } else hint(bad.map((r) => `${svcOf(r.id).name}: ${r.error}`).join(' · '), 'error');
+    } catch (err) {
+      hint(err?.message || String(err), 'error');
+    } finally {
+      sending = false;
+      $('#spSend').disabled = false;
+    }
   }
 
   async function sendOne(id, text, pageCtx, hid) {

@@ -65,6 +65,9 @@ function buildFiles() {
 /** Electron 화면(index.html)을 확장 프로그램 탭용으로 바꾼다: CSP에 iframe 허용, 공통 모듈·host.js 추가. */
 // index.html을 확장용 app.html로 바꿉니다: 파일 경로를 lib/… 로, 확장 전용 스크립트(host.js 등)를 끼워 넣음.
 // 주의: 여기서 찾는 글자가 index.html에서 바뀌면 조립이 실패합니다 (스크립트 줄 등).
+// 확장 화면 CSP connect-src에 더하는 이 PC 주소 (로컬 LLM 패널)
+const LOCAL_CONNECT_SRC = ['http://localhost:*', 'https://localhost:*', 'http://127.0.0.1:*', 'https://127.0.0.1:*'];
+
 function buildAppHtml(html) {
   const replace = (from, to) => {
     if (!html.includes(from)) throw new Error(`src/renderer/index.html에서 "${from}"을 찾지 못했습니다`);
@@ -75,7 +78,9 @@ function buildAppHtml(html) {
     `content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; ` +
       // iframe은 서비스 도메인만 (다른 사이트는 이 탭 안에 뜨지 않게)
       `frame-src ${[...new Set(SERVICES.flatMap((s) => s.hosts))].map((h) => `https://${h}`).join(' ')}; ` +
-      `connect-src https://raw.githubusercontent.com"`,
+      // 로컬 LLM 패널(host.js)이 이 PC의 OpenAI 호환 서버(Ollama · LM Studio 등)에 묻는다 — 주소 검사는 local-llm.js normalizeBaseUrl과 같게 (http(s), 포트 아무거나).
+      // [::1]은 CSP 주소 문법에 IPv6 표기가 없어 넣을 수 없다 (넣으면 무시되거나 경고) → [::1] 주소는 확장에서 막힌다.
+      `connect-src https://raw.githubusercontent.com ${LOCAL_CONNECT_SRC.join(' ')}"`,
   );
   replace('<link rel="stylesheet" href="styles.css" />', [
     '<link rel="stylesheet" href="lib/renderer/styles.css" />',

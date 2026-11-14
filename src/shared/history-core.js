@@ -23,7 +23,18 @@
 
     function changed() {
       clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => save(records), SAVE_DELAY_MS);
+      saveTimer = setTimeout(() => {
+        saveTimer = null;
+        save(records);
+      }, SAVE_DELAY_MS);
+    }
+
+    /** 기다리는 저장이 있으면 바로 저장한다 (앱을 끌 때 마지막 0.5초 안의 변경을 잃지 않게). 없으면 아무것도 안 함 */
+    function flush() {
+      if (!saveTimer) return;
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      save(records);
     }
 
     function load(data) {
@@ -148,7 +159,7 @@
       changed();
     }
 
-    return { load, add, setAnswer, addSynth, list, get, stats, remove, clear, all };
+    return { load, add, setAnswer, addSynth, list, get, stats, remove, clear, all, flush };
   }
 
   return { createHistory };
