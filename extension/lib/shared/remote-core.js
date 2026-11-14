@@ -21,7 +21,7 @@
   // 키가 들어 있으면 받은 파일 바이트 그대로에 맞는 서명이 있을 때만 적용한다 —
   // GitHub 계정·저장소가 털려도 개인 키 없이는 셀렉터를 바꿀 수 없게.
   // 이 줄은 scripts/selectors-keygen.js가 그대로 찾아 바꾼다 (모양을 바꾸지 말 것).
-  const SELECTORS_PUBLIC_KEY = '';
+  const SELECTORS_PUBLIC_KEY = 'PzJTDLNFvJg3IZjz3cWMXtxPzeklRUcc8TOsfNBsXGI=';
   const SIG_URL = DEFAULT_URL + '.sig';
   const SIG_ERROR = '서명이 맞지 않습니다';
 

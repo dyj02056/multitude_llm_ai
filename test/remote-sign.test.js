@@ -27,10 +27,17 @@ const BYTES = Buffer.from('{"version":3,"services":{"chatgpt":{"input":["#remote
 const nodeV = core.nodeVerifier(crypto);
 
 test('공개 키가 비어 있으면 확인하지 않음 (예전 동작)', () => {
-  assert.equal(core.SELECTORS_PUBLIC_KEY, ''); // 저장소에는 아직 키가 없다 (주인이 keygen으로 넣는다)
-  assert.deepEqual(core.verify(BYTES, '', nodeV), { ok: true, unsigned: true });
+  assert.deepEqual(core.verify(BYTES, '', nodeV, ''), { ok: true, unsigned: true });
   assert.deepEqual(core.verify(BYTES, 'garbage', nodeV, ''), { ok: true, unsigned: true });
   assert.equal(core.SIG_URL, `${core.DEFAULT_URL}.sig`);
+});
+
+test('앱에 든 공개 키로 저장소의 selectors.json과 .sig가 맞는다 (selectors.json을 고치고 다시 서명하지 않으면 여기서 실패)', () => {
+  assert.equal(Buffer.from(core.SELECTORS_PUBLIC_KEY, 'base64').length, 32); // Ed25519 공개 키 32바이트
+  // Windows 체크아웃은 CRLF일 수 있다 → GitHub에 올라간 LF 모습으로 바꿔 확인
+  const bytes = committedBytes(fs.readFileSync(path.join(REPO, 'remote', 'selectors.json')), true);
+  const sig = fs.readFileSync(path.join(REPO, 'remote', 'selectors.json.sig'), 'utf8');
+  assert.deepEqual(core.verify(bytes, sig, nodeV), { ok: true });
 });
 
 test('맞는 서명 → 통과, 바뀐 바이트 · 다른 키 · 서명 없음 · 깨진 서명 → 실패', () => {
@@ -111,7 +118,10 @@ test('서명 스크립트: 만든 서명이 확인을 통과, 짝이 아닌 키 
 test('키 만들기: 저장소 안 · 이미 있는 키는 거절, 공개 키 줄을 정확히 바꿈 (임시 복사본)', () => {
   const dir = tmpDir();
   const coreFile = path.join(dir, 'remote-core.js');
-  const original = fs.readFileSync(path.join(REPO, 'src', 'shared', 'remote-core.js'), 'utf8');
+  // 저장소의 remote-core.js에는 이미 진짜 공개 키가 들어 있다 (v0.23.1) → 키를 넣기 전 모습(빈 자리)으로 되돌린 복사본으로 시험
+  const original = fs
+    .readFileSync(path.join(REPO, 'src', 'shared', 'remote-core.js'), 'utf8')
+    .replace(/^  const SELECTORS_PUBLIC_KEY = '[^']*';$/m, "  const SELECTORS_PUBLIC_KEY = '';");
   fs.writeFileSync(coreFile, original);
 
   assert.throws(() => keygen.generate({ keyPath: path.join(REPO, 'remote', 'k.pem'), coreFile }), /저장소 안/);
