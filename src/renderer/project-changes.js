@@ -21,14 +21,14 @@
   async function currentText(path) {
     const r = await host.project.readFile(path, { maxBytes: 5 * 1024 * 1024 });
     if (r.missing) return null;
-    if (typeof r.text !== 'string') throw new Error(r.binary ? '바이너리 파일' : '파일이 너무 큽니다');
+    if (typeof r.text !== 'string') throw new Error(r.binary ? t('project.read.binary') : t('project.read.tooBig'));
     return r.text;
   }
 
   /** 앱 내장 제외(L1) 경로(.env, .git, node_modules 등)는 쓰지 않는다 */
   const writeBlocked = (path) => {
     const r = project.scan.matcher.classify(path, false);
-    return r && r.layer === 'L1' ? `앱 내장 제외 경로라 쓰지 않습니다 (${PI.describe(r)})` : null;
+    return r && r.layer === 'L1' ? t('project.changes.writeBlocked', { why: PI.describe(r) }) : null;
   };
 
   /** 답변 하나의 수정안을 찾고, 지금 파일에 적용하면 어떻게 되는지 미리 계산합니다. [{ change, plan }] */
@@ -58,14 +58,25 @@
     return out;
   }
 
-  const OP_TEXT = { modify: '수정', create: '새 파일', delete: '삭제' };
+  // 화면 이름 — 부를 때 사전에서 (OP_TEXT[op])
+  const OP_TEXT = {
+    get modify() {
+      return t('project.op.modify');
+    },
+    get create() {
+      return t('project.op.create');
+    },
+    get delete() {
+      return t('project.op.delete');
+    },
+  };
 
   // ---------- 패널 변경 바 ----------
   // 프로젝트가 열려 있고 답변에 수정안이 있으면 그 패널 아래에 바를 띄운다: 바뀌는 파일 요약과 [적용] 한 번.
   // [적용]은 미리보기 창에서 기본으로 체크되는 파일(실행 영향·삭제가 아닌 것)만 바로 쓴다. 나머지는 [변경 보기]에서 골라 적용.
   // 적용하면 바가 "적용됨 · 되돌리기"로 바뀐다. 새 질문을 보내거나 새 대화를 열면 바를 내린다 (renderer.js setChangeBar).
 
-  const SAME_TEXT = '바뀌는 내용이 없습니다'; // planChange: 이미 적용된 수정안
+  const sameText = () => t('project.patch.noChange'); // planChange: 이미 적용된 수정안
   const bars = new Map(); // 패널 id -> { ai: { id, name, color, plans }, applied: 적용 기록 항목 | null }
 
   /** 확인 없이 바로 써도 되는 수정안인지 (미리보기 창의 기본 체크와 같은 기준) */
@@ -103,7 +114,7 @@
     renderBar(id);
     // 계획이 오면 바로 시작 (v0.22.0) — 사이트가 다음 질문을 받을 준비가 되도록 잠깐 둔다
     if (project.autoRun) {
-      notice(`계획: 파일 ${planned.length}개 — 바로 한 파일씩 받기 시작합니다`);
+      notice(t('project.split.planStart', { n: planned.length }));
       setTimeout(() => {
         const run = runs.get(id);
         if (!run || run.status !== 'offer') return; // 그사이 버렸거나 직접 시작함
@@ -121,7 +132,7 @@
     saveState(); // 어디까지 받았는지 적어 둔다 (v0.28.0 — 앱을 다시 켜도 이어서 계속)
     const res = await host.sendFollowUp(id, PC.stepPrompt(run.files[run.index], run.index, run.files.length));
     if (!res?.ok) {
-      notice(`보내지 못해 파일별로 받기를 멈춥니다: ${res?.error || '알 수 없는 오류'}`);
+      notice(t('project.split.sendStopped', { error: res?.error || t('project.unknownError') }));
       return finishRun(id);
     }
     renderBar(id);
@@ -146,7 +157,7 @@
     const got = run.files.filter((f) => run.changes.has(f.path)).length;
     bars.set(id, { ai: { id, name: svc?.name || id, color: svc?.color, plans }, applied: null, split: { got, total: run.files.length } });
     renderBar(id);
-    notice(`파일별로 받기 끝: ${got}/${run.files.length}개 받음 — 바에서 미리 보고 적용하세요`);
+    notice(t('project.split.done', { got, total: run.files.length }));
     // 되살린 진행이면: 앱을 다시 켜기 전에 받은 파일은 이 묶음에 없다 (내용은 저장하지 않으므로)
     const missed = (run.prevGot || []).filter((p) => !run.changes.has(p));
     if (missed.length) setTimeout(() => notice(t('restore.prevGot', { files: missed.join(', ') })), 2500);
@@ -178,7 +189,7 @@
         run.status = 'running';
         sendStep(id);
       });
-      const drop = button('✕', '계획을 버립니다 (파일별로 받지 않음)', () => {
+      const drop = button('✕', t('project.split.dropTitle'), () => {
         runs.delete(id);
         setChangeBar(id, false);
         saveState();
@@ -187,14 +198,14 @@
       bar.replaceChildren(span('cb-icon', '»'), text, again, go, drop);
     } else if (run.status === 'offer') {
       const text = span('cb-text', '');
-      text.append(span('cb-count', `계획: 파일 ${total}개`), span('cb-files', ` · ${run.files.map((f) => f.path).join(', ')}`));
-      text.title = `AI가 고칠 파일 목록(계획)을 보냈습니다:\n${list}\n\n"파일별로 받기 시작"을 누르면 한 파일씩 차례로 물어 모읍니다.`;
-      const start = button('▶ 파일별로 받기 시작', `${total}개 파일을 한 파일씩 차례로 받습니다`, () => {
+      text.append(span('cb-count', t('project.split.planCount', { n: total })), span('cb-files', ` · ${run.files.map((f) => f.path).join(', ')}`));
+      text.title = t('project.split.planTitle', { list });
+      const start = button(t('project.split.start'), t('project.split.startTitle', { n: total }), () => {
         run.status = 'running';
         sendStep(id);
       });
       start.className = 'cb-apply';
-      const drop = button('✕', '계획을 버립니다 (파일별로 받지 않음)', () => {
+      const drop = button('✕', t('project.split.dropTitle'), () => {
         runs.delete(id);
         setChangeBar(id, false);
       });
@@ -203,13 +214,13 @@
     } else {
       const cur = run.files[Math.min(run.index, total - 1)];
       const text = span('cb-text', '');
-      text.append(span('cb-count', `파일별로 받는 중 ${Math.min(run.index + 1, total)}/${total}`), span('cb-files', ` · ${cur.path}${run.skip ? ' (건너뜀 — 답이 끝나면 다음으로)' : ''}`));
-      text.title = `${list}\n\n받은 파일: ${[...run.changes.keys()].join(', ') || '없음'}`;
-      const skip = button('건너뛰기', '이 파일은 받지 않고, 지금 답이 끝나면 다음 파일로 넘어갑니다 (답이 오지 않으면 멈추기)', () => {
+      text.append(span('cb-count', t('project.split.progress', { i: Math.min(run.index + 1, total), total })), span('cb-files', ` · ${cur.path}${run.skip ? t('project.split.skipped') : ''}`));
+      text.title = `${list}\n\n${t('project.split.received', { list: [...run.changes.keys()].join(', ') || t('project.split.none') })}`;
+      const skip = button(t('project.split.skip'), t('project.split.skipTitle'), () => {
         run.skip = true;
         renderBar(id);
       });
-      const stop = button('멈추기', '여기까지 받은 수정안으로 바를 그립니다', () => finishRun(id));
+      const stop = button(t('project.split.stop'), t('project.split.stopTitle'), () => finishRun(id));
       bar.replaceChildren(span('cb-icon', '…'), text, skip, stop);
     }
     setChangeBar(id, true);
@@ -225,19 +236,19 @@
     const b = bars.get(id);
     const item = b?.ai.plans.find((x) => x.change.path === path);
     const cont = item && PX.continuationOf(item.change);
-    if (!cont) return notice('이 수정안은 이어 받을 수 없습니다 — 변경 제안에서 다시 요청하세요');
+    if (!cont) return notice(t('project.cont.cannot'));
     const rounds = (b.continued?.path === path ? b.continued.rounds : 0) + 1;
     if (rounds > PX.MAX_CONTINUE) {
-      const msg = `${path}은(는) 이미 ${PX.MAX_CONTINUE}번 이어 받았습니다. 변경 제안에서 "다시 요청"으로 받으세요 (긴 파일은 바꿀 곳만 찾기/바꾸기로).`;
+      const msg = t('project.cont.maxed', { path, n: PX.MAX_CONTINUE });
       return auto ? notice(msg) : alert(msg);
     }
     if (auto && continuing.has(id)) return; // 이미 이어 받는 중
     if (!allowedFor(id)) return;
     const res = await host.sendFollowUp(id, PX.continuePrompt(cont));
-    if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
+    if (!res?.ok) return alert(t('project.sendFailed', { error: res?.error || t('project.unknownError') }));
     continuing.set(id, { path, cont, changes: b.ai.plans.map((x) => x.change), rounds });
     saveState(); // 이어 받는 중이라는 것만 적어 둔다 (v0.28.0)
-    notice(`${b.ai.name}에게 ${path}의 나머지를 부탁했습니다 (${rounds}/${PX.MAX_CONTINUE}) — 답이 끝나면 이어 붙입니다`);
+    notice(t('project.cont.asked', { ai: b.ai.name, path, i: rounds, n: PX.MAX_CONTINUE }));
   }
 
   async function finishContinue(id, md) {
@@ -253,7 +264,7 @@
     const plans = await planChanges([...byPath.values()]);
     bars.set(id, { ai: { id, name: svc?.name || id, color: svc?.color, plans }, applied: null, continued: { path: st.path, rounds: st.rounds, error: r.error || null } });
     renderBar(id);
-    notice(r.error ? `이어 붙이지 못했습니다: ${r.error}` : `${st.path}을(를) 이어 붙였습니다${r.change.truncated ? ' — 아직 끝나지 않아 한 번 더 이어 받을 수 있습니다' : ''}`);
+    notice(r.error ? t('project.cont.failed', { error: r.error }) : t('project.cont.joined', { path: st.path }) + (r.change.truncated ? t('project.cont.notYet') : ''));
   }
 
   /** 적용하거나 되돌린 뒤: 아직 적용하지 않은 다른 패널의 바를 지금 파일 기준으로 다시 계산한다 */
@@ -274,7 +285,7 @@
       return false;
     }
     const bar = p.changeBar;
-    const close = button('✕', '변경 바 닫기 (수정안은 변경 제안 화면에서 다시 볼 수 있습니다)', () => {
+    const close = button('✕', t('project.bar.closeTitle'), () => {
       bars.delete(id);
       setChangeBar(id, false);
     });
@@ -282,12 +293,12 @@
 
     if (b.applied) {
       const { files } = b.applied;
-      const undo = button('되돌리기', '적용하기 전 내용으로 되돌립니다 (새로 만든 파일은 지웁니다)', async () => {
+      const undo = button(t('project.undo'), t('project.undoTitleNew'), async () => {
         undo.disabled = true;
         await revert(b.applied);
         undo.disabled = false;
       });
-      const text = span('cb-text', `${files.length}개 파일 적용됨 · ${files.map((f) => f.path).join(', ')}`);
+      const text = span('cb-text', t('project.bar.applied', { n: files.length, list: files.map((f) => f.path).join(', ') }));
       text.title = files.map((f) => f.path).join('\n');
       bar.className = 'change-bar applied';
       // 적용 후 커밋 (v0.28.0, Windows 앱): 설정 "적용 후 커밋 제안"이 켜져 있으면 [커밋하기] — 누를 때만 커밋 창을 연다
@@ -308,7 +319,7 @@
     const live = ai.plans.filter((x) => x.plan.ok);
     const quick = live.filter(isQuick);
     const look = live.filter((x) => !isQuick(x));
-    const bad = ai.plans.filter((x) => !x.plan.ok && x.plan.error !== SAME_TEXT);
+    const bad = ai.plans.filter((x) => !x.plan.ok && x.plan.error !== sameText());
     if (!live.length && !bad.length) {
       // 수정안이 없거나 이미 모두 적용된 내용
       bars.delete(id);
@@ -318,27 +329,27 @@
     const add = live.reduce((n, x) => n + x.plan.add, 0);
     const del = live.reduce((n, x) => n + x.plan.del, 0);
     const text = span('cb-text', '');
-    text.append(span('cb-count', live.length ? `파일 ${live.length}개 변경` : '적용할 수 있는 수정안 없음'));
+    text.append(span('cb-count', live.length ? t('project.bar.changed', { n: live.length }) : t('project.bar.nothing')));
     if (live.length) text.append(span('add', ` +${add}`), span('del', ` −${del}`), span('cb-files', ` · ${live.map((x) => x.plan.path).join(', ')}`));
     text.title = [
       sumLine(live),
-      look.length ? `\n확인 후 적용 (실행 영향 · 삭제 · 잘림/생략 의심):\n${sumLine(look)}${look.filter((x) => x.plan.suspect).map((x) => `\n  ${x.plan.path}: ${x.plan.suspect}`).join('')}` : '',
-      bad.length ? `\n적용 불가:\n${bad.map(({ plan }) => `${plan.path}: ${plan.error}`).join('\n')}` : '',
+      look.length ? `\n${t('project.bar.lookHead')}\n${sumLine(look)}${look.filter((x) => x.plan.suspect).map((x) => `\n  ${x.plan.path}: ${x.plan.suspect}`).join('')}` : '',
+      bad.length ? `\n${t('project.bar.badHead')}\n${bad.map(({ plan }) => `${plan.path}: ${plan.error}`).join('\n')}` : '',
     ]
       .filter(Boolean)
       .join('\n');
     const notes = [];
-    if (look.length) notes.push(span('cb-warn', `⚠ ${look.length}개 확인 필요`));
+    if (look.length) notes.push(span('cb-warn', t('project.bar.lookCount', { n: look.length })));
     const cut = bad.filter(({ plan }) => plan.truncated);
-    if (cut.length) notes.push(span('cb-bad', `✂ 답변이 잘림 ${cut.length}개`)); // 출력 한도로 끊긴 파일 (v0.16.1) — 적용하지 않음
-    if (bad.length > cut.length) notes.push(span('cb-bad', `${bad.length - cut.length}개 적용 불가`));
-    if (b.split) notes.push(span('cb-warn', `» 파일별로 받음 ${b.split.got}/${b.split.total}`));
-    if (b.continued) notes.push(span(b.continued.error ? 'cb-bad' : 'cb-warn', b.continued.error ? '이어 붙이지 못함' : `↪ 이어 받음 ${b.continued.rounds}번`));
+    if (cut.length) notes.push(span('cb-bad', t('project.bar.cutCount', { n: cut.length }))); // 출력 한도로 끊긴 파일 (v0.16.1) — 적용하지 않음
+    if (bad.length > cut.length) notes.push(span('cb-bad', t('project.bar.badCount', { n: bad.length - cut.length })));
+    if (b.split) notes.push(span('cb-warn', t('project.bar.splitCount', { got: b.split.got, total: b.split.total })));
+    if (b.continued) notes.push(span(b.continued.error ? 'cb-bad' : 'cb-warn', b.continued.error ? t('project.bar.contFailed') : t('project.bar.contCount', { n: b.continued.rounds })));
 
-    const collect = button('collect', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다 (파일에는 쓰지 않음)`, () => window.onCollectClick(id));
+    const collect = button('collect', t('project.bar.collectTitle', { ai: ai.name }), () => window.onCollectClick(id));
     const view = live.length
-      ? button('변경 보기', '파일마다 바뀌는 줄을 보고 골라서 적용합니다', () => openPreview(ai))
-      : button('변경 제안에서 보기', '변경 제안 화면에서 전체 파일 다시 요청 등을 할 수 있습니다', () => host.setView('changes'));
+      ? button(t('project.bar.view'), t('project.bar.viewTitle'), () => openPreview(ai))
+      : button(t('project.bar.viewChanges'), t('project.bar.viewChangesTitle'), () => host.setView('changes'));
     const btns = [collect, view];
     // 이어서 받기 (v0.17.1): 잘렸거나 끝이 잘린 것 같은 파일 — 같은 AI에게 끊긴 곳부터 나머지만 받아 이어 붙인다
     const contTarget = [...ai.plans].reverse().find(PX.wantsContinue);
@@ -351,16 +362,16 @@
       }
     }
     if (contTarget) {
-      const cont = button('↪ 이어서 받기', `${contTarget.plan.path}이(가) 끊겼습니다. ${ai.name}에게 끊긴 곳부터 나머지만 달라고 해서 이어 붙입니다`, () => continueFile(id, contTarget.change.path));
+      const cont = button(t('project.bar.continue'), t('project.bar.continueTitle', { path: contTarget.plan.path, ai: ai.name }), () => continueFile(id, contTarget.change.path));
       cont.className = 'cb-continue';
       btns.unshift(cont);
     }
     if (live.length) {
       const apply = button(
-        quick.length ? `적용 (${quick.length})` : '골라서 적용',
+        quick.length ? t('project.bar.applyN', { n: quick.length }) : t('project.bar.applyPick'),
         quick.length
-          ? `바로 씁니다:\n${sumLine(quick)}${look.length ? `\n\n확인이 필요한 ${look.length}개는 빼고 씁니다 — "변경 보기"에서 골라 적용` : ''}\n\n적용 전 원본은 되돌릴 수 있습니다`
-          : '실행 영향 파일·삭제만 있어 미리 보고 직접 골라야 합니다',
+          ? `${t('project.bar.quickHead')}\n${sumLine(quick)}${look.length ? `\n\n${t('project.bar.quickSkip', { n: look.length })}` : ''}\n\n${t('project.bar.quickUndo')}`
+          : t('project.bar.onlyLook'),
         () => (quick.length ? applyFromBar(id, apply) : openPreview(ai)),
       );
       apply.className = 'cb-apply';
@@ -377,7 +388,7 @@
     const b = bars.get(id);
     if (!b) return;
     btn.disabled = true;
-    btn.textContent = '적용 중…';
+    btn.textContent = t('project.bar.applying');
     try {
       await applyPlans(b.ai, b.ai.plans.filter(isQuick).map((x) => x.plan));
     } finally {
@@ -387,15 +398,15 @@
 
   window.renderChanges = async () => {
     const cols = $('#changesCols');
-    $('#changesLog').textContent = `적용 기록 (${project.log.filter((l) => !l.reverted).length})`;
+    $('#changesLog').textContent = t('project.log.button', { n: project.log.filter((l) => !l.reverted).length });
     $('#changesMix').disabled = true;
     if (!has()) {
       $('#changesInfo').textContent = '';
       cols.style.gridTemplateColumns = '1fr';
-      return cols.replaceChildren(span('change-empty', '프로젝트를 먼저 열어 주세요. 툴바의 "proj"로 폴더를 고르면 AI 답변의 코드 수정안을 여기서 비교하고 적용할 수 있습니다.'));
+      return cols.replaceChildren(span('change-empty', t('project.changes.noProject')));
     }
-    $('#changesInfo').textContent = `${project.info.name} — AI 답변에서 찾은 코드 수정안`;
-    cols.replaceChildren(span('change-empty', '답변을 읽는 중…'));
+    $('#changesInfo').textContent = t('project.changes.info', { name: project.info.name });
+    cols.replaceChildren(span('change-empty', t('project.changes.reading')));
     plansByAi = await planAll();
     $('#changesMix').disabled = !MLA.mixSelect.canMix(plansByAi); // 섞어서 적용 (v0.28.0): 수정안이 있는 AI가 둘 이상일 때
     cols.style.gridTemplateColumns = `repeat(${Math.max(plansByAi.length, 1)}, minmax(0, 1fr))`;
@@ -412,24 +423,24 @@
     const del = ok.reduce((n, x) => n + x.plan.del, 0);
     const head = document.createElement('div');
     head.className = 'compare-col-head';
-    head.append(span('dot ready'), span('name', ai.name), span('muted-label', ai.plans.length ? `파일 ${ai.plans.length}개 · +${add} −${del}` : '수정안 없음'));
+    head.append(span('dot ready'), span('name', ai.name), span('muted-label', ai.plans.length ? t('project.changes.count', { n: ai.plans.length, add, del }) : t('project.changes.none')));
     const list = document.createElement('div');
     list.className = 'change-list';
-    if (!ai.plans.length) list.append(span('change-empty', '이 답변에는 적용할 수정안("파일: 경로" 전체 내용 코드 블록, diff, DELETE_FILES)이 없습니다.'));
+    if (!ai.plans.length) list.append(span('change-empty', t('project.changes.emptyAnswer')));
     for (const { change, plan } of ai.plans) {
       const row = document.createElement('div');
       row.className = 'change-row';
-      const same = !plan.ok && plan.error === SAME_TEXT; // 이미 적용한 수정안
-      row.append(span(`op ${plan.ok ? plan.op : same ? 'same' : 'bad'}`, plan.ok ? OP_TEXT[plan.op] : same ? '✓ 적용됨' : '⚠ 적용 불가'), span('path', plan.path));
+      const same = !plan.ok && plan.error === sameText(); // 이미 적용한 수정안
+      row.append(span(`op ${plan.ok ? plan.op : same ? 'same' : 'bad'}`, plan.ok ? OP_TEXT[plan.op] : same ? t('project.changes.applied') : t('project.changes.cannot')), span('path', plan.path));
       const risk = plan.ok && PX.executionRisk(plan.path, plan.before, plan.after);
       if (risk) {
-        const tag = span('op bad', '⚠ 실행 영향');
-        tag.title = `${risk} — 적용 창에서 기본으로 체크하지 않습니다`;
+        const tag = span('op bad', t('project.changes.risk'));
+        tag.title = t('project.changes.notChecked', { why: risk });
         row.append(tag);
       }
       if (plan.ok && plan.suspect) {
-        const tag = span('op bad', '⚠ 잘림 · 생략?');
-        tag.title = `${plan.suspect} — 적용 창에서 기본으로 체크하지 않습니다`;
+        const tag = span('op bad', t('project.changes.suspect'));
+        tag.title = t('project.changes.notChecked', { why: plan.suspect });
         row.append(tag);
       }
       if (plan.ok) row.append(span('add', `+${plan.add}`), span('del', `−${plan.del}`));
@@ -438,16 +449,16 @@
         row.title = plan.error;
         row.append(err);
         if ((change.type === 'diff' || change.type === 'edit' || plan.truncated) && !change.isNew && !change.isDelete && !writeBlocked(change.path)) {
-          row.append(button('다시 요청', '현재 내용을 주고 다시 달라고 합니다 (긴 파일은 바꿀 곳만 찾기/바꾸기로)', () => refetch(ai, change.path)));
+          row.append(button(t('project.changes.refetch'), t('project.changes.refetchTitle'), () => refetch(ai, change.path)));
         }
       }
       list.append(row);
     }
     const foot = document.createElement('div');
     foot.className = 'change-foot';
-    const applyBtn = button('미리보기·적용', `${ai.name}의 수정안을 미리 보고 적용합니다`, () => openPreview(ai));
+    const applyBtn = button(t('project.changes.preview'), t('project.changes.previewTitle', { ai: ai.name }), () => openPreview(ai));
     applyBtn.disabled = !ok.length;
-    const collectBtn = button('모아보기', `${ai.name}의 수정안을 경로와 전체 코드로 모아 복사합니다`, () => window.onCollectClick(ai.id));
+    const collectBtn = button(t('project.collect.button'), t('project.collect.buttonTitle', { ai: ai.name }), () => window.onCollectClick(ai.id));
     collectBtn.disabled = !ai.plans.length;
     foot.append(applyBtn, collectBtn);
     col.append(head, list, foot);
@@ -462,15 +473,15 @@
     if (!allowedFor(ai.id)) return;
     try {
       const rule = project.scan.matcher.classify(path, false);
-      if (rule?.layer === 'L1') return alert(`${path}은(는) 앱 내장 제외 규칙에 걸린 파일이라 보낼 수 없습니다.\n(${PI.describe(rule)})`);
-      if (rule && !confirm(`${path}은(는) 제외 규칙에 걸린 파일입니다.\n(${PI.describe(rule)})\n\n현재 내용을 ${ai.name}에게 보내 전체 파일로 다시 받을까요?`)) return;
+      if (rule?.layer === 'L1') return alert(t('project.refetch.blocked', { path, why: PI.describe(rule) }));
+      if (rule && !confirm(t('project.refetch.excluded', { path, why: PI.describe(rule), ai: ai.name }))) return;
       const text = await currentText(path);
-      if (text === null) return alert('파일이 없습니다');
+      if (text === null) return alert(t('project.editor.noFile'));
       const hits = scanSecrets(text);
-      if (hits.length && !confirm(`${path}에 비밀 정보로 보이는 문자열이 있습니다:\n${describeSecrets(hits)}\n\n그래도 현재 내용을 ${ai.name}에게 보낼까요?`)) return;
+      if (hits.length && !confirm(t('project.refetch.secret', { path, list: describeSecrets(hits), ai: ai.name }))) return;
       const truncated = ai.plans.some((x) => x.plan.path === path && x.plan.truncated);
       const res = await sendProjectFollowUp(ai.id, PU.packRefetch({ path, text, mode: project.uploadMode, reason: truncated ? 'truncated' : 'diff' }));
-      if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error}`);
+      if (!res?.ok) return alert(t('project.sendFailed', { error: res?.error }));
       remember(ai.id, [{ path, text }]);
       host.setView('panels');
     } catch (err) {
@@ -561,7 +572,7 @@
         more = document.createElement('button');
         more.type = 'button';
         more.className = 'diff-more';
-        more.textContent = `더 보기 (남은 ${lines.length - shown}줄)`;
+        more.textContent = t('project.preview.more', { n: lines.length - shown });
         more.addEventListener('click', (e) => {
           e.preventDefault(); // 체크 상자가 있는 label 안에 있어도 체크가 바뀌지 않게
           next();
@@ -597,7 +608,7 @@
    */
   function openPreview(ai) {
     const ok = ai.plans.filter((x) => x.plan.ok);
-    modal.show(`${ai.name} 수정안 적용`, `${project.info.name} — 체크한 파일(덩어리)만 씁니다. 적용 전 원본은 "적용 기록"에서 파일 단위로 되돌릴 수 있습니다.`);
+    modal.show(t('project.preview.title', { ai: ai.name }), t('project.preview.note', { name: project.info.name }));
     const items = []; // { box, plan, hunks: [{ index, box }] | null }
     $('#patchBody').replaceChildren(
       ...ok.map(({ plan }) => {
@@ -612,19 +623,19 @@
         items.push(item);
         head.append(box, span(`op ${plan.op}`, OP_TEXT[plan.op]), span('path', plan.path));
         if (risk) {
-          const tag = span('op bad', `⚠ 실행 영향: ${risk}`);
-          tag.title = '저장하면 나중에 자동으로 실행될 수 있는 파일입니다. 내용을 확인한 뒤 직접 체크하세요.';
+          const tag = span('op bad', t('project.preview.risk', { why: risk }));
+          tag.title = t('project.preview.riskTitle');
           head.append(tag);
         }
         if (plan.suspect) {
           // 답이 잘렸거나 AI가 코드를 줄였을 수 있다 — 그대로 쓰면 그 부분이 지워진다 (v0.16.1)
           const tag = span('op bad', `⚠ ${plan.suspect}`);
-          tag.title = '전체 파일 교체인데 코드가 빠졌을 수 있습니다. −줄을 확인한 뒤 직접 체크하세요.';
+          tag.title = t('project.preview.suspectTitle');
           head.append(tag);
         }
-        if (plan.op === 'delete') head.append(span('op delete', '파일을 지웁니다 — 직접 체크해야 적용'));
+        if (plan.op === 'delete') head.append(span('op delete', t('project.preview.delete')));
         const hunks = plan.op === 'modify' && typeof plan.before === 'string' && typeof plan.after === 'string' ? PX.splitHunks(plan.before, plan.after) : [];
-        if (hunks.length > 1) head.append(span('op hunks', `덩어리 ${hunks.length}개`));
+        if (hunks.length > 1) head.append(span('op hunks', t('project.preview.hunks', { n: hunks.length })));
         head.append(span('add', `+${plan.add}`), span('del', `−${plan.del}`));
         pf.append(head);
         if (hunks.length > 1) {
@@ -634,7 +645,7 @@
             const hl = document.createElement('label');
             hl.className = 'pf-hunk-head';
             const hb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: box.checked });
-            hl.append(hb, span('muted-label', `덩어리 ${h.index + 1} · ${h.oldStart}번째 줄 근처`));
+            hl.append(hb, span('muted-label', t('project.preview.hunkAt', { i: h.index + 1, line: h.oldStart })));
             row.append(hl, hunkPre(h));
             pf.append(row);
             // 덩어리를 하나라도 고르면 파일도 체크, 모두 빼면 파일도 해제
@@ -672,12 +683,12 @@
         it.box.indeterminate = false;
         it.hunks?.forEach((x) => (x.box.checked = true));
       });
-    $('#patchApply').textContent = '선택한 파일 적용';
+    $('#patchApply').textContent = t('project.preview.applyChosen');
     $('#patchApply').focus(); // Enter(또는 Ctrl+Enter)로 바로 적용
     $('#patchApply').onclick = async () => {
-      if (testRunning) return ($('#patchStatus').textContent = '테스트가 끝난 뒤 적용하세요');
+      if (testRunning) return ($('#patchStatus').textContent = t('project.preview.waitTest'));
       const chosen = chosenPlans();
-      if (!chosen.length) return ($('#patchStatus').textContent = '적용할 파일을 고르세요');
+      if (!chosen.length) return ($('#patchStatus').textContent = t('project.preview.pickApply'));
       $('#patchApply').disabled = true;
       try {
         const { entry, text } = await applyPlans(ai, chosen);
@@ -734,11 +745,11 @@
         return;
       }
       const chosen = getChosen();
-      if (!chosen.length) return ($('#patchStatus').textContent = '테스트할 파일을 고르세요');
+      if (!chosen.length) return ($('#patchStatus').textContent = t('project.test.pick'));
       const scripts = picked();
       if (!scripts.length) return ($('#patchStatus').textContent = t('devtest.pickScript'));
       testRunning = true;
-      btn.textContent = '테스트 중지';
+      btn.textContent = t('project.test.stop');
       $('#patchApply').disabled = true;
       const out = $('#patchTestOut');
       out.hidden = false;
@@ -751,7 +762,7 @@
       } finally {
         testRunning = false;
         btn.disabled = false;
-        btn.textContent = '테스트 다시 실행';
+        btn.textContent = t('project.test.rerun');
         $('#patchApply').disabled = false;
       }
     };
@@ -778,7 +789,7 @@
     }, 900);
   }
 
-  const fmtMs = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}분 ${Math.round((ms % 60000) / 1000)}초` : `${(ms / 1000).toFixed(1)}초`);
+  const fmtMs = (ms) => (ms >= 60000 ? t('project.test.minSec', { m: Math.floor(ms / 60000), s: Math.round((ms % 60000) / 1000) }) : t('project.test.sec', { s: (ms / 1000).toFixed(1) }));
 
   /**
    * 검사 결과: 스크립트마다 한 줄 머리(이름 · 판정)와 적용 전 | 적용 후를 나란히 (상태 · 통과/실패 수 · 걸린 시간 · 출력).
@@ -786,7 +797,7 @@
    */
   function renderTestResult(box, r) {
     if (!r?.ok) {
-      box.replaceChildren(span(r?.cancelled ? 'muted-label' : 'test-err', r?.error || '테스트를 실행하지 못했습니다'));
+      box.replaceChildren(span(r?.cancelled ? 'muted-label' : 'test-err', r?.error || t('project.test.failedToRun')));
       return;
     }
     const col = (title, x) => {
@@ -796,27 +807,27 @@
       head.className = 'test-col-head';
       head.append(span('', title));
       if (!x) {
-        head.append(span('test-badge skip', '실행 안 함'));
+        head.append(span('test-badge skip', t('project.test.notRun')));
         c.append(head);
         return c;
       }
       const [cls, label] = x.stopped
-        ? ['skip', '중지함']
+        ? ['skip', t('project.test.stopped')]
         : x.timedOut
-          ? ['bad', '시간 초과']
+          ? ['bad', t('project.test.timeout')]
           : x.error
-            ? ['bad', '실행 오류']
+            ? ['bad', t('project.test.runError')]
             : x.ok
-              ? ['good', '통과']
-              : ['bad', `실패 (종료 코드 ${x.code})`];
+              ? ['good', t('project.test.pass')]
+              : ['bad', t('project.test.fail', { code: x.code })];
       head.append(span(`test-badge ${cls}`, label));
-      if (x.summary) head.append(span('muted-label', `통과 ${x.summary.pass} · 실패 ${x.summary.fail}`));
+      if (x.summary) head.append(span('muted-label', t('project.test.summary', { pass: x.summary.pass, fail: x.summary.fail })));
       if (x.ms) head.append(span('muted-label', fmtMs(x.ms)));
       c.append(head);
       if (x.error) c.append(span('test-err', x.error));
       const pre = document.createElement('pre');
       pre.className = 'test-output';
-      pre.textContent = x.output || '(출력 없음)';
+      pre.textContent = x.output || t('project.test.noOutput');
       c.append(pre);
       requestAnimationFrame(() => (pre.scrollTop = pre.scrollHeight)); // 요약이 있는 끝부분부터 보이게
       return c;
@@ -836,7 +847,7 @@
     head.append(
       span('muted-label', results.map((x) => x.name).join(' · ')),
       span(`test-badge ${bad ? 'bad' : results.every((x) => x.after?.ok) ? 'good' : 'skip'}`, bad ? t('devtest.sumBad', { n: bad }) : t('devtest.sumOk', { n: results.length })),
-      span('muted-label', '파일은 원래대로 되돌렸습니다'),
+      span('muted-label', t('project.test.restored')),
     );
     const restoreFailed = r.restoreFailed || r.after?.restoreFailed;
     const blocks = results.map((x) => {
@@ -848,11 +859,11 @@
       h.append(span('test-name', x.name === 'test' ? 'npm test' : `npm run ${x.name}`), span('muted-label', x.script ? `(${x.script})` : ''), span(`test-badge ${v[0]}`, v[1]));
       const cols = document.createElement('div');
       cols.className = 'test-cols';
-      cols.append(col('적용 전', x.before), col('적용 후 (체크한 수정안)', x.after));
+      cols.append(col(t('project.test.before'), x.before), col(t('project.test.after'), x.after));
       b.append(h, cols);
       return b;
     });
-    box.replaceChildren(head, ...(restoreFailed?.length ? [span('test-err', `원래 파일로 되돌리지 못했습니다: ${restoreFailed.join(', ')}`)] : []), ...blocks);
+    box.replaceChildren(head, ...(restoreFailed?.length ? [span('test-err', t('project.test.restoreFailed', { list: restoreFailed.join(', ') }))] : []), ...blocks);
   }
 
   /**
@@ -873,10 +884,10 @@
         const now = await currentText(plan.path);
         if (now !== plan.before) {
           // 덩어리 일부만 고른 파일은 다시 계산하면 고른 것이 사라지므로 적용하지 않는다
-          if (plan.partial) throw new Error('그사이 파일이 바뀌었습니다. 미리보기를 다시 열어 덩어리를 고르세요');
+          if (plan.partial) throw new Error(t('project.apply.changedPartial'));
           const change = ownerOf(plan).plans.find((x) => x.plan === (plan.src || plan)).change;
           p = PX.planChange(change, now);
-          if (!p.ok) throw new Error(`그사이 파일이 바뀌어 적용할 수 없습니다 (${p.error})`);
+          if (!p.ok) throw new Error(t('project.apply.changed', { error: p.error }));
         }
         ready.push({ path: p.path, op: p.op === 'delete' ? 'delete' : 'write', before: p.before, after: p.after, owner: ownerOf(plan) });
       } catch (err) {
@@ -892,8 +903,8 @@
       // 묶음이 실패했다: 쓴 파일은 되돌렸으므로 적용 기록 · 바는 그대로 두고 알린다
       if (tx.restored.length || tx.restoreFailed.length) await rescan().catch(() => {});
       const msg = PC.transactionMessage(tx);
-      alert(failed.length ? `${msg}\n\n적용하지 못한 파일:\n${failed.join('\n')}` : msg);
-      return { entry: null, text: `${tx.failed.path} ${tx.failed.op === 'delete' ? '지우기' : '쓰기'} 실패 — 적용하지 않았습니다` };
+      alert(failed.length ? `${msg}\n\n${t('project.apply.failedList', { list: failed.join('\n') })}` : msg);
+      return { entry: null, text: t('project.apply.notApplied', { what: t(tx.failed.op === 'delete' ? 'project.tx.deleteFailed' : 'project.tx.writeFailed', { path: tx.failed.path }) }) };
     }
     const ownerByPath = new Map(ready.map((r) => [r.path, r.owner]));
     const done = tx.done.map(({ owner, ...f }) => f); // 적용 기록에는 AI 객체를 넣지 않는다
@@ -927,15 +938,17 @@
       await rescan();
       await refreshOtherBars(new Set(owners.map((s) => s.ai.id)));
     }
-    if (failed.length) alert(`적용하지 못한 파일:\n${failed.join('\n')}`);
-    return { entry, text: `${done.length}개 파일을 적용했습니다${failed.length ? ` · ${failed.length}개 실패` : ''}` };
+    if (failed.length) alert(t('project.apply.failedList', { list: failed.join('\n') }));
+    return { entry, text: t('project.apply.done', { n: done.length }) + (failed.length ? t('project.apply.someFailed', { n: failed.length }) : '') };
   }
 
   // ---------- 파일 모아보기 ----------
   // 답변에서 찾은 파일 수정안을 "경로 + 전체 코드"로 모아, 직접 복사해 붙여 넣기 좋게 보여 준다. 파일은 쓰지 않는다.
   // 프로젝트를 열지 않아도 쓴다. 그때는 새 파일·수정을 구분하지 못하고, diff는 전체 코드로 바꾸지 못해 diff 그대로 보여 준다.
 
-  const COLLECT_OP = { create: '새 파일', modify: '수정', full: '전체 코드', diff: '바뀐 부분(diff)', edit: '바꿀 곳(찾기/바꾸기)', same: '변경 없음', delete: '삭제' };
+  // 화면 이름 — 부를 때 사전에서. 순서가 모아보기 요약 순서다.
+  const COLLECT_OP = Object.fromEntries(['create', 'modify', 'full', 'diff', 'edit', 'same', 'delete'].map((op) => [op, null]));
+  for (const op of Object.keys(COLLECT_OP)) Object.defineProperty(COLLECT_OP, op, { get: () => t(`project.collect.op.${op}`), enumerable: true });
 
   const hunkText = (change) => change.hunks.map((h) => [`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`, ...h.lines].join('\n')).join('\n');
 
@@ -953,23 +966,23 @@
       if (change.type === 'full') {
         const same = typeof before === 'string' && before.replace(/\r\n/g, '\n').trimEnd() === change.content.replace(/\r\n/g, '\n').trimEnd();
         // 잘린 답변이면 코드는 보여 주되 뒷부분이 없다고 알린다 (그대로 붙여 넣으면 나머지가 사라짐)
-        const note = change.truncated ? '⚠ 답변이 중간에 잘려 이 파일의 뒷부분이 없습니다 — 그대로 붙여 넣지 마세요' : undefined;
+        const note = change.truncated ? t('project.collect.truncatedFull') : undefined;
         items.push({ path, op: before === undefined ? 'full' : before === null ? 'create' : same ? 'same' : 'modify', code: change.content, note });
         continue;
       }
-      let note = '프로젝트를 열면 지금 파일과 합친 전체 코드로 보여 줍니다';
+      let note = t('project.collect.openForFull');
       if (before !== undefined || change.isNew) {
         const plan = PX.planChange(change, before ?? null);
         if (plan.ok) {
           items.push({ path, op: plan.op, code: plan.after.replace(/\r\n/g, '\n') });
           continue;
         }
-        note = `전체 코드로 바꾸지 못했습니다: ${plan.error}`;
+        note = t('project.collect.mergeFailed', { error: plan.error });
       }
       if (change.type === 'edit') {
         // 찾기/바꾸기 블록 (v0.17.0): 프로젝트가 없으면 전체 코드로 합칠 수 없어 블록 그대로 보여 준다
         const code = change.edits.map((e) => `<<<<<<< 찾기\n${e.search}\n=======\n${e.replace}\n>>>>>>> 바꾸기`).join('\n\n');
-        items.push({ path, op: 'edit', code, note: change.truncated ? '⚠ 답변이 중간에 잘려 마지막 찾기/바꾸기가 없을 수 있습니다' : note });
+        items.push({ path, op: 'edit', code, note: change.truncated ? t('project.collect.truncatedEdit') : note });
         continue;
       }
       items.push({ path, op: 'diff', code: hunkText(change), note });
@@ -985,8 +998,8 @@
     p.collectBtn.hidden = !changes.length;
     p.collectBtn.classList.remove('attn');
     if (!changes.length) return;
-    p.collectBtn.textContent = `파일 ${changes.length}개 모아보기`;
-    p.collectBtn.title = `답변에서 찾은 파일 — 경로와 전체 코드를 모아 복사할 수 있습니다:\n${listLines(changes, (c) => `- ${c.path}`)}`;
+    p.collectBtn.textContent = t('project.collect.count', { n: changes.length });
+    p.collectBtn.title = t('project.collect.countTitle', { list: listLines(changes, (c) => `- ${c.path}`) });
     void p.collectBtn.offsetWidth; // 애니메이션을 처음부터 다시 돌린다
     p.collectBtn.classList.add('attn');
   }
@@ -1008,7 +1021,7 @@
 
   async function copyWithFeedback(btn, text, label) {
     await host.copyText(text);
-    btn.textContent = '✓ 복사됨';
+    btn.textContent = t('project.collect.copied');
     btn.classList.add('copied');
     setTimeout(() => {
       btn.textContent = label;
@@ -1027,8 +1040,8 @@
       .map(([label, n]) => `${label} ${n}`)
       .join(' · ');
     modal.show(
-      `${name} — 파일 ${items.length}개 모아보기`,
-      `${counts}${has() ? ` · ${project.info.name} 기준` : ' · 프로젝트를 열면 새 파일·수정을 구분합니다'} — 파일에는 쓰지 않습니다`,
+      t('project.collect.title', { name, n: items.length }),
+      t('project.collect.note', { counts, base: has() ? t('project.collect.base', { name: project.info.name }) : t('project.collect.noBase') }),
     );
     $('#patchBody').replaceChildren(
       ...(items.length
@@ -1038,13 +1051,13 @@
             const head = document.createElement('div');
             head.className = 'pf-head';
             const tag = span(`op ${it.op}`, COLLECT_OP[it.op]);
-            if (it.op === 'full') tag.title = '프로젝트를 열면 새 파일인지 수정인지 알려 줍니다';
+            if (it.op === 'full') tag.title = t('project.collect.fullTitle');
             head.append(tag, span('path', it.path));
             if (it.note) head.append(span('muted-label', it.note));
-            const pathBtn = button('경로 복사', '파일 경로를 복사합니다', () => copyWithFeedback(pathBtn, it.path, '경로 복사'));
+            const pathBtn = button(t('project.collect.copyPath'), t('project.collect.copyPathTitle'), () => copyWithFeedback(pathBtn, it.path, t('project.collect.copyPath')));
             head.append(pathBtn);
             if (it.op !== 'delete') {
-              const codeBtn = button('코드 복사', '이 파일의 전체 코드를 복사합니다', () => copyWithFeedback(codeBtn, it.code, '코드 복사'));
+              const codeBtn = button(t('project.collect.copyCode'), t('project.collect.copyCodeTitle'), () => copyWithFeedback(codeBtn, it.code, t('project.collect.copyCode')));
               codeBtn.className = 'primary';
               head.append(codeBtn);
             }
@@ -1055,31 +1068,32 @@
               pre.className = 'code';
               pre.textContent = it.code;
               pf.append(pre);
-            } else pf.append(span('muted-label collect-del', '이 파일을 지우라는 요청입니다'));
+            } else pf.append(span('muted-label collect-del', t('project.collect.deleteReq')));
             return pf;
           })
-        : [span('change-empty', '이 답변에서 파일 수정안을 찾지 못했습니다.')]),
+        : [span('change-empty', t('project.collect.empty'))]),
     );
     $('#patchAll').hidden = true;
     $('#patchApply').hidden = !items.length;
-    $('#patchApply').textContent = '전체 복사';
+    $('#patchApply').textContent = t('project.collect.copyAll');
     $('#patchApply').onclick = async () => {
       await host.copyText(collectMarkdown(items));
-      $('#patchStatus').textContent = `파일 ${items.length}개를 경로와 함께 복사했습니다`;
+      $('#patchStatus').textContent = t('project.collect.copiedAll', { n: items.length });
     };
   };
 
   const fmtAt = (ms) => new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   $('#changesLog').addEventListener('click', () => {
-    modal.show('적용 기록', '최근 20개. 되돌리면 적용하기 전 내용으로 돌아갑니다 (새로 만든 파일은 지웁니다).');
+    modal.show(t('project.log.title'), t('project.log.note'));
     $('#patchApply').hidden = true;
     $('#patchAll').hidden = true;
     const rows = project.log.map((entry) => {
       const row = document.createElement('div');
       row.className = `log-row${entry.reverted ? ' reverted' : ''}`;
-      row.append(span('', fmtAt(entry.at)), span('name', entry.ai), span('files', entry.files.map((f) => f.path).join(', ')));
-      const undo = button(entry.reverted ? '되돌림' : '되돌리기', '적용하기 전 내용으로 되돌립니다', async () => {
+      // '직접 편집'은 적용 기록에 저장된 표시 (project-editor.js) — 화면에는 지금 언어로
+      row.append(span('', fmtAt(entry.at)), span('name', entry.ai === '직접 편집' ? t('project.log.manualEdit') : entry.ai), span('files', entry.files.map((f) => f.path).join(', ')));
+      const undo = button(entry.reverted ? t('project.log.reverted') : t('project.undo'), t('project.undoTitle'), async () => {
         await revert(entry);
         $('#changesLog').click();
       });
@@ -1087,7 +1101,7 @@
       row.append(undo);
       return row;
     });
-    $('#patchBody').replaceChildren(...(rows.length ? rows : [span('change-empty', '아직 적용한 수정안이 없습니다')]));
+    $('#patchBody').replaceChildren(...(rows.length ? rows : [span('change-empty', t('project.log.empty'))]));
   });
 
   // 적용 기록 하나를 되돌립니다: 적용 전 내용으로 다시 쓰고, 새로 만든 파일은 지웁니다. 그사이 또 바뀐 파일은 먼저 묻습니다.
@@ -1097,7 +1111,7 @@
       const now = await currentText(f.path).catch(() => undefined);
       if (now !== f.after) changed.push(f.path);
     }
-    if (changed.length && !confirm(`적용한 뒤에 다시 바뀐 파일이 있습니다:\n${changed.join('\n')}\n\n그래도 적용 전 내용으로 되돌릴까요? (그 뒤의 변경은 사라집니다)`)) return;
+    if (changed.length && !confirm(t('project.log.changedSince', { list: changed.join('\n') }))) return;
     const failed = [];
     for (const f of entry.files) {
       try {
@@ -1114,7 +1128,7 @@
     // 이 적용으로 "적용됨"이던 바는 다시 적용할 수 있는 상태로, 다른 바도 지금 파일 기준으로 다시 계산
     if (entry.reverted) for (const b of bars.values()) if (b.applied === entry) b.applied = null;
     await refreshOtherBars(null);
-    if (failed.length) alert(`되돌리지 못한 파일:\n${failed.join('\n')}`);
+    if (failed.length) alert(t('project.log.revertFailed', { list: failed.join('\n') }));
   }
 
   Object.assign(P, {

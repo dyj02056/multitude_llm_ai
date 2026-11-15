@@ -31,12 +31,12 @@ function readTestScript(pkgText) {
 
 /** package.json 글 → { ok: true, scripts } | { ok: false, error } */
 function readPkgScripts(pkgText) {
-  if (typeof pkgText !== 'string') return { ok: false, error: 'package.json이 없습니다 (npm 프로젝트만 테스트할 수 있습니다)' };
+  if (typeof pkgText !== 'string') return { ok: false, error: t('main.test.noPkg') };
   let pkg;
   try {
     pkg = JSON.parse(pkgText.replace(/^﻿/, ''));
   } catch {
-    return { ok: false, error: 'package.json을 읽지 못했습니다 (JSON 형식 오류)' };
+    return { ok: false, error: t('main.test.badPkg') };
   }
   return { ok: true, scripts: pkg && typeof pkg.scripts === 'object' && pkg.scripts ? pkg.scripts : {} };
 }
@@ -51,8 +51,8 @@ function readScript(pkgText, name) {
   if (!pkg.ok) return pkg;
   const { scripts } = pkg;
   const script = typeof scripts[name] === 'string' ? scripts[name].trim() : '';
-  if (!script) return { ok: false, error: name === 'test' ? 'package.json에 "test" 스크립트가 없습니다' : t('devtest.noScript', { name }) };
-  if (name === 'test' && NPM_DEFAULT_TEST.test(script)) return { ok: false, error: '"test" 스크립트가 npm 기본값(no test specified)입니다' };
+  if (!script) return { ok: false, error: t('devtest.noScript', { name }) };
+  if (name === 'test' && NPM_DEFAULT_TEST.test(script)) return { ok: false, error: t('main.test.defaultScript') };
   const out = { ok: true, script };
   const pre = scripts[`pre${name}`];
   const post = scripts[`post${name}`];
@@ -214,14 +214,14 @@ function trialWarnings(changes, risk = () => null, names = ['test']) {
         const before = readScript(typeof c.before === 'string' ? c.before : undefined, script);
         const after = readScript(typeof c.after === 'string' ? c.after : undefined, script);
         if (!after.ok) {
-          scriptLines.push(script === 'test' ? `수정안을 쓰면 test 스크립트를 실행할 수 없습니다 (${after.error})` : t('devtest.cannotRunAfter', { name: script, error: after.error }));
+          scriptLines.push(t('devtest.cannotRunAfter', { name: script, error: after.error }));
           continue;
         }
         for (const k of ['pre', 'script', 'post']) {
           const name = { pre: `pre${script}`, script, post: `post${script}` }[k];
           const a = before.ok ? before[k] || '' : '';
           const b = after[k] || '';
-          if (a !== b) scriptLines.push(`${name}: ${a || '(없음)'} → ${b || '(없음)'}`);
+          if (a !== b) scriptLines.push(`${name}: ${a || t('main.test.none')} → ${b || t('main.test.none')}`);
         }
       }
       continue;

@@ -16,7 +16,7 @@ function chainText(name, text, color) {
   box.className = 'chain-answer';
   if (color) box.style.setProperty('--svc', color);
   const sum = document.createElement('summary');
-  sum.append(span('name', name), span('muted-label', text ? `${text.length.toLocaleString()}자` : t('chain.noText')));
+  sum.append(span('name', name), span('muted-label', text ? t('preview.chars', { n: text.length.toLocaleString() }) : t('chain.noText')));
   const copy = button(t('chain.copy'), t('chain.copyTitle', { name }), async (e) => {
     e.preventDefault();
     await host.copyText(text);

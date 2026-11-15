@@ -48,16 +48,16 @@ $('#synthResult').addEventListener('click', async () => {
 // 종합 요청 진행 상황(보내는 중·보냄·실패)을 입력창 아래 안내 글로 보여 줍니다.
 host.on('synth:status', ({ state: st, judge, count, error, cause, mode, trimmed, headless, historyId }) => {
   if (mode === 'debate') return; // 토론 진행은 debate-ui.js가 보여 준다 (v0.26.0)
-  const prefix = cause === 'auto' ? '자동 종합: ' : '';
-  const what = mode === 'analysis' ? '일치 · 이견 분석' : '종합';
+  const prefix = cause === 'auto' ? t('ui.synth.autoPrefix') : '';
+  const what = mode === 'analysis' ? t('ui.synth.whatAnalysis') : t('ui.synth.whatSynth');
   $('#sendHint').textContent =
     (st === 'error'
       ? `${prefix}${error}`
       : st === 'sending'
-        ? `${prefix}${judge}에게 답변 ${count}개 ${what}을 요청하는 중…`
+        ? prefix + t('ui.synth.sending', { judge, n: count, what })
         : st === 'done'
-          ? `${judge}의 ${what}이 끝났습니다${mode === 'analysis' ? ' — 답변 비교 › 분석 탭에서 봅니다' : headless ? t('local.synthDoneHistory') : ''}`
-          : `${prefix}${judge}에게 답변 ${count}개 ${what}을 요청했습니다`) +
+          ? t('ui.synth.done', { judge, what }) + (mode === 'analysis' ? t('ui.synth.doneAnalysisHint') : headless ? t('local.synthDoneHistory') : '')
+          : prefix + t('ui.synth.sent', { judge, n: count, what })) +
     (trimmed?.length && st !== 'error' ? t('local.trimmedHint', { names: trimmed.join(', ') }) : '');
   // 패널 없는 로컬 LLM의 종합 결과 (v0.29.0): 패널에 답이 보이지 않으므로 [결과 보기]로 기록을 연다
   $('#synthResult').hidden = !(st === 'done' && headless && mode !== 'analysis' && historyId);
@@ -88,7 +88,10 @@ let attachments = []; // [{ file, url(이미지 미리보기) }]
 const fmtSize = (bytes) =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`;
 const fileKind = (type) => (/^image\//.test(type || '') ? 'image' : 'document');
-const KIND_TEXT = { image: '이미지', document: '문서' };
+const KIND_TEXT = {
+  get image() { return t('ui.kind.image'); },
+  get document() { return t('ui.kind.document'); },
+};
 
 // 첨부 줄 옆의 안내 글 (예: "Duck.ai은(는) 문서 빼고 보냄")
 function attachHint(text, cls = '') {
@@ -105,17 +108,17 @@ function addFiles(list) {
   const rejected = [];
   let total = attachments.reduce((n, a) => n + a.file.size, 0);
   for (const file of list) {
-    if (attachments.length >= limits.maxFiles) rejected.push(`${file.name}: 최대 ${limits.maxFiles}개`);
-    else if (file.size > limits.maxFileBytes) rejected.push(`${file.name}: 파일당 ${fmtSize(limits.maxFileBytes)} 초과`);
-    else if (total + file.size > limits.maxTotalBytes) rejected.push(`${file.name}: 합계 ${fmtSize(limits.maxTotalBytes)} 초과`);
-    else if (!file.size && !file.type) rejected.push(`${file.name}: 폴더나 빈 파일은 올릴 수 없습니다`);
+    if (attachments.length >= limits.maxFiles) rejected.push(t('ui.attach.maxFiles', { name: file.name, n: limits.maxFiles }));
+    else if (file.size > limits.maxFileBytes) rejected.push(t('ui.attach.tooBig', { name: file.name, size: fmtSize(limits.maxFileBytes) }));
+    else if (total + file.size > limits.maxTotalBytes) rejected.push(t('ui.attach.totalTooBig', { name: file.name, size: fmtSize(limits.maxTotalBytes) }));
+    else if (!file.size && !file.type) rejected.push(t('ui.attach.folderOrEmpty', { name: file.name }));
     else {
       total += file.size;
       attachments.push({ file, url: fileKind(file.type) === 'image' ? URL.createObjectURL(file) : null });
     }
   }
   renderAttachments();
-  if (rejected.length) attachHint(`올리지 못함 — ${rejected.join(' / ')}`, 'error');
+  if (rejected.length) attachHint(t('ui.attach.rejected', { list: rejected.join(' / ') }), 'error');
   $('#prompt').focus();
 }
 
@@ -146,11 +149,11 @@ function applyWebAsk(ask) {
     host.setView('panels');
     $('#prompt').value = ask.question + ($('#prompt').value ? `\n\n${$('#prompt').value}` : '');
     $('#prompt').focus();
-    attachHint('사이드탭의 질문을 넣었습니다 — 보낼 대상을 고르고 보내세요');
+    attachHint(t('ui.webAsk.questionIn'));
     return;
   }
-  if (hits.length && !confirm(`${ask.kind === 'page' ? '페이지 본문' : '선택한 글'}에 비밀 정보로 보이는 것이 있습니다:\n${describeSecrets(hits)}\n\n그래도 넣을까요? (AI 서비스로 보내기 전에 입력창 · 첨부에서 지울 수 있습니다)`)) {
-    attachHint('웹페이지 글을 넣지 않았습니다 (비밀 정보 확인에서 취소)', 'warn');
+  if (hits.length && !confirm(t('ui.webAsk.secrets', { what: t(ask.kind === 'page' ? 'ui.webAsk.whatPage' : 'ui.webAsk.whatSelection'), list: describeSecrets(hits) }))) {
+    attachHint(t('ui.webAsk.secretsCanceled'), 'warn');
     return;
   }
   host.setView('panels');
@@ -169,7 +172,7 @@ function applyWebAsk(ask) {
   const caret = end + (ask.question ? ask.question.length : 0);
   prompt.setSelectionRange(caret, caret); // "질문: " 바로 뒤(또는 넘어온 질문 끝)에 이어 쓰게
   prompt.scrollTop = prompt.scrollHeight; // 입력칸이 작아서, 글쓴이가 쓸 "질문: " 줄이 보이게
-  attachHint(`웹페이지 ${ask.kind === 'page' ? '본문을 page.md로 첨부했습니다' : '선택한 글을 넣었습니다'} — 질문을 쓰고 보내세요${ask.truncated ? ' (길어서 앞부분만)' : ''}`);
+  attachHint(t(ask.kind === 'page' ? 'ui.webAsk.pageAttached' : 'ui.webAsk.selectionAdded') + (ask.truncated ? t('ui.webAsk.truncated') : ''));
 }
 
 window.addEventListener('focus', checkWebAsk); // 열려 있던 앱 탭을 메뉴가 앞으로 가져왔을 때
@@ -197,7 +200,7 @@ function renderAttachments() {
       if (a.url) chip.append(Object.assign(document.createElement('img'), { src: a.url, alt: '' }));
       else chip.append(span('file-icon', '[f]'));
       chip.append(span('file-name', a.file.name), span('file-size', fmtSize(a.file.size)));
-      chip.append(button('✕', '첨부에서 빼기', () => removeAttachment(i)));
+      chip.append(button('✕', t('ui.attach.remove'), () => removeAttachment(i)));
       return chip;
     }),
   );
@@ -210,7 +213,7 @@ function renderAttachHint() {
   if (!limits) return;
   if (!attachments.length) {
     return attachHint(
-      `끌어다 놓기 · Ctrl+V로도 올릴 수 있습니다 (최대 ${limits.maxFiles}개, 파일당 ${fmtSize(limits.maxFileBytes)}, 합계 ${fmtSize(limits.maxTotalBytes)})`,
+      t('ui.attach.howTo', { n: limits.maxFiles, perFile: fmtSize(limits.maxFileBytes), total: fmtSize(limits.maxTotalBytes) }),
     );
   }
   const total = attachments.reduce((n, a) => n + a.file.size, 0);
@@ -218,8 +221,8 @@ function renderAttachHint() {
   const warns = [...targets]
     .map((id) => state.services.find((s) => s.id === id))
     .filter((svc) => svc && kinds.some((k) => !svc.accept.includes(k)))
-    .map((svc) => `${svc.name}은(는) ${kinds.filter((k) => !svc.accept.includes(k)).map((k) => KIND_TEXT[k]).join('·')} 빼고 보냄`);
-  attachHint(`${attachments.length}개 · ${fmtSize(total)}${warns.length ? ` — ${warns.join(', ')}` : ''}`, warns.length ? 'warn' : '');
+    .map((svc) => t('ui.attach.notAccepted', { name: svc.name, kinds: kinds.filter((k) => !svc.accept.includes(k)).map((k) => KIND_TEXT[k]).join('·') }));
+  attachHint(`${t('ui.attach.summary', { n: attachments.length, size: fmtSize(total) })}${warns.length ? ` — ${warns.join(', ')}` : ''}`, warns.length ? 'warn' : '');
 }
 
 $('#attachBtn').addEventListener('click', () => $('#fileInput').click());
@@ -326,7 +329,7 @@ async function send({ preview = false } = {}) {
   const text = box.value.trim();
   if ((!text && !attachments.length) || sending) return;
   const ids = [...targets];
-  if (!ids.length) return alert('보낼 대상을 하나 이상 켜 주세요.');
+  if (!ids.length) return alert(t('ui.send.noTargets'));
   sending = true;
   $('#sendBtn').disabled = true;
   try {
@@ -350,10 +353,10 @@ async function send({ preview = false } = {}) {
       clearAttachments();
     }
     $('#sendHint').textContent = failed.length
-      ? `${failed.map((r) => name(r.id)).join(', ')} 보내기 실패 — 입력 내용은 남겨 두었습니다`
-      : `${results.length}곳에 보냈습니다${skill ? ` · 스킬 지침 ${skill.ids.length}곳` : ''}${noAttach.length ? ` · ${noAttach.map((r) => `${name(r.id)}(${ATTACH_TEXT[r.attach.state]})`).join(', ')}` : ''}`;
+      ? t('ui.send.failed', { names: failed.map((r) => name(r.id)).join(', ') })
+      : `${t('ui.send.sent', { n: results.length })}${skill ? ` · ${t('ui.send.skillCount', { n: skill.ids.length })}` : ''}${noAttach.length ? ` · ${noAttach.map((r) => `${name(r.id)}(${ATTACH_TEXT[r.attach.state]})`).join(', ')}` : ''}`;
   } catch (err) {
-    $('#sendHint').textContent = `보내지 못했습니다: ${err.message}`;
+    $('#sendHint').textContent = t('ui.send.error', { msg: err.message });
   } finally {
     sending = false;
     $('#sendBtn').disabled = false;
@@ -437,9 +440,9 @@ $('#reloadAll').addEventListener('click', () => host.panelAction('*', 'reload'))
 $('#newChatAll').addEventListener('click', () => host.panelAction('*', 'newchat'));
 $('#copyAll').addEventListener('click', async () => {
   const r = await host.copyAnswer('*');
-  $('#sendHint').textContent = r.copied ? `답변 ${r.copied}개를 복사했습니다` : '복사할 답변이 없습니다';
+  $('#sendHint').textContent = r.copied ? t('ui.copyAnswers.done', { n: r.copied }) : t('ui.copyAnswers.none');
 });
 $('#pickBtn').addEventListener('click', () => host.pickModels());
 $('#logoutBtn').addEventListener('click', () => {
-  if (confirm('로그아웃하면 모든 서비스의 로그인 정보(쿠키)가 지워집니다. 질문·답변 기록은 남습니다. 계속할까요?')) host.logout();
+  if (confirm(t('ui.logoutConfirm'))) host.logout();
 });

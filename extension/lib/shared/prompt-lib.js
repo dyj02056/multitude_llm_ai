@@ -24,6 +24,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // 화면 문구 (i18n-*-library.js). 부를 때마다 사전을 찾고, 사전이 없으면 키 이름을 그대로 쓴다 (부서지지 않게).
+  const tr = (key) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key) : key;
+  };
+
   const LIMITS = {
     templates: 200,
     skills: 50,
@@ -107,7 +113,7 @@
     }
     const body = text.trim();
     if (!body) return null;
-    if (!name) name = (body.match(/^#\s+(.+)$/m)?.[1] || fallbackName || '이름 없는 스킬').trim();
+    if (!name) name = (body.match(/^#\s+(.+)$/m)?.[1] || fallbackName || tr('library.unnamedSkill')).trim();
     return { name: clip(name, LIMITS.name), description: clip(description, LIMITS.hint), body: clip(body, LIMITS.skillBody) };
   }
 
@@ -346,7 +352,7 @@
     const okSvc = (v) => (typeof v === 'string' && SVC_ID.test(v) ? v : '');
     return {
       id: typeof p.id === 'string' && /^p-[\w-]{1,40}$/.test(p.id) ? p.id : newId('p'),
-      name: clip(p.name, LIMITS.name).trim() || '이름 없는 프리셋',
+      name: clip(p.name, LIMITS.name).trim() || tr('library.unnamedPreset'),
       at: Number.isFinite(p.at) ? p.at : 0,
       template: { id: typeof tpl.id === 'string' && TPL_ID.test(tpl.id) && tpl.id !== 'none' ? tpl.id : '', vars: cleanVars(tpl.vars) },
       skills: uniq(p.skills, /^s-[\w-]{1,40}$/).filter((id) => !skillIds || skillIds.has(id)).slice(0, LIMITS.activeSkills),
@@ -427,7 +433,7 @@
       .slice(0, LIMITS.templates)
       .map((t) => ({
         id: typeof t.id === 'string' && /^u-[\w-]{1,40}$/.test(t.id) ? t.id : newId('u'),
-        name: clip(t.name, LIMITS.name).trim() || '이름 없는 템플릿',
+        name: clip(t.name, LIMITS.name).trim() || tr('library.unnamedTemplate'),
         hint: clip(t.hint, LIMITS.hint),
         text: clip(t.text, LIMITS.templateText),
         fav: !!t.fav,
@@ -437,7 +443,7 @@
       .slice(0, LIMITS.skills)
       .map((s) => ({
         id: typeof s.id === 'string' && /^s-[\w-]{1,40}$/.test(s.id) ? s.id : newId('s'),
-        name: clip(s.name, LIMITS.name).trim() || '이름 없는 스킬',
+        name: clip(s.name, LIMITS.name).trim() || tr('library.unnamedSkill'),
         description: clip(s.description, LIMITS.hint),
         body: clip(s.body, LIMITS.skillBody),
         // AI로 만든 압축본 · 만들 때 원문의 지문 · 보낼 때 압축본을 쓸지 · 예시 절 빼기 · 압축 권장 알림 끄기
@@ -488,10 +494,10 @@
     try {
       data = typeof json === 'string' ? JSON.parse(json) : json;
     } catch {
-      throw new Error('JSON 형식이 아닙니다');
+      throw new Error(tr('library.notJson'));
     }
     if (!data || (data.kind !== 'multitude-llm-library' && !Array.isArray(data.templates) && !Array.isArray(data.skills))) {
-      throw new Error('Multitude LLM 라이브러리 파일이 아닙니다');
+      throw new Error(tr('library.notLibraryFile'));
     }
     const lib = normalizeLibrary({ templates: data.templates, skills: data.skills });
     const tplMap = new Map(lib.templates.map((t) => [t.id, newId('u')]));

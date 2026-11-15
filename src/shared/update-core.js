@@ -10,6 +10,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // 화면 문구 (v0.30.0): 부를 때마다 사전에서 찾는다 (언어를 바꾸면 바로 반영). 사전이 없는 곳(서비스 페이지 등)에서는 키 이름 그대로
+  const t = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   const REPO = 'dyj02056/multitude_llm_ai';
   const RELEASES_URL = `https://github.com/${REPO}/releases`;
   // 크롬 확장이 보는 최신 버전 (이미 쓰는 raw.githubusercontent.com — 권한 · CSP를 더 받지 않는다)
@@ -55,23 +61,23 @@
   function statusText(s) {
     switch (s.state) {
       case 'dev':
-        return `개발 실행 중 (v${s.current}) — 설치한 앱에서만 업데이트를 확인합니다`;
+        return t('main.update.dev', { v: s.current });
       case 'checking':
-        return '새 버전을 확인하는 중…';
+        return t('main.update.checking');
       case 'none':
-        return `최신 버전입니다 (v${s.current})`;
+        return t('main.update.none', { v: s.current });
       case 'available':
         return s.canInstall
-          ? `새 버전 v${s.version}이 있습니다 — [다운로드]를 누르면 받습니다`
-          : `새 버전 v${s.version}이 있습니다 — 저장소를 git pull 하고 chrome://extensions에서 ↻를 누르세요`;
+          ? t('main.update.availableApp', { v: s.version })
+          : t('main.update.availableExt', { v: s.version });
       case 'downloading':
-        return `v${s.version} 받는 중… ${s.percent ?? 0}%`;
+        return t('main.update.downloading', { v: s.version, percent: s.percent ?? 0 });
       case 'downloaded':
-        return `v${s.version}을 받았습니다 — [다시 시작해서 설치]를 누르거나, 앱을 닫으면 설치됩니다`;
+        return t('main.update.downloaded', { v: s.version });
       case 'error':
-        return `확인 실패: ${s.error || '알 수 없는 오류'}`;
+        return t('main.update.error', { error: s.error || t('main.update.unknownError') });
       default:
-        return `지금 버전 v${s.current}`;
+        return t('main.update.current', { v: s.current });
     }
   }
 

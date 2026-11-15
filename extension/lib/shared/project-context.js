@@ -14,6 +14,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
   'use strict';
 
+  // 화면 문구 (i18n-*-project.js) — 부를 때 찾는다 (Electron 앱 require · 화면 전역 MLA.i18n). AI에게 보내는 글(RULES 등)은 옮기지 않는다.
+  const tr = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : root && root.MLA && root.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   // 경로 정리(프로젝트 밖 · 위험한 이름 거르기)는 patch.js의 safeRelPath를 쓴다. 화면에서는 patch.js가 이 파일보다 늦게
   // 읽히므로 쓸 때 찾는다. 못 찾으면(patch.js 없이 쓰는 경우) 그대로 둔다 — 파일을 읽고 쓰는 쪽에서 한 번 더 거른다.
   function safePath(p) {
@@ -239,9 +245,11 @@
   const estimateTokens = (bytes) => Math.max(0, Math.round((Number(bytes) || 0) / 4));
   /** 사이드바 요약에 붙일 글: "≈ 3.2천 토큰" · "≈ 1.4만 토큰" */
   function tokenText(tokens) {
-    if (tokens < 1000) return `≈ ${tokens} 토큰`;
-    if (tokens < 10000) return `≈ ${(tokens / 1000).toFixed(1)}천 토큰`;
-    return `≈ ${(tokens / 10000).toFixed(1)}만 토큰`;
+    if (tokens < 1000) return tr('project.tokens.under1k', { n: tokens });
+    if (tokens < 10000) return tr('project.tokens.under10k', { n: (tokens / 1000).toFixed(1) });
+    // 큰 수의 단위는 사전이 정한다 (한국어 만 = 10000, 영어 k = 1000)
+    const unit = Number(tr('project.tokens.over10kUnit')) || 10000;
+    return tr('project.tokens.over10k', { n: (tokens / unit).toFixed(1) });
   }
   const suggestSplitTokens = (tokens) => tokens > SPLIT_TOKENS;
 
@@ -375,13 +383,13 @@
   /** 트랜잭션 실패 안내: "a.js 쓰기 실패 — 같이 적용한 3개 파일을 원래대로 되돌렸습니다" */
   function transactionMessage(r) {
     if (!r || r.ok || !r.failed) return '';
-    const what = `${r.failed.path} ${r.failed.op === 'delete' ? '지우기' : '쓰기'} 실패`;
+    const what = tr(r.failed.op === 'delete' ? 'project.tx.deleteFailed' : 'project.tx.writeFailed', { path: r.failed.path });
     const lines = [];
-    if (r.restored.length) lines.push(`${what} — 같이 적용한 ${r.restored.length}개 파일을 원래대로 되돌렸습니다`);
-    else if (!r.restoreFailed.length) lines.push(`${what} — 쓴 파일이 없어 바뀐 것은 없습니다`);
+    if (r.restored.length) lines.push(tr('project.tx.restored', { what, n: r.restored.length }));
+    else if (!r.restoreFailed.length) lines.push(tr('project.tx.nothingChanged', { what }));
     else lines.push(what);
-    lines.push(`(이유: ${r.failed.error})`);
-    if (r.restoreFailed.length) lines.push(`되돌리지 못한 파일 — 직접 확인해 주세요:\n${r.restoreFailed.map((f) => `- ${f.path}: ${f.error}`).join('\n')}`);
+    lines.push(tr('project.tx.reason', { error: r.failed.error }));
+    if (r.restoreFailed.length) lines.push(tr('project.tx.restoreFailed', { list: r.restoreFailed.map((f) => `- ${f.path}: ${f.error}`).join('\n') }));
     return lines.join('\n');
   }
 

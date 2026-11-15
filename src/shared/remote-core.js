@@ -22,7 +22,11 @@
   // 이 줄은 scripts/selectors-keygen.js가 그대로 찾아 바꾼다 (모양을 바꾸지 말 것).
   const SELECTORS_PUBLIC_KEY = 'PzJTDLNFvJg3IZjz3cWMXtxPzeklRUcc8TOsfNBsXGI=';
   const SIG_URL = DEFAULT_URL + '.sig';
-  const SIG_ERROR = '서명이 맞지 않습니다';
+  // 화면 문구 (v0.30.0): 부를 때마다 사전에서 찾는다 (언어를 바꾸면 바로 반영). 사전이 없는 곳(서비스 페이지 등)에서는 키 이름 그대로
+  const t = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
 
   // 원격으로 바꿀 수 있는 필드와 모양.
   // 보안상 "읽기"에 쓰는 것(입력창·답변·중지·로그인 상태·첨부 확인 표시)과 그 서비스 도메인 안의 새 대화 주소만 받는다.
@@ -183,7 +187,7 @@
   const toBytes = (b) => (b instanceof Uint8Array ? b : new Uint8Array(b));
 
   function verdict(good) {
-    return good === true ? { ok: true } : { ok: false, error: SIG_ERROR };
+    return good === true ? { ok: true } : { ok: false, error: t('main.remote.sigMismatch') };
   }
 
   /**
@@ -195,7 +199,7 @@
    */
   function verify(bytes, sigB64, verifier, publicKey = SELECTORS_PUBLIC_KEY) {
     if (!publicKey) return { ok: true, unsigned: true };
-    const fail = (err) => ({ ok: false, error: SIG_ERROR, detail: err ? String(err.message || err) : '' });
+    const fail = (err) => ({ ok: false, error: t('main.remote.sigMismatch'), detail: err ? String(err.message || err) : '' });
     try {
       if (typeof sigB64 !== 'string' || !sigB64.trim()) return fail('서명 없음');
       const sig = b64ToBytes(sigB64);

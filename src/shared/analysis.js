@@ -15,6 +15,12 @@
   const Diff = DiffLib || require('./vendor/diff');
 
   // 판정 AI에게 요구하는 머리글 (synth.js의 분석 요청 글과 같아야 한다)
+  // 화면 문구 (v0.30.0): 부를 때마다 사전에서 찾는다 (언어를 바꾸면 바로 반영). 사전이 없는 곳(서비스 페이지 등)에서는 키 이름 그대로
+  const tr = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+  // 머리글 이름은 AI 답을 읽는 데 쓰므로(프롬프트도 한국어) 번역하지 않는다
   const SECTIONS = { common: '공통 의견', disagree: '이견', unsupported: '근거 부족', final: '최종 답변' };
   const NONE_RE = /^(없음|없습니다|해당\s*없음|none|n\/a|-)\.?$/i;
   const VERDICT_RE = /^(판단|결론|평가|판정|verdict)$/i;
@@ -105,7 +111,7 @@
    */
   function parseAnalysis(md, { names = [] } = {}) {
     const text = String(md || '').replace(/\r\n/g, '\n');
-    if (!text.trim()) return { ok: false, raw: text, reason: '답변이 비어 있습니다' };
+    if (!text.trim()) return { ok: false, raw: text, reason: tr('main.analysis.empty') };
     const parts = {};
     let cur = null;
     let inFence = false;
@@ -120,10 +126,10 @@
       if (cur) parts[cur].push(line);
     }
     if (!parts.disagree || !parts.final) {
-      return { ok: false, raw: text, reason: `"${!parts.disagree ? SECTIONS.disagree : SECTIONS.final}" 머리글을 찾지 못했습니다` };
+      return { ok: false, raw: text, reason: tr('main.analysis.noHeading', { heading: !parts.disagree ? SECTIONS.disagree : SECTIONS.final }) };
     }
     const final = parts.final.join('\n').trim();
-    if (!final) return { ok: false, raw: text, reason: '최종 답변이 비어 있습니다' };
+    if (!final) return { ok: false, raw: text, reason: tr('main.analysis.emptyFinal') };
     return {
       ok: true,
       common: bullets(parts.common || []),

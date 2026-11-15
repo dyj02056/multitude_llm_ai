@@ -20,10 +20,10 @@ const path = require('path');
 const crypto = require('crypto');
 const { net } = require('electron');
 const core = require('../shared/remote-core');
+const { t } = require('../shared/i18n');
 const { DEFAULT_URL, sanitize: sanitizeData, snapshotBase, apply: applyTo } = core;
 
 const verifier = core.nodeVerifier(crypto);
-const SIG_FAILED = '서명 확인 실패';
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -64,7 +64,7 @@ async function fetchBytes(target) {
   try {
     // 리다이렉트는 따라가지 않는다 (정해 둔 주소의 파일만 받는다. 다른 곳으로 보내면 실패로 보고 지금 값을 유지)
     const res = await net.fetch(target, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
-    if (res.redirected) throw new Error('리다이렉트된 응답은 받지 않습니다');
+    if (res.redirected) throw new Error(t('main.remote.redirect'));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return new Uint8Array(await res.arrayBuffer());
   } finally {
@@ -99,10 +99,10 @@ async function refresh() {
     if (!check.ok) {
       // 서명이 틀리면 적용하지 않고 캐시도 그대로 둔다 (지금 쓰는 값 유지)
       console.warn('[remote] 서명 확인 실패', check.detail || '');
-      throw new Error(SIG_FAILED);
+      throw new Error(t('main.remote.sigFailed'));
     }
     const clean = sanitize(core.parseBytes(bytes));
-    if (!clean) throw new Error('형식이 올바르지 않습니다');
+    if (!clean) throw new Error(t('main.remote.badFormat'));
     apply(clean.overrides);
     await saveCache(JSON.stringify(core.packCache(bytes, sig)));
     status = {
@@ -114,7 +114,7 @@ async function refresh() {
       checkedAt,
     };
   } catch (err) {
-    status = { ...status, checkedAt, error: err.name === 'AbortError' ? '시간 초과' : err.message };
+    status = { ...status, checkedAt, error: err.name === 'AbortError' ? t('main.remote.timeout') : err.message };
   }
   return status;
 }

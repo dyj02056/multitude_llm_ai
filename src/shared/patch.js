@@ -21,6 +21,13 @@
   'use strict';
 
   const Diff = DiffLib || require('./vendor/diff');
+  // 화면 문구 (i18n-*-project.js) — 부를 때 찾는다 (Electron 앱 require · 화면 전역 MLA.i18n).
+  // AI 답에서 읽는 표시(파일: · 찾기/바꾸기 · 생략 표시)와 AI에게 보내는 이어받기 부탁 글은 옮기지 않는다.
+  const tr = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
 
   /** 프로젝트 안쪽 상대 경로로 정리한다. 밖으로 나가거나 이상한 경로면 null */
   function safeRelPath(p) {
@@ -186,8 +193,8 @@
       else if (hits.length > 1) multi = Math.max(multi, hits.length);
     }
     if (unique.length) return { edit: unique.reduce((a, b) => (b.len > a.len ? b : a)).c };
-    if (multi) return { error: `찾기/바꾸기 ${n + 1}번은 ======= 줄이 여러 개인데, 어느 줄로 나눠도 찾을 부분이 파일에 한 곳만 맞지 않습니다 (${multi}곳 이상 — 앞뒤 줄을 더 넣어 달라고 하세요)` };
-    return { error: `찾기/바꾸기 ${n + 1}번은 ======= 줄이 여러 개인데, 어느 줄로 나눠도 찾을 부분을 지금 파일에서 찾지 못했습니다` };
+    if (multi) return { error: tr('project.patch.multiSepAmbiguous', { n: n + 1, count: multi }) };
+    return { error: tr('project.patch.multiSepNotFound', { n: n + 1 }) };
   }
 
   /**
@@ -206,9 +213,9 @@
       }
       const { search, replace } = edit;
       const { want, hits } = findSearch(lines, search);
-      if (!want.length) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분이 비어 있습니다` };
-      if (!hits.length) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분을 지금 파일에서 찾지 못했습니다` };
-      if (hits.length > 1) return { error: `찾기/바꾸기 ${n + 1}번의 찾을 부분이 파일에 ${hits.length}곳 있어 어디를 바꿀지 모릅니다 (앞뒤 줄을 더 넣어 달라고 하세요)` };
+      if (!want.length) return { error: tr('project.patch.searchEmpty', { n: n + 1 }) };
+      if (!hits.length) return { error: tr('project.patch.searchNotFound', { n: n + 1 }) };
+      if (hits.length > 1) return { error: tr('project.patch.searchAmbiguous', { n: n + 1, count: hits.length }) };
       // 바꿀 내용도 찾을 부분처럼 앞뒤 빈 줄은 뺀다 (AI가 표시 줄 옆에 붙이는 빈 줄). 비어 있으면 찾은 부분을 지운다.
       const rep = replace.split('\n');
       while (rep.length && !rep[rep.length - 1].trim()) rep.pop();
@@ -392,7 +399,7 @@
 
   // ---------- 잘린 답변 · 생략한 코드 알아채기 (v0.16.1) ----------
   // 출력 한도로 답이 끊기거나 AI가 "... 기존과 같음"처럼 줄이면, 전체 파일 교체로 쓸 때 나머지 코드가 사라진다.
-  const TRUNCATED_TEXT = '답변이 중간에 잘렸습니다 (코드 블록이 닫히지 않음) — 파일 뒷부분이 없어 적용하지 않습니다';
+  const truncatedText = () => tr('project.patch.truncated');
   // 코드를 줄였다는 표시 줄. 둘 중 하나:
   //   ① 주석 · 줄 처음에 "..."(…)이 있고 "기존 · 나머지 · 생략 · 동일 · unchanged · rest · existing · same · omitted"가 붙은 줄 ("// ... 기존 코드 ...", "# ... (생략)")
   //   ② 그 자체로 생략을 뜻하는 말만 있는 주석 줄 ("<!-- 이하 동일 -->", "/* rest of the file unchanged */", "// 기존과 같음")
@@ -431,25 +438,26 @@
     if (!BRACE_EXT.test(path) || typeof after !== 'string') return null;
     const a = braceDebt(after);
     const b = typeof before === 'string' ? braceDebt(before) : 0;
-    return a > 0 && a > b ? `끝이 잘린 것 같습니다 (괄호 ${a - b}개가 닫히지 않음)` : null;
+    return a > 0 && a > b ? tr('project.patch.cutBraces', { n: a - b }) : null;
   }
 
   /**
    * 전체 파일 교체가 수상한지: 생략 표시가 있거나, 원본의 끝부분이 통째로 사라졌는지 → 이유 글 | null
    * before · after: LF 줄바꿈 글
    */
+  const findOmit = (before, aLines) => aLines.find((l) => OMIT_RE.test(l) && !before.split('\n').some((b) => b.trim() === l.trim()));
   function suspectFullReplace(before, after) {
     if (typeof before !== 'string' || typeof after !== 'string') return null;
     const aLines = after.split('\n');
-    const omit = aLines.find((l) => OMIT_RE.test(l) && !before.split('\n').some((b) => b.trim() === l.trim()));
-    if (omit) return `코드를 줄인 표시가 있습니다 ("${omit.trim().slice(0, 40)}")`;
+    const omit = findOmit(before, aLines);
+    if (omit) return tr('project.patch.omitted', { text: omit.trim().slice(0, 40) });
     const bLines = before.split('\n');
     const bCount = bLines.filter((l) => l.trim()).length;
     const aCount = aLines.filter((l) => l.trim()).length;
     if (bCount < 30 || aCount >= bCount * 0.6) return null;
     const tail = bLines.map((l) => l.trim()).filter((l) => l.length > 2).slice(-3);
     const kept = new Set(aLines.map((l) => l.trim()));
-    if (tail.length && tail.every((l) => !kept.has(l))) return `끝이 잘린 것 같습니다 (원본 ${bCount}줄 → ${aCount}줄, 원래 끝부분이 없음)`;
+    if (tail.length && tail.every((l) => !kept.has(l))) return tr('project.patch.cutTail', { before: bCount, after: aCount });
     return null;
   }
 
@@ -465,13 +473,13 @@
     const crlf = typeof before === 'string' && before.includes('\r\n');
     const lf = typeof before === 'string' ? before.replace(/\r\n/g, '\n') : null;
 
-    if (change.truncated) return { ...base, op: before === null ? 'create' : 'modify', error: TRUNCATED_TEXT, truncated: true };
+    if (change.truncated) return { ...base, op: before === null ? 'create' : 'modify', error: truncatedText(), truncated: true };
     let after;
     let op;
     if (change.type === 'edit') {
       // 찾기/바꾸기: 있는 파일에만. 새 파일이면 찾을 부분이 모두 빈 블록일 때 바꿀 내용을 그대로 새 파일로
       if (before === null) {
-        if (!change.edits.every((e) => !e.search.trim())) return { ...base, op: 'modify', error: '파일이 없습니다 (새 파일은 전체 내용으로 받아야 합니다)' };
+        if (!change.edits.every((e) => !e.search.trim())) return { ...base, op: 'modify', error: tr('project.patch.noFileEdit') };
         op = 'create';
         after = `${change.edits.map((e) => e.replace).join('\n')}\n`;
       } else {
@@ -485,12 +493,12 @@
       after = change.content.replace(/\r\n/g, '\n');
       if (!after.endsWith('\n')) after += '\n';
     } else if (change.isDelete) {
-      if (before === null) return { ...base, op: 'delete', error: '지울 파일이 없습니다' };
+      if (before === null) return { ...base, op: 'delete', error: tr('project.patch.noFileDelete') };
       op = 'delete';
       after = null;
     } else if (change.isNew || before === null) {
-      if (!change.isNew && before === null) return { ...base, op: 'modify', error: '파일이 없습니다 (새 파일이면 /dev/null diff나 전체 내용으로 받아야 합니다)' };
-      if (before !== null) return { ...base, op: 'create', error: '이미 있는 파일입니다' };
+      if (!change.isNew && before === null) return { ...base, op: 'modify', error: tr('project.patch.noFileDiff') };
+      if (before !== null) return { ...base, op: 'create', error: tr('project.patch.exists') };
       op = 'create';
       after = change.hunks.flatMap((h) => h.lines.filter((l) => l[0] === '+').map((l) => l.slice(1))).join('\n') + '\n';
     } else {
@@ -499,21 +507,22 @@
       after = Diff.applyPatch(lf, patch);
       if (after === false) after = Diff.applyPatch(lf, patch, { compareLine: (_n, a, _op, b) => a !== undefined && String(a).trimEnd() === String(b).trimEnd() });
       if (after === false) after = applyBySearch(lf, change.hunks);
-      if (after === null || after === false) return { ...base, op, error: 'diff가 현재 내용과 맞지 않습니다' };
+      if (after === null || after === false) return { ...base, op, error: tr('project.patch.diffMismatch') };
     }
     if (after !== null && lf !== null && lf.endsWith('\n') && !after.endsWith('\n')) after += '\n';
-    if (after !== null && after === lf) return { ...base, op, error: '바뀌는 내용이 없습니다' };
+    if (after !== null && after === lf) return { ...base, op, error: tr('project.patch.noChange') };
     const preview = previewDiff(change.path, lf, after);
     const add = preview.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).length;
     const del = preview.split('\n').filter((l) => l.startsWith('-') && !l.startsWith('---')).length;
     // 전체 파일 교체가 수상하면 적용은 되지만 바로 쓰지 않는다 (미리보기에서 기본 체크 해제 · 바의 "확인 필요")
     // 새 파일 · 찾기/바꾸기 결과도 괄호가 닫히지 않았으면 잘린 것으로 의심한다
-    const suspect =
-      after === null
-        ? null
-        : (change.type === 'full' && op === 'modify' ? suspectFullReplace(lf, after) : null) || suspectCutCode(change.path, lf, after);
+    const full = after !== null && change.type === 'full' && op === 'modify' ? suspectFullReplace(lf, after) : null;
+    const cutCode = after !== null && !full ? suspectCutCode(change.path, lf, after) : null;
+    const suspect = full || cutCode;
+    // 끝이 잘린 의심인지 (생략 표시가 아니라) — 이어받기(wantsContinue)가 글 대신 이 표시를 본다
+    const suspectCut = !!cutCode || (!!full && !findOmit(lf, after.split('\n')));
     if (after !== null && crlf) after = after.replace(/\n/g, '\r\n'); // 원래 줄바꿈(CRLF)을 지킨다
-    return { ...base, op, after, ok: true, add, del, preview, ...(suspect ? { suspect } : {}) };
+    return { ...base, op, after, ok: true, add, del, preview, ...(suspect ? { suspect, ...(suspectCut ? { suspectCut } : {}) } : {}) };
   }
 
   // ---------- 덩어리(hunk) 단위 적용 ----------
@@ -594,23 +603,23 @@
   // ---------- 실행에 영향을 주는 파일 ----------
   // 저장만 해도 나중에 자동으로 실행될 수 있는 파일. 적용 창에서 표시하고 기본 체크를 해제한다.
   const EXEC_PATHS = [
-    [/^\.github\//, 'GitHub 자동 작업(Actions) 설정'],
-    [/^\.gitlab-ci\.ya?ml$/, 'GitLab CI 설정'],
-    [/^\.circleci\//, 'CircleCI 설정'],
-    [/(^|\/)(\.travis\.ya?ml|azure-pipelines\.ya?ml|Jenkinsfile|bitbucket-pipelines\.yml)$/, 'CI 설정'],
-    [/^\.husky\//, 'git 훅(husky)'],
-    [/(^|\/)\.pre-commit-config\.ya?ml$/, 'git 훅(pre-commit)'],
-    [/^\.vscode\//, 'VS Code 작업·설정 (폴더를 열 때 실행될 수 있음)'],
-    [/^\.idea\//, 'JetBrains 실행 설정'],
-    [/(^|\/)\.envrc$/, 'direnv (폴더에 들어가면 실행)'],
-    [/(^|\/)\.gitattributes$/, 'git 필터 설정'],
-    [/(^|\/)\.gitmodules$/, 'git 하위 모듈 설정 (받아 올 주소)'],
+    [/^\.github\//, 'project.risk.github'],
+    [/^\.gitlab-ci\.ya?ml$/, 'project.risk.gitlab'],
+    [/^\.circleci\//, 'project.risk.circleci'],
+    [/(^|\/)(\.travis\.ya?ml|azure-pipelines\.ya?ml|Jenkinsfile|bitbucket-pipelines\.yml)$/, 'project.risk.ci'],
+    [/^\.husky\//, 'project.risk.husky'],
+    [/(^|\/)\.pre-commit-config\.ya?ml$/, 'project.risk.preCommit'],
+    [/^\.vscode\//, 'project.risk.vscode'],
+    [/^\.idea\//, 'project.risk.idea'],
+    [/(^|\/)\.envrc$/, 'project.risk.direnv'],
+    [/(^|\/)\.gitattributes$/, 'project.risk.gitattributes'],
+    [/(^|\/)\.gitmodules$/, 'project.risk.gitmodules'],
     [/(^|\/)(GNU)?[Mm]akefile$|\.mk$/, 'Makefile'],
     [/(^|\/)Dockerfile[^/]*$|(^|\/)[^/]*\.dockerfile$/i, 'Dockerfile'],
-    [/(^|\/)(docker-)?compose[^/]*\.ya?ml$/, 'Docker Compose 설정'],
+    [/(^|\/)(docker-)?compose[^/]*\.ya?ml$/, 'project.risk.compose'],
     [/(^|\/)Procfile$/, 'Procfile'],
-    [/(^|\/)setup\.py$/, '설치 때 실행되는 setup.py'],
-    [/\.(sh|bash|zsh|ps1|psm1|bat|cmd|command)$/i, '스크립트 파일'],
+    [/(^|\/)setup\.py$/, 'project.risk.setupPy'],
+    [/\.(sh|bash|zsh|ps1|psm1|bat|cmd|command)$/i, 'project.risk.script'],
   ];
   // package.json에서 설치·실행 때 자동으로 돌아가는 항목
   const PKG_EXEC_KEYS = ['scripts', 'bin', 'husky', 'lint-staged', 'simple-git-hooks', 'pre-commit', 'gitHooks'];
@@ -628,12 +637,12 @@
         a = before === null ? {} : JSON.parse(before);
         b = after === null ? {} : JSON.parse(after);
       } catch {
-        return 'package.json (형식을 읽을 수 없어 실행 항목 변경 여부를 확인하지 못함)';
+        return tr('project.risk.pkgUnreadable');
       }
       const changed = PKG_EXEC_KEYS.filter((k) => JSON.stringify(a?.[k] ?? null) !== JSON.stringify(b?.[k] ?? null));
-      return changed.length ? `package.json 실행 항목 변경 (${changed.join(', ')})` : null;
+      return changed.length ? tr('project.risk.pkgExec', { keys: changed.join(', ') }) : null;
     }
-    for (const [re, why] of EXEC_PATHS) if (re.test(path)) return why;
+    for (const [re, why] of EXEC_PATHS) if (re.test(path)) return why.startsWith('project.') ? tr(why) : why; // 키가 아니면 이름 그대로 (Makefile 등)
     return null;
   }
 
@@ -705,12 +714,12 @@
    * → { change: 합친 수정안(또 잘렸으면 truncated) } | { error }
    */
   function stitchContinuation(cont, next) {
-    if (!next) return { error: `이어 받은 답에서 "${cont.path}" 코드를 찾지 못했습니다` };
+    if (!next) return { error: tr('project.patch.contNotFound', { path: cont.path }) };
     if (cont.kind === 'edit') {
-      if (next.type !== 'edit') return { error: '이어 받은 답이 찾기/바꾸기 형식이 아닙니다' };
+      if (next.type !== 'edit') return { error: tr('project.patch.contNotEdit') };
       return { change: { path: cont.path, type: 'edit', edits: [...cont.edits, ...next.edits], ...(next.truncated ? { truncated: true } : {}) } };
     }
-    if (next.type !== 'full') return { error: '이어 받은 답이 코드 블록 형식이 아닙니다' };
+    if (next.type !== 'full') return { error: tr('project.patch.contNotFull') };
     const tail = String(next.content).replace(/\r\n/g, '\n').split('\n');
     while (tail.length && !tail[0].trim()) tail.shift();
     const same = (a, b) => String(a).trimEnd() === String(b).trimEnd();
@@ -722,7 +731,7 @@
     else {
       // 기준 줄이 둘째 줄 이후에 있으면 (앞부분을 조금 더 다시 씀) 거기서부터 붙인다
       const at = tail.findIndex((l) => same(l, cont.anchor));
-      if (at < 0 || at > 20) return { error: '이어 받은 코드의 첫 줄이 끊긴 곳과 맞지 않아 붙이지 않았습니다 (다시 요청하세요)' };
+      if (at < 0 || at > 20) return { error: tr('project.patch.contMismatch') };
       merged = [...cont.head, ...tail.slice(at + 1)];
     }
     return { change: { path: cont.path, type: 'full', content: merged.join('\n'), ...(next.truncated ? { truncated: true } : {}) } };
@@ -730,7 +739,7 @@
 
   /** 잘렸거나 끝이 잘린 것으로 의심되어 이어 받을 만한 수정안인지 */
   const wantsContinue = ({ change, plan }) =>
-    !!continuationOf(change) && (plan.truncated || /끝이 잘린 것 같습니다/.test(plan.suspect || ''));
+    !!continuationOf(change) && (plan.truncated || plan.suspectCut || /끝이 잘린 것 같습니다/.test(plan.suspect || '')); // 글 비교: 표시 없이 저장된 예전 작업
 
 
   /** 자동 이어받기(v0.22.0)가 같은 파일 · 같은 횟수에 두 번 보내지 않게 하는 열쇠 */
@@ -738,7 +747,9 @@
 
   return {
     autoContinueKey,
-    TRUNCATED_TEXT,
+    get TRUNCATED_TEXT() {
+      return truncatedText();
+    },
     MAX_CONTINUE,
     suspectFullReplace,
     suspectCutCode,

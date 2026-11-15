@@ -21,6 +21,11 @@
   'use strict';
 
   const PC = projectContext || require('./project-context');
+  // 화면 문구 (i18n-*-project.js) — 부를 때 찾는다 (Electron 앱 require · 화면 전역 MLA.i18n). AI에게 보내는 글은 옮기지 않는다.
+  const tr = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
   const MODES = ['bundle', 'files'];
   const DEFAULT_MODE = 'bundle';
   // 묶음 파일 하나의 최대 크기 (UTF-8 바이트). 넘으면 -1, -2 …로 나눈다.
@@ -262,7 +267,7 @@
     const attachments = bundle(PC.CONTEXT_FILE, `${head}\n\n[프로젝트 구조]\n${tree}\n`, files, budget);
     const names = attachments.map((a) => a.name).join(', ');
     const text = `${head}\n첨부한 ${names}에 프로젝트 구조와 파일 ${files.length}개의 내용이 있습니다.\n\n${tail}`;
-    const note = mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined;
+    const note = mode === 'files' ? tr('project.upload.bundledNote') : undefined;
     return { mode: 'bundle', text, attachments, inlineText, note };
   }
 
@@ -280,7 +285,7 @@
     const attachments = bundle('requested-files.md', '', files, budget);
     const names = attachments.map((a) => a.name).join(', ');
     const text = [`요청한 파일 ${files.length}개의 내용을 첨부한 ${names}에 넣었습니다.`, '', ...skippedLines(skipped), ...tail].join('\n');
-    return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined };
+    return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? tr('project.upload.bundledNote') : undefined };
   }
 
   /**
@@ -304,7 +309,7 @@
     const attachments = bundle('updated-files.md', '', files, budget);
     const names = attachments.map((a) => a.name).join(', ');
     const text = [intro, `바뀐 파일 ${files.length}개의 지금 내용을 첨부한 ${names}에 넣었습니다.`, '', ...gone, ack].join('\n');
-    return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined };
+    return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? tr('project.upload.bundledNote') : undefined };
   }
 
   /**
@@ -384,7 +389,7 @@
     const names = attachments.map((a) => a.name).join(', ');
     const what = [includeTree ? '프로젝트 구조' : '', files.length ? `${first ? '' : '바뀐 '}파일 ${files.length}개의 지금 내용` : ''].filter(Boolean).join('와 ');
     const text = [head, `첨부한 ${names}에 ${what}${files.length ? '이' : '가'} 있습니다.`, '', ...sameLines, ...goneLines, tail].join('\n');
-    const note = mode === 'files' ? '개별 파일 한도를 넘어 묶음 파일로 보냄' : undefined;
+    const note = mode === 'files' ? tr('project.upload.bundledNote') : undefined;
     return { mode: 'bundle', text, attachments, inlineText, note };
   }
 

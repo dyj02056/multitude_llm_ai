@@ -9,9 +9,9 @@ const L = require('../../shared/local-llm');
 const { RELEASES_URL } = require('../../shared/update-core');
 const { normalizeLibrary } = require('../../shared/prompt-lib');
 const notifyCore = require('../../shared/notify');
+const { t } = require('../../shared/i18n');
 
 const ASK_MAX = 200000; // local:ask 글자 수 한도 (v0.29.0)
-const LOCAL_ONLY = '주소는 이 PC(localhost · 127.0.0.1 · [::1])의 http(s) 주소만 쓸 수 있습니다';
 
 /**
  * ctx: { ipcMain, history, remote, guard, net, shell, TIMEOUT_CHOICES, MAX_CHOICES, prefs(), savePrefs, pushState,
@@ -61,7 +61,7 @@ function register(ctx) {
     const prefs = ctx.prefs();
     const cur = prefs.local;
     const baseUrl = next.baseUrl === undefined ? cur.baseUrl : L.normalizeBaseUrl(next.baseUrl);
-    if (!baseUrl) return { ok: false, error: LOCAL_ONLY };
+    if (!baseUrl) return { ok: false, error: t('main.settings.localOnly') };
     prefs.local = {
       enabled: typeof next.enabled === 'boolean' ? next.enabled : cur.enabled,
       baseUrl,
@@ -84,13 +84,13 @@ function register(ctx) {
   ipcMain.handle('local:models', async (_e, baseUrl) => {
     // 화면이 준 주소도 이 PC 주소인지 앱 쪽에서 다시 본다 (아니면 요청을 보내지 않는다)
     const base = baseUrl === undefined || baseUrl === null ? ctx.prefs().local.baseUrl : guard.localBaseUrl(baseUrl);
-    if (!base) return { ok: false, error: LOCAL_ONLY };
+    if (!base) return { ok: false, error: t('main.settings.localOnly') };
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
       return { ok: true, models: await L.listModels((u, o) => net.fetch(u, o), base, { signal: ctrl.signal }) };
     } catch (err) {
-      return { ok: false, error: err.name === 'AbortError' ? '5초 안에 답이 없습니다 (서버가 켜져 있는지 확인하세요)' : err.message };
+      return { ok: false, error: err.name === 'AbortError' ? t('main.settings.noReply5s') : err.message };
     } finally {
       clearTimeout(timer);
     }
@@ -98,7 +98,7 @@ function register(ctx) {
 
   // 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 스킬 압축): 글만 받는다 (20만 자까지). 주소는 설정의 localhost 주소뿐
   ipcMain.handle('local:ask', (_e, text) => {
-    if (typeof text !== 'string' || !text.trim() || text.length > ASK_MAX) return { ok: false, error: '보낼 내용이 올바르지 않습니다' };
+    if (typeof text !== 'string' || !text.trim() || text.length > ASK_MAX) return { ok: false, error: t('main.settings.badAsk') };
     return ctx.askLocal(text);
   });
 

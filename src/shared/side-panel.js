@@ -13,6 +13,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // 화면 문구 (i18n-*-ext.js). 부를 때마다 사전을 찾고, 사전이 없으면 키 이름을 그대로 쓴다 (부서지지 않게).
+  const tr = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   const MAX_SIDE = 2; // 사이드탭에 함께 띄울 수 있는 모델 수
   const DEFAULT_SIDE = ['gemini'];
   const MAX_PAGE = 300000; // page.md에 넣는 본문의 최대 글자 수 (오른쪽 클릭 메뉴와 같음)
@@ -38,10 +44,10 @@
   function toggle(selected, id) {
     const cur = Array.isArray(selected) ? [...selected] : [];
     if (cur.includes(id)) {
-      if (cur.length === 1) return { ok: false, selected: cur, error: '최소 1개는 열어 두어야 합니다' };
+      if (cur.length === 1) return { ok: false, selected: cur, error: tr('ext.side.minOne') };
       return { ok: true, selected: cur.filter((x) => x !== id) };
     }
-    if (cur.length >= MAX_SIDE) return { ok: false, selected: cur, error: `사이드탭에는 최대 ${MAX_SIDE}개까지 띄울 수 있습니다` };
+    if (cur.length >= MAX_SIDE) return { ok: false, selected: cur, error: tr('ext.side.maxModels', { n: MAX_SIDE }) };
     return { ok: true, selected: [...cur, id] };
   }
 

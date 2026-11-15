@@ -29,6 +29,9 @@
 // 페이지 본문은 오른쪽 클릭 메뉴 "사이드탭에서 묻기"나 단축키(Alt+Shift+S)를 누른 그 탭에서만, 그때 받은 한 번 권한으로 읽는다.
 
 importScripts('lib/shared/services.js');
+// 화면 문구 사전 (v0.30.0): 오른쪽 클릭 메뉴 이름 · 사이드탭에 넘기는 오류 글. 사전 → i18n.js 순서로 읽는다.
+// 언어는 앱 탭 · 사이드탭과 같이 아직 한국어로 둔다 (setLang을 부르지 않음).
+importScripts('lib/shared/i18n-ko.js', 'lib/shared/i18n-ko-ext.js', 'lib/shared/i18n-en.js', 'lib/shared/i18n-en-ext.js', 'lib/shared/i18n.js');
 
 const APP_URL = chrome.runtime.getURL('app.html');
 const SIDE_URL = chrome.runtime.getURL('sidepanel.html');
@@ -65,13 +68,13 @@ chrome.action.onClicked.addListener(() => openApp());
 // 읽은 글은 브라우저를 닫으면 사라지는 저장소(storage.session)에 잠깐 두고 앱 탭을 열거나 앞으로 가져온다. 앱(host.js)이 받아서 지운다.
 const ASK_KEY = 'mla:ask';
 const ASK_MENUS = [
-  { id: 'mla-ask-selection', title: 'Multitude LLM에 묻기 — 선택한 글', contexts: ['selection'] },
-  { id: 'mla-ask-page', title: 'Multitude LLM에 묻기 — 이 페이지 본문', contexts: ['page', 'selection'] },
-  { id: 'mla-side-page', title: '사이드탭에서 이 페이지로 묻기 (Alt+Shift+S)', contexts: ['page', 'selection'] },
+  { id: 'mla-ask-selection', key: 'ext.menu.askSelection', contexts: ['selection'] },
+  { id: 'mla-ask-page', key: 'ext.menu.askPage', contexts: ['page', 'selection'] },
+  { id: 'mla-side-page', key: 'ext.menu.sidePage', contexts: ['page', 'selection'] },
 ];
 function setupAskMenus() {
   chrome.contextMenus.removeAll(() => {
-    for (const m of ASK_MENUS) chrome.contextMenus.create({ ...m, documentUrlPatterns: ['http://*/*', 'https://*/*'] }, () => void chrome.runtime.lastError);
+    for (const { key, ...m } of ASK_MENUS) chrome.contextMenus.create({ ...m, title: MLA.i18n.t(key), documentUrlPatterns: ['http://*/*', 'https://*/*'] }, () => void chrome.runtime.lastError);
   });
 }
 chrome.runtime.onInstalled.addListener(setupAskMenus);
@@ -92,9 +95,9 @@ async function readPageText(tabId) {
 const SIDE_CTX = (windowId) => `mla:side-ctx:${windowId}`;
 async function sideAsk(tab) {
   try {
-    if (!/^https?:/i.test(tab.url || '')) throw new Error('웹페이지(http · https)만 가져올 수 있습니다');
+    if (!/^https?:/i.test(tab.url || '')) throw new Error(MLA.i18n.t('ext.bg.httpOnly'));
     const page = await readPageText(tab.id);
-    if (!page?.text?.trim()) throw new Error('페이지 글을 읽지 못했습니다');
+    if (!page?.text?.trim()) throw new Error(MLA.i18n.t('ext.bg.noPageText'));
     const ctx = { title: page.title || tab.title || '', url: page.url || tab.url, text: page.text, tabId: tab.id, at: Date.now() };
     await chrome.storage.session.set({ [SIDE_CTX(tab.windowId)]: ctx });
   } catch (err) {
@@ -120,7 +123,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       ask = { kind: 'selection', title: tab.title || '', url: tab.url, text: String(info.selectionText || '') };
     } else {
       const page = await readPageText(tab.id);
-      if (!page) throw new Error('페이지 글을 읽지 못했습니다');
+      if (!page) throw new Error(MLA.i18n.t('ext.bg.noPageText'));
       ask = { kind: 'page', title: page.title || tab.title || '', url: page.url || tab.url, text: page.text };
     }
     await chrome.storage.session.set({ [ASK_KEY]: { ...ask, at: Date.now() } });

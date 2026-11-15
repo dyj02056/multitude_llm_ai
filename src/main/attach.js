@@ -19,6 +19,7 @@ const path = require('path');
 const { pageAttachFiles } = require('../shared/page');
 const { uploadOf, isServiceUrl } = require('../shared/services');
 const { log } = require('./dev');
+const { t } = require('../shared/i18n');
 
 const WORLD = 1001; // 첨부용 격리 공간 번호 (사이트 스크립트와 분리)
 const CHUNK = 2 * 1024 * 1024; // 한 번에 옮기는 base64 글자 수
@@ -125,7 +126,7 @@ async function attachWithDebugger(wc, svc, files) {
 async function attachFiles(wc, svc, files) {
   const key = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const cfg = { input: svc.input || [], upload: uploadOf(svc) };
-  if (!isServiceUrl(svc, wc.getURL())) return { ok: false, error: '패널이 서비스 주소가 아닙니다' };
+  if (!isServiceUrl(svc, wc.getURL())) return { ok: false, error: t('main.attach.notService') };
   let res;
   try {
     await transfer(wc, key, files);
@@ -143,7 +144,7 @@ async function attachFiles(wc, svc, files) {
     await clearTransfer(wc, key);
   }
   log('attach', svc.id, JSON.stringify(res));
-  if (res?.ok || !cfg.upload.methods.includes('input')) return res || { ok: false, error: '첨부하지 못했습니다' };
+  if (res?.ok || !cfg.upload.methods.includes('input')) return res || { ok: false, error: t('main.attachFailed') };
 
   if (await attachWithDebugger(wc, svc, files)) {
     // 사이트가 파일을 읽고 미리보기를 만들 시간을 준다. 업로드가 끝났는지는 보내기 버튼이 켜지는 것으로 본다.

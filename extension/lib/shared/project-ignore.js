@@ -21,6 +21,12 @@
 
   const ignore = ignoreLib || require('./vendor/ignore');
 
+  // 화면 문구 (i18n-*-project.js) — 부를 때 찾는다 (Electron 앱 require · 화면 전역 MLA.i18n)
+  const tr = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   const MAX_FILE_BYTES = 1024 * 1024; // 이보다 큰 파일은 보내지 않는다 (L1)
   const MAX_ENTRIES = 20000; // 이보다 많으면 훑기를 멈춘다
 
@@ -93,7 +99,8 @@
     return i >= 0 ? i + 1 : null;
   }
 
-  const L1 = makeSource({ source: '기본 제외 규칙(앱 내장)', layer: 'L1', content: L1_RULES.join('\n') });
+  const L1 = makeSource({ source: 'L1', layer: 'L1', content: L1_RULES.join('\n') });
+  Object.defineProperty(L1, 'source', { get: () => tr('project.ignore.builtinSource'), enumerable: true }); // 화면 이름 (부를 때 언어로)
 
   // 여러 제외 규칙 파일을 모아 "이 경로는 빼야 하나?"에 답하는 판정기를 만듭니다. git과 같은 문법을 씁니다.
   function createMatcher() {
@@ -214,11 +221,11 @@
       const path = join(dir, it.name);
       const isDir = it.kind === 'dir';
       let excluded = null;
-      if (it.kind === 'link') excluded = { layer: 'L1', source: '바로가기 링크', pattern: '링크는 따라가지 않음' };
+      if (it.kind === 'link') excluded = { layer: 'L1', source: tr('project.ignore.linkSource'), pattern: tr('project.ignore.linkPattern') };
       else excluded = matcher.classify(path, isDir);
       if (!excluded && parentReason) excluded = parentReason;
       if (!excluded && !isDir && it.size > MAX_FILE_BYTES) {
-        excluded = { layer: 'L1', source: '크기 제한', pattern: `${Math.round(MAX_FILE_BYTES / 1024)}KB 초과` };
+        excluded = { layer: 'L1', source: tr('project.ignore.sizeSource'), pattern: tr('project.ignore.sizePattern', { n: Math.round(MAX_FILE_BYTES / 1024) }) };
       }
       return { path, name: it.name, kind: it.kind, size: it.size || 0, depth, excluded, l3: excluded ? [] : matcher.l3Would(path, isDir) };
     });
@@ -317,7 +324,7 @@
   /** 사람이 읽을 이유 한 줄: ".gitignore 3행 (dist/)" */
   function describe(reason) {
     if (!reason) return '';
-    const where = reason.line ? `${reason.source} ${reason.line}행` : reason.source;
+    const where = reason.line ? tr('project.ignore.atLine', { source: reason.source, line: reason.line }) : reason.source;
     return reason.pattern ? `${where} (${reason.pattern})` : where;
   }
 

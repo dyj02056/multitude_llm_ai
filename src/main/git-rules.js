@@ -26,14 +26,16 @@ const SUBCOMMANDS = new Set([
   'fetch', 'pull', 'push', 'remote', 'init', 'config', 'version',
 ]);
 
-// 어느 하위 명령에서든 받지 않는 옵션
+const { t } = require('../shared/i18n');
+
+// 어느 하위 명령에서든 받지 않는 옵션 (둘째 값은 사전 키 — 쓸 때 t()로 바꾼다)
 const BLOCKED_OPTS = [
-  [/^--(upload-pack|receive-pack|exec)(=|$)/, '외부 프로그램을 실행하는 옵션'],
-  [/^--output(=|$)/, '결과를 다른 파일에 쓰는 옵션'],
-  [/^--(ext-diff|textconv)$/, '외부 diff 프로그램을 쓰는 옵션'],
-  [/^--(git-dir|work-tree|namespace|exec-path|config-env|separate-git-dir)(=|$)/, '다른 저장소·설정을 가리키는 옵션'],
-  [/^--template(=|$)/, '다른 템플릿(훅 포함)을 쓰는 옵션'],
-  [/^--rebase=(i|interactive)$/, '대화형 옵션 (이 콘솔에서는 입력을 받을 수 없음)'],
+  [/^--(upload-pack|receive-pack|exec)(=|$)/, 'main.git.opt.external'],
+  [/^--output(=|$)/, 'main.git.opt.output'],
+  [/^--(ext-diff|textconv)$/, 'main.git.opt.extDiff'],
+  [/^--(git-dir|work-tree|namespace|exec-path|config-env|separate-git-dir)(=|$)/, 'main.git.opt.otherRepo'],
+  [/^--template(=|$)/, 'main.git.opt.template'],
+  [/^--rebase=(i|interactive)$/, 'main.git.opt.interactive'],
 ];
 // 이 하위 명령들에서는 -p · -i · -e가 대화형(줄마다 묻기·편집기)이라 받지 않는다 (log · show · diff의 -p는 괜찮다)
 const INTERACTIVE_SUBS = new Set(['add', 'checkout', 'restore', 'reset', 'stash', 'commit', 'switch']);
@@ -76,35 +78,35 @@ const hasAny = (args, list) => args.some((a) => list.includes(a));
 //           → config는 읽기만, commit은 메시지 필수 등 명령별 규칙 → 위험도(danger) 판단
 function checkCommand(line) {
   const parts = splitArgs(String(line || '').trim());
-  if (!parts) return { ok: false, error: '따옴표가 닫히지 않았습니다' };
-  if (!parts.length) return { ok: false, error: '명령을 입력하세요' };
-  if (parts[0] !== 'git') return { ok: false, error: 'git 명령만 실행할 수 있습니다 (예: git status)' };
+  if (!parts) return { ok: false, error: t('main.git.unclosedQuote') };
+  if (!parts.length) return { ok: false, error: t('main.git.enterCommand') };
+  if (parts[0] !== 'git') return { ok: false, error: t('main.git.onlyGit') };
   const args = parts.slice(1);
-  if (!args.length) return { ok: false, error: '하위 명령을 입력하세요 (예: git status)' };
-  if (args[0].startsWith('-')) return { ok: false, error: `git 앞 옵션(${args[0]})은 쓸 수 없습니다. 하위 명령 뒤에 쓰세요` };
+  if (!args.length) return { ok: false, error: t('main.git.enterSub') };
+  if (args[0].startsWith('-')) return { ok: false, error: t('main.git.globalOpt', { opt: args[0] }) };
   const sub = args[0];
-  if (!SUBCOMMANDS.has(sub)) return { ok: false, error: `이 콘솔에서 쓸 수 없는 명령입니다: git ${sub}` };
-  if (args.some((a) => a.length > 1000 || /[\0\r\n]/.test(a))) return { ok: false, error: '인자가 너무 길거나 줄바꿈이 있습니다' };
+  if (!SUBCOMMANDS.has(sub)) return { ok: false, error: t('main.git.notAllowedSub', { sub }) };
+  if (args.some((a) => a.length > 1000 || /[\0\r\n]/.test(a))) return { ok: false, error: t('main.git.badArg') };
   const rest = args.slice(1);
   for (const a of rest) {
     if (a === '--') break; // 그 뒤는 경로
-    for (const [re, why] of BLOCKED_OPTS) if (re.test(a)) return { ok: false, error: `${why}은(는) 쓸 수 없습니다: ${a}` };
-    if (INTERACTIVE_SUBS.has(sub) && INTERACTIVE_OPT.test(a)) return { ok: false, error: `대화형 옵션은 쓸 수 없습니다 (이 콘솔에서는 입력을 받을 수 없음): ${a}` };
+    for (const [re, why] of BLOCKED_OPTS) if (re.test(a)) return { ok: false, error: t('main.git.blocked', { why: t(why), arg: a }) };
+    if (INTERACTIVE_SUBS.has(sub) && INTERACTIVE_OPT.test(a)) return { ok: false, error: t('main.git.interactiveOpt', { arg: a }) };
   }
 
   if (sub === 'config') {
     const read = rest.length && rest.every((a) => /^(--get|--get-all|--get-regexp|--list|-l|--show-origin|--global|--local|--system|--name-only)$/.test(a) || !a.startsWith('-'));
     const wantsRead = hasAny(rest, ['--get', '--get-all', '--get-regexp', '--list', '-l']) || (rest.filter((a) => !a.startsWith('-')).length === 1);
-    if (!read || !wantsRead) return { ok: false, error: 'git config는 읽기만 할 수 있습니다 (예: git config --get user.name, git config --list)' };
+    if (!read || !wantsRead) return { ok: false, error: t('main.git.configReadOnly') };
   }
   if (sub === 'commit' && !rest.some((a) => /^(-m|--message(=.*)?|-F|--file(=.*)?|--no-edit|-C|--reuse-message(=.*)?)$/.test(a) || /^-[a-zA-Z]*m/.test(a))) {
-    return { ok: false, error: '메시지를 붙여 주세요: git commit -m "메시지" (편집기는 열 수 없습니다)' };
+    return { ok: false, error: t('main.git.commitNeedsMessage') };
   }
   if (sub === 'remote' && rest[0] && !['-v', '--verbose', 'show', 'get-url', 'add', 'remove', 'rm', 'rename', 'set-url', 'prune'].includes(rest[0])) {
-    return { ok: false, error: `이 콘솔에서 쓸 수 없는 remote 명령입니다: ${rest[0]}` };
+    return { ok: false, error: t('main.git.remoteNotAllowed', { cmd: rest[0] }) };
   }
   if (sub === 'stash' && rest[0] && !['list', 'show', 'push', 'save', 'pop', 'apply', 'drop', 'clear', '-u', '-m', '--include-untracked', '--message'].includes(rest[0])) {
-    return { ok: false, error: `이 콘솔에서 쓸 수 없는 stash 명령입니다: ${rest[0]}` };
+    return { ok: false, error: t('main.git.stashNotAllowed', { cmd: rest[0] }) };
   }
   return { ok: true, args, danger: dangerOf(sub, rest) };
 }
@@ -112,18 +114,18 @@ function checkCommand(line) {
 /** 되돌리기 어려운 명령이면 이유 (확인 창에 씀), 아니면 null */
 function dangerOf(sub, rest) {
   const has = (...xs) => hasAny(rest, xs);
-  if (sub === 'reset' && has('--hard', '--merge', '--keep')) return '커밋하지 않은 변경이 사라집니다';
+  if (sub === 'reset' && has('--hard', '--merge', '--keep')) return t('main.git.danger.uncommitted');
   if (sub === 'push' && (has('--force', '-f', '--force-with-lease', '--mirror', '--delete', '-d', '--prune') || rest.some((a) => /^\+|^:|^--force-with-lease=/.test(a)))) {
-    return '원격 저장소의 기록을 덮어쓰거나 지웁니다';
+    return t('main.git.danger.remoteHistory');
   }
-  if (sub === 'branch' && (has('-D', '--delete', '-d') || has('-f', '--force'))) return '브랜치를 지우거나 덮어씁니다';
-  if ((sub === 'checkout' || sub === 'switch') && has('-f', '--force', '--discard-changes')) return '커밋하지 않은 변경이 사라집니다';
-  if (sub === 'checkout' && rest.includes('--')) return '파일의 커밋하지 않은 변경이 사라집니다';
-  if (sub === 'restore' && !has('--staged', '-S')) return '파일의 커밋하지 않은 변경이 사라집니다';
-  if (sub === 'stash' && ['drop', 'clear'].includes(rest[0])) return '보관한 변경이 사라집니다';
-  if (sub === 'tag' && has('-d', '--delete', '-f', '--force')) return '태그를 지우거나 덮어씁니다';
-  if (sub === 'rm' && !has('--cached')) return '파일을 지웁니다';
-  if (sub === 'remote' && ['remove', 'rm', 'set-url'].includes(rest[0])) return '원격 저장소 설정을 바꿉니다';
+  if (sub === 'branch' && (has('-D', '--delete', '-d') || has('-f', '--force'))) return t('main.git.danger.branch');
+  if ((sub === 'checkout' || sub === 'switch') && has('-f', '--force', '--discard-changes')) return t('main.git.danger.uncommitted');
+  if (sub === 'checkout' && rest.includes('--')) return t('main.git.danger.fileUncommitted');
+  if (sub === 'restore' && !has('--staged', '-S')) return t('main.git.danger.fileUncommitted');
+  if (sub === 'stash' && ['drop', 'clear'].includes(rest[0])) return t('main.git.danger.stash');
+  if (sub === 'tag' && has('-d', '--delete', '-f', '--force')) return t('main.git.danger.tag');
+  if (sub === 'rm' && !has('--cached')) return t('main.git.danger.rm');
+  if (sub === 'remote' && ['remove', 'rm', 'set-url'].includes(rest[0])) return t('main.git.danger.remote');
   return null;
 }
 
@@ -155,7 +157,7 @@ function maskOutput(text, patterns = []) {
   let s = String(text).replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@');
   for (const p of patterns) {
     if (p.name === '비밀번호·토큰 대입') continue; // git 출력(diff)에서는 오탐이 많다
-    s = s.replace(new RegExp(p.re.source, p.re.flags.includes('g') ? p.re.flags : `${p.re.flags}g`), (m) => `${m.slice(0, 4)}…(가림)`);
+    s = s.replace(new RegExp(p.re.source, p.re.flags.includes('g') ? p.re.flags : `${p.re.flags}g`), (m) => `${m.slice(0, 4)}${t('main.git.masked')}`);
   }
   return s;
 }

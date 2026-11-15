@@ -16,7 +16,7 @@
   const RETRY_DELAY_MS = 1500; // 보내기 실패 뒤 다시 보낼 때까지 (페이지가 막 바뀌는 중이었을 수 있어 잠깐 기다린다)
   const MAX_AUTO = 1; // 자동으로 다시 보내는 횟수
   // 다시 보내도 소용없는 실패 (패널이 없음 · 보낼 것이 없음)
-  const HOPELESS = [/패널이 (열려 있지 않|닫혔)/, /보낼 내용이 없/, /한도를 넘/];
+  const HOPELESS = [/패널이 (열려 있지 않|닫혔)/, /보낼 내용이 없/, /한도를 넘/, /panel (is not open|was closed)/i, /^Nothing to send/i, /exceeds? the (total size )?limit/i]; // 한국어 · 영어 오류 글 (v0.30.0)
 
   /**
    * state: 'error'(보내기 실패) · 'timeout' · 'no-answer' · 'done'

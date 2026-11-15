@@ -20,6 +20,7 @@ const { spawn, execFile } = require('child_process');
 const { dialog } = require('electron');
 const { checkCommand, FORCED_PREFIX, FORCED_ENV, createLineMasker } = require('./git-rules');
 const { PATTERNS } = require('../shared/secret-scan');
+const { t } = require('../shared/i18n');
 
 const MAX_OUTPUT = 2 * 1024 * 1024;
 const NETWORK = new Set(['fetch', 'pull', 'push']);
@@ -72,8 +73,8 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
   // 콘솔을 열 때: git 위치, 저장소인지, 브랜치, 이 저장소의 git 훅 (commit 등에서 실행되는 프로그램)
   ipcMain.handle('git:info', async () => {
     const root = getRoot();
-    if (!root) return { error: '프로젝트가 열려 있지 않습니다' };
-    if (!gitPath()) return { error: 'git을 찾지 못했습니다. Git for Windows를 설치하고 PATH에 넣은 뒤 앱을 다시 시작하세요' };
+    if (!root) return { error: t('main.noProject') };
+    if (!gitPath()) return { error: t('main.noGitInstall') };
     const top = await quick(root, ['rev-parse', '--show-toplevel']);
     if (top === null) return { root, isRepo: false };
     const branch = await quick(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
@@ -90,29 +91,29 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
   // 명령 실행: 한 번에 하나만. 출력은 받는 즉시 화면으로 보내고(git:output), 끝나면 git:done으로 알립니다.
   ipcMain.handle('git:run', async (_e, line) => {
     const root = getRoot();
-    if (!root) return { ok: false, error: '프로젝트가 열려 있지 않습니다' };
-    if (running) return { ok: false, error: '이미 실행 중인 명령이 있습니다 (끝나거나 중지한 뒤 실행하세요)' };
+    if (!root) return { ok: false, error: t('main.noProject') };
+    if (running) return { ok: false, error: t('main.gitconsole.busy') };
     // 확인 창을 기다리는 동안 두 번째 실행이 끼어들지 않게 자리를 먼저 잡아 둔다 (실행하지 못하고 끝나면 finally에서 푼다)
     running = { pending: true };
     let launched = false;
     try {
-      if (typeof line !== 'string' || line.length > 4000) return { ok: false, error: '명령이 너무 깁니다' };
+      if (typeof line !== 'string' || line.length > 4000) return { ok: false, error: t('main.gitconsole.tooLong') };
       const exe = gitPath();
-      if (!exe) return { ok: false, error: 'git을 찾지 못했습니다' };
+      if (!exe) return { ok: false, error: t('main.noGit') };
       const cmd = checkCommand(line);
       if (!cmd.ok) return cmd;
       if (cmd.danger) {
         const win = getWin();
         const { response } = await dialog.showMessageBox(win, {
           type: 'warning',
-          buttons: ['실행', '취소'],
+          buttons: [t('main.run'), t('main.cancel')],
           defaultId: 1,
           cancelId: 1,
-          title: 'git 명령 확인',
-          message: `${cmd.danger}. 실행할까요?`,
-          detail: `${line.trim()}\n\n폴더: ${root}`,
+          title: t('main.gitconsole.confirmTitle'),
+          message: t('main.gitconsole.confirm', { danger: cmd.danger }),
+          detail: `${line.trim()}\n\n${t('main.folderLine', { path: root })}`,
         });
-        if (response !== 0) return { ok: false, error: '취소했습니다', cancelled: true };
+        if (response !== 0) return { ok: false, error: t('main.cancelled'), cancelled: true };
       }
 
       const started = Date.now();
@@ -132,7 +133,7 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
         size += buf.length;
         if (size > MAX_OUTPUT) {
           cut = true;
-          send('git:output', { stream: 'info', text: '\n… 출력이 2MB를 넘어 나머지는 보이지 않습니다\n' });
+          send('git:output', { stream: 'info', text: `\n${t('main.outputCut')}\n` });
           return;
         }
         const text = maskers[stream].push(buf);
@@ -142,7 +143,7 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
       child.stderr.on('data', onData('err'));
       const limit = NETWORK.has(cmd.args[0]) ? 120000 : 60000;
       const timer = setTimeout(() => {
-        send('git:output', { stream: 'info', text: `\n시간 제한(${limit / 1000}초)을 넘어 멈췄습니다\n` });
+        send('git:output', { stream: 'info', text: `\n${t('commit.timedOut', { s: limit / 1000 })}\n` });
         killTree(child);
       }, limit);
       running = { child, timer };
@@ -172,7 +173,7 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
   // 중지 버튼
   ipcMain.handle('git:stop', () => {
     if (!running?.child) return false; // 확인 창을 기다리는 중(아직 실행 전)이면 멈출 것이 없다
-    send('git:output', { stream: 'info', text: '\n중지했습니다\n' });
+    send('git:output', { stream: 'info', text: `\n${t('main.gitconsole.stopped')}\n` });
     killTree(running.child);
     return true;
   });
@@ -180,7 +181,7 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
   // 이 폴더에서 Windows 터미널(없으면 PowerShell) 열기 — git 밖의 작업이 필요할 때 사용자가 직접 쓴다
   ipcMain.handle('git:openTerminal', () => {
     const root = getRoot();
-    if (!root) return { ok: false, error: '프로젝트가 열려 있지 않습니다' };
+    if (!root) return { ok: false, error: t('main.noProject') };
     const wt = resolveExe('wt.exe');
     const [exe, args] = wt
       ? [wt, ['-d', root]]
@@ -189,7 +190,7 @@ function setupGitConsole({ ipcMain, getWin, getRoot }) {
       const child = spawn(exe, args, { cwd: root, detached: true, stdio: 'ignore', shell: false });
       child.on('error', () => {});
       child.unref();
-      return { ok: true, via: wt ? 'Windows 터미널' : 'PowerShell' };
+      return { ok: true, via: wt ? t('main.gitconsole.windowsTerminal') : 'PowerShell' };
     } catch (err) {
       return { ok: false, error: err.message };
     }

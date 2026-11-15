@@ -30,7 +30,15 @@
   const { scanSecrets, describeSecrets } = MLA.secretScan;
   const PC = MLA.projectContext;
   const PU = MLA.projectUpload;
-  const MODE_TEXT = { bundle: '묶음 파일', files: '개별 파일' };
+  // 화면 이름 — 부를 때 사전에서
+  const MODE_TEXT = {
+    get bundle() {
+      return t('project.mode.bundle');
+    },
+    get files() {
+      return t('project.mode.files');
+    },
+  };
   const PX = MLA.patch;
 
   const KEY_FILES = ['package.json', 'README.md', 'README', 'readme.md', 'pyproject.toml', 'requirements.txt', 'go.mod', 'Cargo.toml', 'pom.xml', 'build.gradle', 'composer.json', 'Gemfile', 'tsconfig.json'];
@@ -180,7 +188,7 @@
     const known = await loadState();
     await rescan();
     // 지난번 "테스트 실행" 도중 앱이 꺼져 잠깐 써 둔 수정안이 남아 있었으면 메인이 원래대로 되돌렸다 (Windows 앱)
-    if (info.recovered) notice(`지난번 테스트 중 앱이 꺼져 남아 있던 임시 수정 ${info.recovered}개 파일을 원래대로 되돌렸습니다`);
+    if (info.recovered) notice(t('project.open.recovered', { n: info.recovered }));
     await P.afterRestore(); // 되살린 패널의 변경 바 · 파일별로 받기 바 (v0.28.0)
     // 처음 연 프로젝트면 package.json · README 같은 핵심 파일을 골라 둔다.
     if (fresh || !known) {
@@ -193,7 +201,7 @@
 
   /** 폴더를 다시 훑어 파일 목록을 새로 만듭니다 (사이드바 ⟳ 버튼, 파일을 쓴 뒤 등). 사라진 파일은 고른 목록에서 뺍니다. */
   async function rescan() {
-    $('#psSummary').textContent = '폴더를 읽는 중…';
+    $('#psSummary').textContent = t('project.open.reading');
     const globalExclude = await host.project.globalExclude().catch(() => null);
     project.scan = await PI.scanProject(fsx(), { l3Enabled: project.l3Enabled, globalExclude });
     // 고른 파일 중 사라진 것은 뺀다.
@@ -208,13 +216,13 @@
       const info = await host.project.pick();
       if (info) await openProject(info, { fresh: true });
     } catch (err) {
-      alert(`폴더를 열지 못했습니다: ${err.message}`);
+      alert(t('project.open.failed', { error: err.message }));
     }
   }
 
   async function closeProject() {
-    const draft = P.edDirty() ? `\n\n편집기에서 저장하지 않은 ${ed.path}의 수정 내용은 사라집니다.` : '';
-    if (!confirm(`프로젝트를 닫을까요? (폴더의 파일은 그대로이고, 적용 기록은 다음에 같은 폴더를 열면 다시 보입니다)${draft}`)) return;
+    const draft = P.edDirty() ? `\n\n${t('project.close.draft', { path: ed.path })}` : '';
+    if (!confirm(t('project.close.confirm') + draft)) return;
     await host.project.close().catch(() => {});
     project.open = false;
     await openProject(null);
@@ -251,28 +259,28 @@
     project.split = e.target.checked;
     saveState();
     render();
-    notice(project.split ? '큰 작업: 다음 질문은 계획(고칠 파일 목록)만 받고, 파일별로 차례로 받습니다' : '큰 작업을 껐습니다');
+    notice(project.split ? t('project.opt.splitOn') : t('project.opt.splitOff'));
   });
   $('#psAutoRun').addEventListener('change', (e) => {
     project.autoRun = e.target.checked;
     saveState();
-    notice(project.autoRun ? '계획 답이 오면 바로 한 파일씩 받기 시작합니다' : '계획 답이 오면 [▶ 파일별로 받기 시작]을 눌러 시작합니다');
+    notice(project.autoRun ? t('project.opt.autoRunOn') : t('project.opt.autoRunOff'));
   });
   $('#psAutoCont').addEventListener('change', (e) => {
     project.autoContinue = e.target.checked;
     saveState();
-    notice(project.autoContinue ? `잘린 파일은 자동으로 이어 받습니다 (한 파일 최대 ${PX.MAX_CONTINUE}번)` : '잘린 파일은 [↪ 이어서 받기]를 눌러 받습니다');
+    notice(project.autoContinue ? t('project.opt.autoContinueOn', { n: PX.MAX_CONTINUE }) : t('project.opt.autoContinueOff'));
   });
   $('#psIncremental').addEventListener('change', (e) => {
     project.incremental = e.target.checked;
     saveState();
     render();
-    notice(project.incremental ? '이어지는 질문에는 내용이 바뀐 파일만 다시 올립니다' : '질문마다 고른 파일을 모두 다시 올립니다');
+    notice(project.incremental ? t('project.opt.incrementalOn') : t('project.opt.incrementalOff'));
   });
   $('#psFollowList').addEventListener('change', (e) => {
     project.followList = e.target.checked;
     saveState();
-    notice(project.followList ? '이어지는 질문에 지난번에 보낸 파일 목록을 붙이고, 그중 바뀐 파일은 다시 올립니다' : '이어지는 질문에는 고른 파일만 봅니다');
+    notice(project.followList ? t('project.opt.followListOn') : t('project.opt.followListOff'));
   });
   $('#projectInclude').addEventListener('change', (e) => {
     project.include = e.target.checked;
@@ -322,17 +330,17 @@
     renderServices();
     renderTree();
     const chars = [...project.checked].reduce((n, p) => n + (entryOf(p)?.size || 0), 0);
-    const amount = chars < 10000 ? `${chars.toLocaleString()}자` : `${(chars / 10000).toFixed(1)}만 자`;
+    const amount = chars < 10000 ? t('project.chars.small', { n: chars.toLocaleString() }) : t('project.chars.big', { n: (chars / (Number(t('project.chars.bigUnit')) || 10000)).toFixed(1) });
     // 보낼 양 어림 (v0.22.0): 파일 크기로 센 대략의 토큰 수. 많으면 "큰 작업"을 먼저 권한다
     const tokens = PC.estimateTokens(chars);
-    const summary = `내용 보낼 파일 ${project.checked.size}개 · 약 ${amount} (${PC.tokenText(tokens)}) / 보낼 수 있는 파일 ${sendablePaths().length}개`;
-    $('#psSummary').replaceChildren(document.createTextNode(project.scan.truncated ? `${summary} (항목이 많아 일부만 읽음)` : summary));
+    const summary = t('project.summary', { n: project.checked.size, amount, tokens: PC.tokenText(tokens), total: sendablePaths().length });
+    $('#psSummary').replaceChildren(document.createTextNode(project.scan.truncated ? summary + t('project.summary.truncated') : summary));
     if (!project.split && PC.suggestSplitTokens(tokens)) {
-      const w = span('split-warn', ' · [!] 큰 작업 권장');
-      w.title = `고른 파일이 ${PC.tokenText(tokens)}입니다 — 한 답에 다 고쳐 쓰면 출력 한도로 끊기기 쉬워 "큰 작업"을 권합니다 (토큰 수는 파일 크기로 어림한 값)`;
+      const w = span('split-warn', t('project.splitHint'));
+      w.title = t('project.splitHintTitle', { tokens: PC.tokenText(tokens) });
       $('#psSummary').append(w);
     }
-    $('#projectChipText').textContent = `~/${project.info.name} · 파일 ${project.checked.size}개 · ${MODE_TEXT[project.uploadMode]}로 업로드`;
+    $('#projectChipText').textContent = t('project.chip', { name: project.info.name, n: project.checked.size, mode: MODE_TEXT[project.uploadMode] });
   }
 
   /** 서비스마다 이 프로젝트의 파일을 보낼지 (끄면 그 서비스에는 질문 글만 보낸다) */
@@ -351,13 +359,13 @@
       });
       const label = document.createElement('label');
       label.append(box, ` ${s.name}`);
-      row.append(label, span('muted-label', box.checked ? '구조·파일 업로드' : '질문 글만'));
+      row.append(label, span('muted-label', box.checked ? t('project.svc.upload') : t('project.svc.textOnly')));
       return row;
     });
     $('#psServicesBody').replaceChildren(...rows);
     $('#psServices').querySelector('summary').textContent = project.blocked.size
-      ? `프로젝트 파일을 보낼 서비스 (${project.blocked.size}곳 제외)`
-      : '프로젝트 파일을 보낼 서비스';
+      ? t('project.svc.titleBlocked', { n: project.blocked.size })
+      : t('project.svc.title');
   }
 
   const nameOf = (id) => state.services.find((s) => s.id === id)?.name || id;
@@ -374,14 +382,14 @@
     if (!fresh.length) return true;
     const ok = confirm(
       [
-        `프로젝트 ${project.info.name}의 구조와 파일 ${fileCount}개 내용을 다음 서비스에 처음 올립니다:`,
+        t('project.upload.confirmHead', { name: project.info.name, n: fileCount }),
         ...fresh.map((id) => `- ${nameOf(id)}`),
         '',
-        '올린 내용은 각 회사 서버에 저장되고, 서비스 설정에 따라 학습에 쓰일 수 있습니다.',
-        '보내지 않을 서비스는 사이드바의 "프로젝트 파일을 보낼 서비스"에서 끌 수 있습니다.',
+        t('project.upload.confirmStored'),
+        t('project.upload.confirmOff'),
         '',
-        '확인: 올리기 (이 프로젝트에서 다시 묻지 않음)',
-        '취소: 보내지 않기',
+        t('project.upload.confirmOk'),
+        t('project.upload.confirmCancel'),
       ].join('\n'),
     );
     if (!ok) return false;
@@ -393,7 +401,7 @@
   /** 이 서비스에 프로젝트 파일을 보내도 되는지. 안 되면 알리고 false */
   function allowedFor(id) {
     if (!project.blocked.has(id)) return true;
-    alert(`${nameOf(id)}은(는) 이 프로젝트의 파일을 보내지 않도록 설정되어 있습니다. (사이드바 "프로젝트 파일을 보낼 서비스")`);
+    alert(t('project.svc.blocked', { name: nameOf(id) }));
     return false;
   }
 
@@ -401,10 +409,10 @@
   function renderRules() {
     const s = project.scan;
     const rows = [];
-    const l2 = s.l2Found.length ? s.l2Found.join(', ') : '없음';
-    rows.push(span('rule-row', `항상 제외: 앱 내장 규칙(비밀·키·바이너리·1MB 초과·.git·node_modules)`));
-    rows.push(span('rule-row', `기본 적용: ${l2}`));
-    if (!s.l3Found.length) rows.push(span('rule-row', '선택 적용: (해당 파일 없음)'));
+    const l2 = s.l2Found.length ? s.l2Found.join(', ') : t('project.split.none');
+    rows.push(span('rule-row', t('project.rules.l1')));
+    rows.push(span('rule-row', t('project.rules.l2', { list: l2 })));
+    if (!s.l3Found.length) rows.push(span('rule-row', t('project.rules.l3None')));
     for (const f of s.l3Found) {
       const row = document.createElement('label');
       row.className = 'rule-row';
@@ -414,7 +422,7 @@
         saveState();
         await rescan();
       });
-      row.append(box, span('', f.source), span('muted-label', f.enabled ? '적용 중' : `켜면 ${f.count}개 더 제외`));
+      row.append(box, span('', f.source), span('muted-label', f.enabled ? t('project.rules.l3On') : t('project.rules.l3Off', { n: f.count })));
       rows.push(row);
     }
     $('#psRulesBody').replaceChildren(...rows);
@@ -464,25 +472,25 @@
       row.append(twisty, box, name);
       if (e.excluded) {
         const tag = span(`tag ${e.excluded.layer}`, e.excluded.layer);
-        tag.title = `제외됨: ${PI.describe(e.excluded)}${e.excluded.layer === 'L1' ? ' — 앱 내장 규칙이라 보낼 수 없습니다' : ' — 체크하면 이 파일만 보냅니다'}`;
+        tag.title = t('project.tree.excluded', { why: PI.describe(e.excluded) }) + (e.excluded.layer === 'L1' ? t('project.tree.excludedL1') : t('project.tree.excludedPick'));
         row.append(tag);
       }
       const hits = project.secretHits.get(e.path);
       if (hits?.length) {
-        const tag = span('tag secret', '⚠ 비밀?');
-        tag.title = `비밀 정보로 보이는 문자열: ${describeSecrets(hits)}`;
+        const tag = span('tag secret', t('project.tree.secret'));
+        tag.title = t('project.tree.secretTitle', { list: describeSecrets(hits) });
         row.append(tag);
       }
       const touched = project.touched.get(e.path);
       if (touched) {
         const tag = span(`tag touched ${touched}`, touched);
-        tag.title = touched === 'A' ? 'AI 수정안으로 새로 만든 파일' : 'AI 수정안으로 바꾼 파일';
+        tag.title = touched === 'A' ? t('project.tree.touchedNew') : t('project.tree.touchedMod');
         row.append(tag);
       }
       if (e.kind === 'file') row.append(span('sz', fmtSize(e.size)));
       if (e.kind === 'dir') name.addEventListener('click', () => toggleDir(e));
       else if (e.kind === 'file' && e.excluded?.layer !== 'L1') {
-        name.title = `${e.path}\n누르면 편집기에서 엽니다`;
+        name.title = `${e.path}\n${t('project.tree.openHint')}`;
         name.addEventListener('click', () => P.openEditor(e.path));
       }
       if (e.path === ed.path) row.classList.add('editing');
@@ -502,7 +510,7 @@
           const at = project.scan.entries.indexOf(e);
           project.scan.entries.splice(at + 1, 0, ...children);
         } catch (err) {
-          alert(`폴더를 읽지 못했습니다: ${err.message}`);
+          alert(t('project.tree.readFailed', { error: err.message }));
         }
       }
     }
@@ -519,13 +527,13 @@
     // 고를 때 비밀 정보를 먼저 본다.
     const r = await host.project.readFile(e.path).catch((err) => ({ error: err.message }));
     if (r.binary || r.tooLarge || r.missing || r.error) {
-      alert(`이 파일은 보낼 수 없습니다: ${r.binary ? '바이너리 파일' : r.tooLarge ? '1MB 초과' : r.missing ? '파일이 없습니다' : r.error}`);
+      alert(t('project.pick.cannot', { why: r.binary ? t('project.read.binary') : r.tooLarge ? t('project.read.over1mb') : r.missing ? t('project.editor.noFile') : r.error }));
       return render();
     }
     const hits = scanSecrets(r.text);
     project.secretHits.set(e.path, hits);
     if (hits.length && !project.allowSecret.has(e.path)) {
-      if (!confirm(`${e.path}에 비밀 정보로 보이는 문자열이 있습니다:\n${describeSecrets(hits)}\n\n그래도 AI에게 보낼 파일로 고를까요?`)) return render();
+      if (!confirm(t('project.pick.secret', { path: e.path, list: describeSecrets(hits) }))) return render();
       project.allowSecret.add(e.path);
     }
     project.checked.add(e.path);
@@ -556,7 +564,7 @@
     }
     if (risky.length) {
       const list = risky.map((x) => `- ${x.path}: ${describeSecrets(x.hits)}`).join('\n');
-      if (!confirm(`비밀 정보로 보이는 문자열이 있는 파일이 있습니다:\n${list}\n\n확인: 그래도 함께 보내기\n취소: 이 파일들은 빼고 보내기`)) {
+      if (!confirm(t('project.send.secretConfirm', { list }))) {
         for (const x of risky) {
           const i = files.findIndex((f) => f.path === x.path);
           if (i >= 0) files.splice(i, 1);
@@ -630,7 +638,7 @@
     const lineCount = files.reduce((n, f) => n + String(f.text).split('\n').length, 0);
     if (!project.split && !P.splitSuggested && PC.suggestSplit({ files: files.length, lines: lineCount })) {
       P.splitSuggested = true;
-      notice(`고른 파일이 ${files.length}개 · ${lineCount.toLocaleString()}줄입니다 — 답이 끊기면 사이드바의 "큰 작업"을 켜 보세요`);
+      notice(t('project.send.bigHint', { n: files.length, lines: lineCount.toLocaleString() }));
     }
     const request = project.split ? `${payload.text || '(요청 없음)'}\n\n${PC.PLAN_FIRST}` : payload.text;
     const projInfo = { name: project.info.name, paths: sendablePaths() };
@@ -656,7 +664,7 @@
       const ups = pack.attachments.map(toAttachment);
       const room = ups.length <= budget.files && ups.reduce((n, f) => n + f.data.byteLength, 0) <= budget.bytes;
       // 직접 올린 파일 때문에 자리가 없으면 프로젝트 내용은 본문으로 보낸다
-      if (!room) notice('첨부 한도가 모자라 프로젝트 내용은 본문으로 보냅니다');
+      if (!room) notice(t('project.send.inline'));
       // 문서 첨부를 받지 않는 서비스(예: Duck.ai)에는 내용을 본문으로 넣는다 (넘치는 만큼 잘라서).
       for (const id of withProject) if (!room || !acceptsDocs(id)) textById[id] = pack.inlineText;
       if (pack.note) notice(pack.note);
@@ -700,12 +708,12 @@
     const base = packs[upIds[0] || quiet[0]];
     const ups = upIds.length ? base.attachments.map(toAttachment) : [];
     const room = ups.length <= budget.files && ups.reduce((n, f) => n + f.data.byteLength, 0) <= budget.bytes;
-    if (!room) notice('첨부 한도가 모자라 프로젝트 내용은 본문으로 보냅니다');
+    if (!room) notice(t('project.send.inline'));
     for (const id of upIds) textById[id] = !room || !acceptsDocs(id) ? packs[id].inlineText : packs[id].text;
     for (const id of quiet) textById[id] = packs[id].text;
     const sameCount = Math.max(0, ...withProject.map((id) => plan.byId[id].same.length));
-    const what = `바뀐 파일 ${plan.union.length}개 올림${sameCount ? ` · ${sameCount}개는 앞서 보낸 그대로` : ''}`;
-    notice(base.note || what);
+    const what = `바뀐 파일 ${plan.union.length}개 올림${sameCount ? ` · ${sameCount}개는 앞서 보낸 그대로` : ''}`; // 기록의 질문 글 (아래 question)
+    notice(base.note || t('project.send.changedOnly', { n: plan.union.length }) + (sameCount ? t('project.send.sameCount', { n: sameCount }) : ''));
     pendingSent = {
       files: plan.union,
       treeHash,
@@ -731,7 +739,7 @@
   /** 패널 하나에 프로젝트 파일을 이어서 보낸다 (요청 파일 보내기 · 다시 보내기). pack: PU.pack* 결과 */
   // 패널 하나에만 이어서 보내기 (요청 파일, 바뀐 파일, 전체 파일 다시 요청에 씀)
   async function sendProjectFollowUp(id, pack) {
-    if (project.blocked.has(id)) return { ok: false, error: '이 프로젝트의 파일을 보내지 않도록 설정된 서비스' };
+    if (project.blocked.has(id)) return { ok: false, error: t('project.svc.blockedShort') };
     if (pack.note) notice(pack.note);
     if (!acceptsDocs(id)) return host.sendFollowUp(id, pack.inlineText);
     return host.sendFollowUp(id, pack.text, pack.attachments.map(toAttachment), { fallbackText: pack.inlineText });
@@ -818,8 +826,8 @@
     const btn = $('#psSync');
     const paths = new Set(project.stale.flatMap((s) => [...s.files.map((f) => f.path), ...s.deleted]));
     btn.hidden = !has() || !paths.size;
-    btn.textContent = `⇪ 바뀐 파일 ${paths.size}개 → AI ${project.stale.length}곳에 보내기`;
-    btn.title = project.stale.map((s) => `${s.name}: ${[...s.files.map((f) => f.path), ...s.deleted.map((p) => `${p} (지움)`)].join(', ')}`).join('\n');
+    btn.textContent = t('project.sync.button', { n: paths.size, ais: project.stale.length });
+    btn.title = project.stale.map((s) => `${s.name}: ${[...s.files.map((f) => f.path), ...s.deleted.map((p) => t('project.sync.deleted', { path: p }))].join(', ')}`).join('\n');
   }
 
   $('#psSync').addEventListener('click', () => syncStale());
@@ -832,11 +840,11 @@
       .map((s) => (onlyPath ? { ...s, files: s.files.filter((f) => f.path === onlyPath), deleted: s.deleted.filter((p) => p === onlyPath) } : s))
       .filter((s) => s.files.length || s.deleted.length);
     if (!stale.length) return 0;
-    const summary = ['로컬에서 바뀐 파일의 지금 내용을 각 AI 탭에 보냅니다.', ''];
+    const summary = [t('project.sync.head'), ''];
     for (const s of stale) {
-      summary.push(`[${s.name}]`, listLines([...s.files.map((f) => f.path), ...s.deleted.map((p) => `${p} (지움)`)], (p) => `- ${p}`), '');
+      summary.push(`[${s.name}]`, listLines([...s.files.map((f) => f.path), ...s.deleted.map((p) => t('project.sync.deleted', { path: p }))], (p) => `- ${p}`), '');
     }
-    summary.push('보낼까요? (AI에게는 바뀐 점만 확인하고 아직 수정하지 말라고 부탁합니다)');
+    summary.push(t('project.sync.confirm'));
     if (!confirm(summary.join('\n'))) return 0;
     // 바뀐 내용에 비밀 정보가 새로 생겼을 수 있다.
     const risky = new Map();
@@ -851,7 +859,7 @@
     let withRisky = true;
     if (risky.size) {
       const list = listLines([...risky], ([p, hits]) => `- ${p}: ${describeSecrets(hits)}`);
-      withRisky = confirm(`비밀 정보로 보이는 문자열이 있는 파일입니다:\n${list}\n\n이 파일들도 함께 보낼까요? (취소하면 빼고 보냅니다)`);
+      withRisky = confirm(t('project.send.secretAlso', { list }));
       if (withRisky) for (const p of risky.keys()) project.allowSecret.add(p);
     }
     const failed = [];
@@ -863,11 +871,11 @@
       if (res?.ok) {
         remember(s.id, [...files, ...s.deleted.map((path) => ({ path, text: null }))]);
         sent++;
-      } else failed.push(`${s.name}: ${res?.error || '알 수 없는 오류'}`);
+      } else failed.push(`${s.name}: ${res?.error || t('project.unknownError')}`);
     }
     await checkStale();
-    if (failed.length) alert(`보내지 못했습니다:\n${failed.join('\n')}`);
-    else notice('바뀐 파일을 보냈습니다');
+    if (failed.length) alert(t('project.sendFailedList', { list: failed.join('\n') }));
+    else notice(t('project.sync.done'));
     return sent;
   }
 
@@ -894,8 +902,8 @@
     if (!p) return;
     project.need.set(id, wanted);
     p.needBtn.hidden = !wanted.length;
-    p.needBtn.textContent = `[+] 요청 파일 ${wanted.length}개 보내기`;
-    p.needBtn.title = `AI가 내용을 보고 싶다고 한 파일:\n${wanted.join('\n')}`;
+    p.needBtn.textContent = t('project.need.button', { n: wanted.length });
+    p.needBtn.title = t('project.need.title', { list: wanted.join('\n') });
   };
 
   /** 요청 경로가 보내도 되는 파일인지. 안 되면 이유 */
@@ -911,7 +919,7 @@
     return null;
   }
 
-  const listLines = (items, fmt) => items.slice(0, 15).map(fmt).join('\n') + (items.length > 15 ? `\n… 외 ${items.length - 15}개` : '');
+  const listLines = (items, fmt) => items.slice(0, 15).map(fmt).join('\n') + (items.length > 15 ? `\n${t('project.listMore', { n: items.length - 15 })}` : '');
 
   /**
    * AI가 요청한 파일 보내기. 보내기 전에 "보낼 파일 / 보내지 않을 파일과 이유" 목록을 확인 창으로 보여 준다.
@@ -919,7 +927,7 @@
    * (확인 창은 브라우저 기본 창이라 Windows 앱에서도 서비스 패널 위에 뜬다)
    */
   window.onNeedFilesClick = async (id) => {
-    if (!has()) return alert('프로젝트가 열려 있지 않습니다');
+    if (!has()) return alert(t('project.notOpen'));
     if (!allowedFor(id)) return;
     const name = state.services.find((s) => s.id === id)?.name || id;
     const wanted = project.need.get(id) || [];
@@ -944,18 +952,18 @@
       else files.push({ path: clean, text: r.text });
     }
     const summary = [
-      `${name}이(가) 요청한 파일을 보냅니다.`,
+      t('project.need.head', { name }),
       '',
-      `[보낼 파일 ${files.length}개]`,
-      files.length ? listLines(files, (f) => `- ${f.path}`) : '(없음)',
+      t('project.need.files', { n: files.length }),
+      files.length ? listLines(files, (f) => `- ${f.path}`) : t('project.need.noneParen'),
     ];
-    if (risky.length) summary.push('', `[비밀 정보가 보여 빼는 파일 ${risky.length}개]`, listLines(risky, (f) => `- ${f.path}: ${describeSecrets(f.hits)}`));
-    if (skipped.length) summary.push('', `[보내지 않는 파일 ${skipped.length}개]`, listLines(skipped, (f) => `- ${f.path}: ${f.reason}`));
-    summary.push('', '보낼까요? (보내지 않는 파일은 이유만 함께 알려 줍니다)');
+    if (risky.length) summary.push('', t('project.need.risky', { n: risky.length }), listLines(risky, (f) => `- ${f.path}: ${describeSecrets(f.hits)}`));
+    if (skipped.length) summary.push('', t('project.need.skipped', { n: skipped.length }), listLines(skipped, (f) => `- ${f.path}: ${f.reason}`));
+    summary.push('', t('project.need.confirm'));
     if (!confirm(summary.join('\n'))) return;
     if (risky.length) {
       const list = listLines(risky, (f) => `- ${f.path}: ${describeSecrets(f.hits)}`);
-      if (confirm(`비밀 정보로 보이는 문자열이 있는 파일입니다:\n${list}\n\n이 파일들도 함께 보낼까요? (취소하면 빼고 보냅니다)`)) {
+      if (confirm(t('project.send.secretAlso', { list }))) {
         for (const f of risky) {
           files.push({ path: f.path, text: f.text });
           project.allowSecret.add(f.path);
@@ -965,7 +973,7 @@
     const p = panels.get(id);
     p.needBtn.hidden = true;
     const res = await sendProjectFollowUp(id, PU.packFollowUp({ files, skipped, mode: project.uploadMode, budget: budgetAfter([], [id]) }));
-    if (!res?.ok) alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
+    if (!res?.ok) alert(t('project.sendFailed', { error: res?.error || t('project.unknownError') }));
     else remember(id, files);
   };
 

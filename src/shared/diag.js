@@ -15,17 +15,19 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // 화면 문구 (v0.30.0): 부를 때마다 사전에서 찾는다 (언어를 바꾸면 바로 반영). 사전이 없는 곳(서비스 페이지 등)에서는 키 이름 그대로
+  const t = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   const PARTS = ['input', 'send', 'response'];
-  const PART_TEXT = { input: '입력창', send: '보내기 버튼', response: '답변 영역' };
+  const partText = (p) => t(`main.diag.part.${p}`); // 입력창 · 보내기 버튼 · 답변 영역
+  // 화면(renderer.js)이 D.PART_TEXT[p] · D.STATE_TEXT[s] · D.HINT로 읽는다 → 읽을 때마다 사전에서 찾는 값
+  const lazyMap = (keys, prefix) => Object.defineProperties({}, Object.fromEntries(keys.map((k) => [k, { get: () => t(prefix + k), enumerable: true }])));
+  const PART_TEXT = lazyMap(PARTS, 'main.diag.part.');
   // 'ok' 찾음 · 'warn' 대신 다른 방법으로 됨 · 'fail' 못 찾음 · 'unknown' 아직 모름
   const MARK = { ok: '✓', warn: '△', fail: '✕', unknown: '–' };
-  const HINT =
-    '사이트 화면이 바뀌어 앱이 이 부분을 찾지 못한 것 같습니다. ' +
-    '① ⌂로 처음 화면으로 돌아가 다시 해 보고, ② 설정(?)의 "사이트 셀렉터 자동 갱신 › 지금 확인"을 누르세요. ' +
-    '③ 그래도 계속되면 패널에서 직접 입력하고, 앱 업데이트를 기다려 주세요.';
-  const LIMIT_HINT =
-    '이 서비스의 사용 한도에 걸린 것 같습니다. 잠시 기다렸다가 다시 보내거나, 이번에는 다른 AI의 답을 쓰세요. ' +
-    '한도 안내가 아니라면 무시해도 됩니다 (답변이 끝나지 않았거나 아주 짧을 때 화면 글에서 한도 문구를 찾아 알려 줍니다).';
   const FAIL_LIMIT = 2; // 답변 영역은 연달아 이만큼 못 찾으면 "못 찾음" (한 번은 사이트 사정일 수 있음)
 
   /** onChange(id, status): 서비스 하나의 상태가 바뀌었을 때 */
@@ -57,19 +59,19 @@
     function fromProbe(id, probe) {
       if (!probe || typeof probe.input !== 'boolean') return;
       if (probe.input) set(id, 'input', 'ok');
-      else if (row(id).input === 'unknown' || row(id).input === 'warn') set(id, 'input', 'warn', '페이지에서 입력창이 보이지 않았습니다 (보낼 때 다시 확인)');
+      else if (row(id).input === 'unknown' || row(id).input === 'warn') set(id, 'input', 'warn', t('main.diag.inputNotSeen'));
     }
 
     /** 보내기 결과: { ok, via: 'button' | 'key' | …, code: 'no-input' | … } */
     function fromSend(id, res) {
       if (!res) return;
       if (!res.ok) {
-        if (res.code === 'no-input') set(id, 'input', 'fail', res.error || '입력창을 찾지 못했습니다');
+        if (res.code === 'no-input') set(id, 'input', 'fail', res.error || t('main.diag.inputNotFound'));
         return;
       }
       set(id, 'input', 'ok');
       if (/^button/.test(res.via || '')) set(id, 'send', 'ok');
-      else if (/^key/.test(res.via || '')) set(id, 'send', 'warn', '보내기 버튼을 찾지 못해 Enter 키로 보냈습니다');
+      else if (/^key/.test(res.via || '')) set(id, 'send', 'warn', t('main.diag.sentWithEnter'));
     }
 
     /** 답변 감시 결과: 'done' · 'no-answer' · 'timeout' */
@@ -80,8 +82,8 @@
         set(id, 'response', 'ok');
       } else if (state === 'no-answer') {
         r.misses += 1;
-        if (r.misses >= FAIL_LIMIT) set(id, 'response', 'fail', `보낸 뒤 답변을 ${r.misses}번 연달아 찾지 못했습니다`);
-        else set(id, 'response', r.response === 'ok' ? 'ok' : 'warn', '보낸 뒤 답변을 찾지 못했습니다 (한 번)');
+        if (r.misses >= FAIL_LIMIT) set(id, 'response', 'fail', t('main.diag.answerMissedN', { n: r.misses }));
+        else set(id, 'response', r.response === 'ok' ? 'ok' : 'warn', t('main.diag.answerMissedOnce'));
       }
     }
 
@@ -103,9 +105,9 @@
       const states = PARTS.map((p) => r[p]);
       const failed = PARTS.filter((p) => r[p] === 'fail');
       const level = failed.length ? 'broken' : states.includes('warn') ? 'warn' : states.every((s) => s === 'unknown') ? 'unknown' : 'ok';
-      const message = failed.length ? `⚠ 화면이 바뀐 것 같음 (${failed.map((p) => PART_TEXT[p]).join(' · ')})` : '';
-      const notes = PARTS.filter((p) => r.notes[p]).map((p) => `${PART_TEXT[p]}: ${r.notes[p]}`);
-      return { input: r.input, send: r.send, response: r.response, level, message, hint: failed.length ? HINT : '', notes, limit: r.limit || null, limitHint: r.limit ? LIMIT_HINT : '' };
+      const message = failed.length ? t('main.diag.broken', { parts: failed.map(partText).join(' · ') }) : '';
+      const notes = PARTS.filter((p) => r.notes[p]).map((p) => `${partText(p)}: ${r.notes[p]}`);
+      return { input: r.input, send: r.send, response: r.response, level, message, hint: failed.length ? t('main.diag.hint') : '', notes, limit: r.limit || null, limitHint: r.limit ? t('main.diag.limitHint') : '' };
     }
 
     /** 모든 서비스의 상태 { id: status } (설정 화면의 표) */
@@ -125,7 +127,9 @@
     return { fromProbe, fromSend, fromAnswer, setLimit, status, all, reset };
   }
 
-  const STATE_TEXT = { ok: '찾음', warn: '다른 방법으로 됨', fail: '못 찾음', unknown: '확인 전' };
+  const STATES = ['ok', 'warn', 'fail', 'unknown']; // 찾음 · 다른 방법으로 됨 · 못 찾음 · 확인 전
+  const stateText = (s) => t(`main.diag.state.${STATES.includes(s) ? s : 'unknown'}`);
+  const STATE_TEXT = lazyMap(STATES, 'main.diag.state.');
 
   /**
    * [진단 정보 복사]용 글 (v0.21.1): 셀렉터를 고칠 때 필요한 것만 — 질문 · 답변 글 · 주소의 경로는 넣지 않는다.
@@ -136,20 +140,33 @@
     const r = remote || {};
     const remoteLine =
       r.source === 'remote' || r.source === 'cache'
-        ? `원격 셀렉터 v${r.version ?? '?'}${r.updated ? ` (${r.updated})` : ''}${r.source === 'cache' ? ' · 저장해 둔 것' : ''}`
-        : '내장 셀렉터';
+        ? `${t('main.diag.remote', { version: r.version ?? '?' })}${r.updated ? ` (${r.updated})` : ''}${r.source === 'cache' ? ` · ${t('main.diag.cached')}` : ''}`
+        : t('main.diag.builtin');
     return [
-      `[Multitude LLM 셀렉터 진단] ${new Date(now).toISOString()}`,
-      `앱: v${app || '?'}${where ? ` · ${where}` : ''}`,
-      `서비스: ${service?.name || '?'} (${service?.id || '?'})${host ? ` · ${host}` : ''}`,
-      `셀렉터: ${remoteLine}${r.error ? ` · 마지막 확인 실패: ${r.error}` : ''}`,
-      ...PARTS.map((p) => `- ${PART_TEXT[p]}: ${MARK[st[p]] || '–'} ${STATE_TEXT[st[p]] || STATE_TEXT.unknown}`),
+      t('main.diag.reportTitle', { time: new Date(now).toISOString() }),
+      `${t('main.diag.app', { version: app || '?' })}${where ? ` · ${where}` : ''}`,
+      `${t('main.diag.service', { name: service?.name || '?', id: service?.id || '?' })}${host ? ` · ${host}` : ''}`,
+      `${t('main.diag.selectors', { line: remoteLine })}${r.error ? ` · ${t('main.diag.lastFailed', { error: r.error })}` : ''}`,
+      ...PARTS.map((p) => `- ${partText(p)}: ${MARK[st[p]] || '–'} ${stateText(st[p])}`),
       ...(st.notes || []).map((n) => `  · ${n}`),
-      st.limit ? `- 사용 한도 문구: "${String(st.limit).slice(0, 120)}"` : '',
+      st.limit ? t('main.diag.limitQuote', { text: String(st.limit).slice(0, 120) }) : '',
     ]
       .filter(Boolean)
       .join('\n');
   }
 
-  return { PARTS, PART_TEXT, MARK, HINT, LIMIT_HINT, STATE_TEXT, createDiag, report };
+  return {
+    PARTS,
+    PART_TEXT,
+    MARK,
+    get HINT() {
+      return t('main.diag.hint');
+    },
+    get LIMIT_HINT() {
+      return t('main.diag.limitHint');
+    },
+    STATE_TEXT,
+    createDiag,
+    report,
+  };
 });

@@ -103,7 +103,7 @@ test('라이브러리 합치기: 덮어쓰기 · 둘 다 남기기, 한도 검�
 test('연결: 설정 화면 · 가져오기 창 · 앱 저장(file:save mla) · 확장 다운로드 · 빌드 목록', () => {
   const html = read('src/renderer/index.html');
   for (const id of ['id="transferExport"', 'id="transferImport"', 'id="transferModal"', 'name="transferMode"', 'src="../shared/settings-transfer.js"', 'src="settings-transfer-ui.js"']) assert.ok(html.includes(id), id);
-  assert.match(read('src/main/ipc/history.js'), /mla: \{ name: 'Multitude LLM 설정', ext: 'mla\.json'/);
+  assert.match(read('src/main/ipc/history.js'), /mla: \{ nameKey: 'main\.save\.mla', ext: 'mla\.json'/);
   assert.match(read('extension/host.js'), /mla: 'application\/json'/);
   const ui = read('src/renderer/settings-transfer-ui.js');
   assert.match(ui, /host\.saveFile\(\{ name: .*kind: 'mla' \}\)/);

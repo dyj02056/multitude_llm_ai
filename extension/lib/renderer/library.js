@@ -19,7 +19,7 @@
   const PL = MLA.promptLib;
   const { scanSecrets, describeSecrets } = MLA.secretScan;
   const TPL_KEY = 'mla.template'; // 마지막에 고른 템플릿 (이 PC에만 저장)
-  const MODE_TEXT = { first: '새 대화 첫 질문에만', every: '매 질문마다' };
+  const tr = MLA.i18n.t; // 화면 문구 (i18n-*-library.js)
 
   let lib = PL.normalizeLibrary({});
   let template = TEMPLATES[0];
@@ -34,7 +34,7 @@
   async function save() {
     lib = PL.normalizeLibrary(lib);
     const ok = await host.library.save(lib).catch(() => false);
-    if (!ok) alert('라이브러리를 저장하지 못했습니다');
+    if (!ok) alert(tr('library.saveFailed'));
   }
 
   // ---------- 템플릿 고르기 (입력창 왼쪽) ----------
@@ -57,9 +57,9 @@
     const mine = [...lib.templates].sort((a, b) => b.fav - a.fav).map((t) => option(t.id, `${t.fav ? '★ ' : ''}${t.name}`));
     $('#tplSelect').replaceChildren(
       option('none', TEMPLATES[0].name),
-      ...(mine.length ? [group('내 템플릿', mine)] : []),
-      group('기본 템플릿', TEMPLATES.slice(1).map((t) => option(t.id, t.name))),
-      option('__library', 'lib: 라이브러리 열기…'),
+      ...(mine.length ? [group(tr('library.groupMine'), mine)] : []),
+      group(tr('library.groupBuiltin'), TEMPLATES.slice(1).map((t) => option(t.id, t.name))),
+      option('__library', tr('library.openLibrary')),
     );
     $('#tplSelect').value = template.id;
   }
@@ -69,11 +69,11 @@
     template = findTpl(id) || TEMPLATES[0];
     $('#tplSelect').value = template.id;
     $('#tplSelect').classList.toggle('on', template.id !== 'none');
-    $('#prompt').placeholder = template.hint || '모든 AI에게 한 번에 물어보기';
+    $('#prompt').placeholder = template.hint || tr('library.promptPlaceholder');
     // 템플릿이 질문을 어떻게 감싸는지 한 줄로 보여 준다. 변수는 〈이름〉으로.
     const vars = PL.parseVars(template.text);
     $('#tplPreview').textContent =
-      template.id === 'none' ? '' : `${vars.length ? `변수 ${vars.length}개 · ` : ''}${template.text.replace(/\n+/g, ' ').replace('{q}', '〈입력〉')}`;
+      template.id === 'none' ? '' : `${vars.length ? tr('library.tplPreviewVars', { n: vars.length }) : ''}${template.text.replace(/\n+/g, ' ').replace('{q}', tr('library.tplPreviewInput'))}`;
     $('#tplPreview').title = template.text;
     try {
       localStorage.setItem(TPL_KEY, template.id);
@@ -132,7 +132,7 @@
       } else {
         field = document.createElement('input');
         field.value = last[v.name] ?? '';
-        field.placeholder = v.def ? `비우면: ${v.def}` : '';
+        field.placeholder = v.def ? tr('library.varDefault', { def: v.def }) : '';
         field.spellcheck = false;
       }
       field.dataset.var = v.name;
@@ -142,7 +142,7 @@
       return row;
     });
     $('#varsFields').replaceChildren(...rows);
-    $('#varsQ').textContent = q ? `입력창 내용 ${q.length.toLocaleString()}자는 {q} 자리에 들어갑니다` : '';
+    $('#varsQ').textContent = q ? tr('library.varsQ', { n: q.length.toLocaleString() }) : '';
     updateVarsPreview();
   }
 
@@ -184,11 +184,11 @@
   /** 스킬 하나의 길이 표시: { text, level } */
   function badgeOf(s) {
     const len = PL.sendBody(s).length;
-    if (s.compact && PL.compactStale(s)) return { text: `⚠ 압축본이 원문보다 오래됨 · ${len.toLocaleString()}자`, level: 'stale' };
-    if (s.compact && s.useCompact) return { text: `✓ 압축본 ${len.toLocaleString()}자 (원문 ${s.body.length.toLocaleString()}자)`, level: 'compact' };
+    if (s.compact && PL.compactStale(s)) return { text: tr('library.badgeStale', { n: len.toLocaleString() }), level: 'stale' };
+    if (s.compact && s.useCompact) return { text: tr('library.badgeCompact', { n: len.toLocaleString(), body: s.body.length.toLocaleString() }), level: 'compact' };
     const level = s.noWarn ? 'none' : PL.compressLevel(len, lib.compressWarn, lib.skillMode);
-    const label = { warn: '[!] 압축 권장 · ', strong: '[!!] 압축 강력 권장 · ' }[level] || '';
-    return { text: `${label}${len.toLocaleString()}자`, level };
+    const label = { warn: tr('library.badgeWarn'), strong: tr('library.badgeStrong') }[level] || '';
+    return { text: label + tr('library.chars', { n: len.toLocaleString() }), level };
   }
 
   // 🧩 스킬 칩 줄: 스킬마다 켜기/끄기 단추, 켠 순서(①②③)가 우선순위입니다.
@@ -197,12 +197,12 @@
     const { len } = PL.prefixSize(active);
     const L = PL.warnLimits(lib.compressWarn, lib.skillMode);
     const btn = $('#skillBtn');
-    btn.textContent = active.length === 0 ? 'skill: 없음' : active.length === 1 ? `skill: ${active[0].name}` : `skill: ${active.length}개`;
+    btn.textContent = active.length === 0 ? tr('library.skillBtnNone') : active.length === 1 ? `skill: ${active[0].name}` : tr('library.skillBtnMany', { n: active.length });
     btn.classList.toggle('on', active.length > 0);
     btn.classList.toggle('warn', len >= L.total);
     btn.title = active.length
-      ? `${active.map((s, i) => `${CIRCLED[i]} ${s.name}`).join('\n')}\n합계 ${len.toLocaleString()} / ${PL.LIMITS.prefixTotal.toLocaleString()}자 · ${MODE_TEXT[lib.skillMode]}${len >= L.total ? '\n합계가 길어요 — 압축본을 쓰면 줄일 수 있습니다' : ''}`
-      : '고른 스킬(최대 3개)의 지침을 질문 앞에 붙여 보냅니다';
+      ? `${active.map((s, i) => `${CIRCLED[i]} ${s.name}`).join('\n')}\n${tr('library.skillTotal', { len: len.toLocaleString(), max: PL.LIMITS.prefixTotal.toLocaleString() })} · ${tr(`library.mode.${lib.skillMode}`)}${len >= L.total ? `\n${tr('library.skillTotalLong')}` : ''}`
+      : tr('library.skillBtnTitle');
     const chips = lib.skills.map((s) => {
       const at = lib.activeSkills.indexOf(s.id);
       const b = badgeOf(s);
@@ -211,8 +211,8 @@
       chip.disabled = at < 0 && lib.activeSkills.length >= PL.LIMITS.activeSkills;
       return chip;
     });
-    $('#skillChips').replaceChildren(...(chips.length ? chips : [span('muted-label', '스킬이 없습니다 — lib 관리에서 만들거나 SKILL.md를 가져오세요')]));
-    $('#skillTotal').textContent = `${lib.activeSkills.length}/${PL.LIMITS.activeSkills} · 합계 ${len.toLocaleString()} / ${PL.LIMITS.prefixTotal.toLocaleString()}자`;
+    $('#skillChips').replaceChildren(...(chips.length ? chips : [span('muted-label', tr('library.noSkills'))]));
+    $('#skillTotal').textContent = `${lib.activeSkills.length}/${PL.LIMITS.activeSkills} · ${tr('library.skillTotal', { len: len.toLocaleString(), max: PL.LIMITS.prefixTotal.toLocaleString() })}`;
     $('#skillTotal').classList.toggle('warn', len >= L.total);
   }
 
@@ -224,10 +224,10 @@
     const at = lib.activeSkills.indexOf(id);
     if (at >= 0) lib.activeSkills.splice(at, 1);
     else {
-      if (lib.activeSkills.length >= PL.LIMITS.activeSkills) return alert(`스킬은 ${PL.LIMITS.activeSkills}개까지 함께 켤 수 있습니다. 먼저 다른 스킬을 끄세요.`);
+      if (lib.activeSkills.length >= PL.LIMITS.activeSkills) return alert(tr('library.activeLimit', { n: PL.LIMITS.activeSkills }));
       if (badgeOf(s).level === 'strong') {
         const ok = confirm(
-          `${s.name}의 보내는 글이 ${PL.sendBody(s).length.toLocaleString()}자입니다. 압축을 강력 권장합니다 (라이브러리 → AI로 압축).\n\n확인: 그대로 켜기 (이 스킬은 다시 알리지 않음)\n취소: 켜지 않기`,
+          tr('library.confirmStrong', { name: s.name, n: PL.sendBody(s).length.toLocaleString() }),
         );
         if (!ok) return;
         s.noWarn = true;
@@ -245,7 +245,7 @@
     const now = lib.activeSkills.join(',');
     if (![...skillSent.values()].some((ids) => ids.join(',') !== now)) return;
     changeNoted = true;
-    $('#sendHint').textContent = '스킬을 바꿨습니다 — 다음 질문에 바뀐 점만 알립니다. 새 대화를 열면 가장 깔끔하게 적용됩니다';
+    $('#sendHint').textContent = tr('library.midChange');
   }
 
   $('#skillBtn').addEventListener('click', () => {
@@ -268,15 +268,15 @@
     if (active.length) {
       const { len, over } = PL.prefixSize(active);
       if (over) {
-        alert(`켠 스킬의 지침이 너무 깁니다 (${len.toLocaleString()} / ${PL.LIMITS.prefixTotal.toLocaleString()}자).\n스킬을 끄거나 라이브러리에서 압축본을 만들어 쓰세요.`);
+        alert(tr('library.prefixOver', { len: len.toLocaleString(), max: PL.LIMITS.prefixTotal.toLocaleString() }));
         return { cancel: true };
       }
       if (!totalAlerted && len >= PL.warnLimits(lib.compressWarn, lib.skillMode).totalAlert) {
         const tips = active
           .filter((s) => !(s.compact && s.useCompact))
-          .map((s) => `- ${s.name}: ${PL.sendBody(s).length.toLocaleString()}자`)
+          .map((s) => `- ${s.name}: ${tr('library.chars', { n: PL.sendBody(s).length.toLocaleString() })}`)
           .join('\n');
-        const ok = confirm(`켠 스킬의 지침 합계가 ${len.toLocaleString()}자입니다. 질문마다 이만큼 함께 보내므로 압축을 권장합니다.\n${tips ? `\n압축본이 없는 스킬:\n${tips}\n` : ''}\n확인: 그대로 보내기 (이번 실행 동안 다시 묻지 않음)\n취소: 보내지 않기`);
+        const ok = confirm(tr('library.confirmTotal', { n: len.toLocaleString(), tips: tips ? tr('library.confirmTotalTips', { tips }) : '' }));
         if (!ok) return { cancel: true };
         totalAlerted = true;
       }
@@ -353,10 +353,10 @@
     $('#libWarnTotal').value = lib.compressWarn.total;
     const list = [];
     if (ui.tab === 'templates') {
-      list.push(button('＋ 새 템플릿', '빈 템플릿을 만듭니다', () => editNewTemplate()));
-      list.push(span('lib-group', `내 템플릿 ${lib.templates.length}개`));
+      list.push(button(tr('library.newTemplate'), tr('library.newTemplateTitle'), () => editNewTemplate()));
+      list.push(span('lib-group', tr('library.groupMineCount', { n: lib.templates.length })));
       for (const t of [...lib.templates].sort((a, b) => b.fav - a.fav)) {
-        const star = button(t.fav ? '★' : '☆', t.fav ? '즐겨찾기 해제' : '즐겨찾기 (템플릿 목록 맨 위에)', (e) => {
+        const star = button(t.fav ? '★' : '☆', t.fav ? tr('library.unfav') : tr('library.fav'), (e) => {
           e.stopPropagation();
           t.fav = !t.fav;
           save().then(refreshAll);
@@ -364,14 +364,14 @@
         star.className = 'lib-star';
         list.push(listRow(t.name, varsSummary(t.text), ui.sel === t.id, () => select(t.id), [star]));
       }
-      list.push(span('lib-group', '기본 템플릿 (복제해서 고칠 수 있음)'));
-      for (const t of TEMPLATES.slice(1)) list.push(listRow(`[기본] ${t.name}`, varsSummary(t.text), ui.sel === t.id, () => select(t.id)));
+      list.push(span('lib-group', tr('library.groupBuiltinNote')));
+      for (const t of TEMPLATES.slice(1)) list.push(listRow(tr('library.builtinRow', { name: t.name }), varsSummary(t.text), ui.sel === t.id, () => select(t.id)));
     } else {
-      list.push(button('＋ 새 스킬', '빈 스킬을 만듭니다', () => editNewSkill()));
-      list.push(button('SKILL.md 가져오기', '.md 파일에서 스킬을 가져옵니다 (맨 위 --- 사이에 name · description)', () => $('#libSkillFile').click()));
+      list.push(button(tr('library.newSkill'), tr('library.newSkillTitle'), () => editNewSkill()));
+      list.push(button(tr('library.importSkill'), tr('library.importSkillTitle'), () => $('#libSkillFile').click()));
       // 켠 스킬: 순서가 우선순위 (▲▼로 바꿈)
       const active = activeList();
-      list.push(span('lib-group', `켠 스킬 ${active.length}/${PL.LIMITS.activeSkills} — 위에 있는 것이 우선 · 합계 ${PL.prefixSize(active).len.toLocaleString()}자`));
+      list.push(span('lib-group', tr('library.groupActive', { n: active.length, max: PL.LIMITS.activeSkills, len: PL.prefixSize(active).len.toLocaleString() })));
       active.forEach((s, i) => {
         const move = (d) => (e) => {
           e.stopPropagation();
@@ -381,9 +381,9 @@
           [arr[i], arr[j]] = [arr[j], arr[i]];
           save().then(refreshAll);
         };
-        const up = button('▲', '우선순위 올리기', move(-1));
-        const down = button('▼', '우선순위 내리기', move(1));
-        const off = button('끄기', '이 스킬 끄기', (e) => {
+        const up = button('▲', tr('library.moveUp'), move(-1));
+        const down = button('▼', tr('library.moveDown'), move(1));
+        const off = button(tr('library.off'), tr('library.skillOff'), (e) => {
           e.stopPropagation();
           toggleSkill(s.id);
         });
@@ -392,7 +392,7 @@
         down.disabled = i === active.length - 1;
         list.push(listRow(`${CIRCLED[i]} ${s.name}`, badgeOf(s).text, ui.sel === s.id, () => select(s.id), [up, down, off]));
       });
-      list.push(span('lib-group', `스킬 ${lib.skills.length}개`));
+      list.push(span('lib-group', tr('library.groupSkills', { n: lib.skills.length })));
       for (const s of lib.skills) {
         const b = badgeOf(s);
         const row = listRow(`${lib.activeSkills.includes(s.id) ? '● ' : ''}${s.name}`, b.text, ui.sel === s.id, () => select(s.id));
@@ -406,11 +406,11 @@
 
   const varsSummary = (text) => {
     const vars = PL.parseVars(text);
-    return vars.length ? `변수: ${vars.map((v) => v.name).join(', ')}` : '변수 없음';
+    return vars.length ? tr('library.varsList', { names: vars.map((v) => v.name).join(', ') }) : tr('library.noVars');
   };
 
   function select(id) {
-    if (editorDirty() && !confirm('저장하지 않은 수정 내용을 버릴까요?')) return;
+    if (editorDirty() && !confirm(tr('library.discardEdits'))) return;
     ui.sel = id;
     renderLibrary();
   }
@@ -420,15 +420,15 @@
   let shown = null; // 편집기에 넣은 처음 값 (고쳤는지 비교)
 
   function editNewTemplate(from) {
-    if (editorDirty() && !confirm('저장하지 않은 수정 내용을 버릴까요?')) return;
-    draft = { kind: 'template', name: from ? `${from.name} (복사)` : '', hint: from?.hint || '', text: from?.text || '{q}' };
+    if (editorDirty() && !confirm(tr('library.discardEdits'))) return;
+    draft = { kind: 'template', name: from ? tr('library.copyName', { name: from.name }) : '', hint: from?.hint || '', text: from?.text || '{q}' };
     ui.sel = null;
     renderLibrary();
     $('#libName').focus();
   }
 
   function editNewSkill(from) {
-    if (editorDirty() && !confirm('저장하지 않은 수정 내용을 버릴까요?')) return;
+    if (editorDirty() && !confirm(tr('library.discardEdits'))) return;
     draft = { kind: 'skill', name: from?.name || '', hint: from?.description || '', text: from?.body || '' };
     ui.sel = null;
     renderLibrary();
@@ -459,15 +459,15 @@
     $('#libEmpty').hidden = !!c;
     $('#libEmpty').textContent =
       ui.tab === 'templates'
-        ? '왼쪽에서 템플릿을 고르거나 ＋ 새 템플릿을 누르세요.'
-        : '왼쪽에서 스킬을 고르거나 ＋ 새 스킬 / SKILL.md 가져오기를 누르세요.';
+        ? tr('library.emptyTemplates')
+        : tr('library.emptySkills');
     if (!c) {
       shown = null;
       return;
     }
     const isTpl = c.kind === 'template';
-    $('#libHintLabel').textContent = isTpl ? '안내 문구 (입력창에 보임)' : '설명';
-    $('#libTextLabel').textContent = isTpl ? '내용 — {q}: 입력창 내용 · {{이름}} · {{이름|기본값}} · {{이름:가,나,다}} · {{오늘}} {{프로젝트}} {{선택 파일}}' : '지침 본문 (질문 앞에 붙여 보냄)';
+    $('#libHintLabel').textContent = isTpl ? tr('library.hintLabel') : tr('library.descLabel');
+    $('#libTextLabel').textContent = isTpl ? tr('library.textLabelTpl') : tr('library.textLabelSkill');
     $('#libName').value = c.name;
     $('#libHint').value = c.hint;
     $('#libText').value = c.text;
@@ -476,10 +476,10 @@
     $('#libSave').hidden = !!c.readonly;
     $('#libDelete').hidden = !!c.readonly || !!c.isNew;
     $('#libCopy').hidden = !!c.isNew;
-    $('#libCopy').textContent = c.readonly ? '복제해서 고치기' : '복제';
+    $('#libCopy').textContent = c.readonly ? tr('library.copyEdit') : tr('library.copy');
     $('#libExportMd').hidden = isTpl || !!c.isNew;
     $('#libUse').hidden = !!c.isNew;
-    $('#libUse').textContent = isTpl ? '이 템플릿 쓰기' : lib.activeSkills.includes(c.item?.id) ? '이 스킬 끄기' : '이 스킬 켜기';
+    $('#libUse').textContent = isTpl ? tr('library.useTemplate') : lib.activeSkills.includes(c.item?.id) ? tr('library.skillOff') : tr('library.skillOn');
     // 스킬 전용: 보내는 글 고르기 · 예시 절 빼기 · 알림 끄기 · AI로 압축
     const sk = !isTpl && !c.isNew ? c.item : null;
     $('#libSkillOpts').hidden = !sk;
@@ -489,7 +489,7 @@
       $('#libDropEx').checked = sk.dropExamples;
       $('#libNoWarn').checked = sk.noWarn;
       $('#libCompactDel').hidden = !sk.compact;
-      $('#libCompress').textContent = sk.compact ? 'AI로 다시 압축' : 'AI로 압축';
+      $('#libCompress').textContent = sk.compact ? tr('library.recompress') : tr('library.compress');
     }
     window.libPresets?.renderVersions(sk); // 스킬 이전 버전 (v0.29.0)
     updateEditorInfo();
@@ -502,7 +502,7 @@
     if (c.kind === 'template') {
       const vars = PL.parseVars(text);
       $('#libInfo').dataset.level = '';
-      $('#libInfo').textContent = `${vars.length ? `변수 ${vars.length}개: ${vars.map((v) => (v.choices ? `${v.name}(${v.choices.join('/')})` : v.def ? `${v.name}=${v.def}` : v.name)).join(', ')}` : '변수 없음'}${text.includes('{q}') ? '' : ' · {q}가 없어 입력창 내용은 맨 뒤에 붙습니다'}`;
+      $('#libInfo').textContent = `${vars.length ? tr('library.varsInfo', { n: vars.length, names: vars.map((v) => (v.choices ? `${v.name}(${v.choices.join('/')})` : v.def ? `${v.name}=${v.def}` : v.name)).join(', ') }) : tr('library.noVars')}${text.includes('{q}') ? '' : tr('library.noQ')}`;
     } else {
       // 보내는 글 길이 (저장한 스킬이면 압축본·정리 설정을 반영, 새 스킬이면 지금 입력한 글을 정리한 길이)
       const sk = c.isNew ? null : c.item;
@@ -510,9 +510,9 @@
       const len = PL.sendBody(probe).length;
       const level = sk?.noWarn ? 'none' : PL.compressLevel(len, lib.compressWarn, lib.skillMode);
       const L = PL.warnLimits(lib.compressWarn, lib.skillMode);
-      const advice = { warn: ` — ${L.one.toLocaleString()}자 이상은 압축을 권장합니다`, strong: ` — ${L.strong.toLocaleString()}자 이상: 압축을 강력 권장합니다` }[level] || '';
-      const compactNote = sk?.compact ? (PL.compactStale({ ...sk, body: text }) ? ' · ⚠ 압축본이 원문보다 오래됨' : ` · 압축본 ${sk.compact.length.toLocaleString()}자`) : '';
-      $('#libInfo').textContent = `원문 ${text.length.toLocaleString()} / ${PL.LIMITS.skillBody.toLocaleString()}자 · 보내는 글 ${len.toLocaleString()}자${advice}${compactNote} · ${MODE_TEXT[lib.skillMode]}`;
+      const advice = { warn: tr('library.adviceWarn', { n: L.one.toLocaleString() }), strong: tr('library.adviceStrong', { n: L.strong.toLocaleString() }) }[level] || '';
+      const compactNote = sk?.compact ? (PL.compactStale({ ...sk, body: text }) ? tr('library.noteStale') : tr('library.noteCompact', { n: sk.compact.length.toLocaleString() })) : '';
+      $('#libInfo').textContent = `${tr('library.skillInfo', { n: text.length.toLocaleString(), max: PL.LIMITS.skillBody.toLocaleString(), len: len.toLocaleString() })}${advice}${compactNote} · ${tr(`library.mode.${lib.skillMode}`)}`;
       $('#libInfo').dataset.level = level;
     }
   }
@@ -524,22 +524,22 @@
     const name = $('#libName').value.trim();
     const hint = $('#libHint').value.trim();
     const text = $('#libText').value;
-    if (!name) return alert('이름을 입력하세요');
-    if (!text.trim()) return alert('내용을 입력하세요');
+    if (!name) return alert(tr('library.needName'));
+    if (!text.trim()) return alert(tr('library.needText'));
     const limit = c.kind === 'template' ? PL.LIMITS.templateText : PL.LIMITS.skillBody;
-    if (text.length > limit) return alert(`내용이 너무 깁니다 (${limit.toLocaleString()}자까지)`);
+    if (text.length > limit) return alert(tr('library.textTooLong', { n: limit.toLocaleString() }));
     // 템플릿·스킬은 AI 서비스에 그대로 보내지므로 비밀 정보가 섞이지 않았는지 본다.
     const hits = scanSecrets(text);
-    if (hits.length && !confirm(`비밀 정보로 보이는 문자열이 있습니다: ${describeSecrets(hits)}\n이 내용은 질문과 함께 AI 서비스로 보내집니다. 그래도 저장할까요?`)) return;
+    if (hits.length && !confirm(tr('library.secretSave', { what: describeSecrets(hits) }))) return;
     if (c.kind === 'template') {
       if (c.isNew) {
-        if (lib.templates.length >= PL.LIMITS.templates) return alert(`템플릿은 ${PL.LIMITS.templates}개까지 저장할 수 있습니다`);
+        if (lib.templates.length >= PL.LIMITS.templates) return alert(tr('library.templateLimit', { n: PL.LIMITS.templates }));
         const t = { id: PL.newId('u'), name, hint, text, fav: false };
         lib.templates.push(t);
         ui.sel = t.id;
       } else Object.assign(c.item, { name, hint, text });
     } else if (c.isNew) {
-      if (lib.skills.length >= PL.LIMITS.skills) return alert(`스킬은 ${PL.LIMITS.skills}개까지 저장할 수 있습니다`);
+      if (lib.skills.length >= PL.LIMITS.skills) return alert(tr('library.skillLimit', { n: PL.LIMITS.skills }));
       const s = { id: PL.newId('s'), name, description: hint, body: text };
       lib.skills.push(s);
       ui.sel = s.id;
@@ -548,7 +548,7 @@
     shown = null;
     await save();
     refreshAll();
-    flash($('#libInfo'), '저장했습니다');
+    flash($('#libInfo'), tr('library.saved'));
   });
 
   $('#libCopy').addEventListener('click', () => {
@@ -557,13 +557,13 @@
     const from = { name: $('#libName').value, hint: $('#libHint').value, text: $('#libText').value };
     shown = null; // 복제는 지금 보이는 내용으로 (저장하지 않은 수정도 함께)
     if (c.kind === 'template') editNewTemplate({ name: from.name, hint: from.hint, text: from.text });
-    else editNewSkill({ name: `${from.name} (복사)`, description: from.hint, body: from.text });
+    else editNewSkill({ name: tr('library.copyName', { name: from.name }), description: from.hint, body: from.text });
   });
 
   $('#libDelete').addEventListener('click', async () => {
     const c = current();
     if (!c || c.readonly || c.isNew) return;
-    if (!confirm(`${c.name}을(를) 지울까요?`)) return;
+    if (!confirm(tr('library.confirmDelete', { name: c.name }))) return;
     if (c.kind === 'template') {
       lib.templates = lib.templates.filter((t) => t !== c.item);
       delete lib.lastVars[c.item.id];
@@ -581,7 +581,7 @@
   $('#libUse').addEventListener('click', async () => {
     const c = current();
     if (!c || c.isNew) return;
-    if (editorDirty() && !confirm('저장하지 않은 수정 내용이 있습니다. 저장한 내용으로 쓸까요?')) return;
+    if (editorDirty() && !confirm(tr('library.useSaved'))) return;
     shown = null;
     if (c.kind === 'template') {
       setTemplate(c.item.id);
@@ -622,7 +622,7 @@
   $('#libDropEx').addEventListener('change', (e) => updateSkill({ dropExamples: e.target.checked }));
   $('#libNoWarn').addEventListener('change', (e) => updateSkill({ noWarn: e.target.checked }));
   $('#libCompactDel').addEventListener('click', () => {
-    if (confirm('압축본을 지울까요? (원문은 그대로입니다)')) updateSkill({ compact: '', compactOf: '', useCompact: true });
+    if (confirm(tr('library.confirmCompactDel'))) updateSkill({ compact: '', compactOf: '', useCompact: true });
   });
 
   for (const [id, key] of [['#libWarnOne', 'one'], ['#libWarnTotal', 'total']]) {
@@ -654,7 +654,7 @@
     const out = $('#cmpOut').value.trim();
     const base = s ? PL.cleanSkill(s.body).length : 0;
     const pct = base ? (out.length / base) * 100 : 0;
-    $('#cmpOutCount').textContent = out ? `${out.length.toLocaleString()}자 · 원문의 ${pct > 0 && pct < 1 ? '1% 미만' : `${Math.round(pct)}%`}` : '';
+    $('#cmpOutCount').textContent = out ? tr('library.cmpOutCount', { n: out.length.toLocaleString(), pct: pct > 0 && pct < 1 ? tr('library.pctUnder1') : `${Math.round(pct)}%` }) : '';
     $('#cmpSave').disabled = !out || !!cmp.waiting;
     $('#cmpRun').disabled = !!cmp.waiting || !$('#cmpTarget').value;
     $('#cmpRead').disabled = !!cmp.waiting || !(cmp.panelId || ($('#cmpTarget').value && $('#cmpTarget').value !== LOCAL_ASK));
@@ -663,7 +663,7 @@
   $('#libCompress').addEventListener('click', () => {
     const c = current();
     if (!c || c.kind !== 'skill' || c.isNew) return;
-    if (editorDirty()) return alert('먼저 원문 수정 내용을 저장하세요 (저장한 원문으로 압축합니다)');
+    if (editorDirty()) return alert(tr('library.saveFirst'));
     openCompress(c.item.id);
   });
 
@@ -673,7 +673,7 @@
     if (!s) return;
     // 다른 스킬의 압축 답변을 기다리는 중이면 먼저 끝내야 한다
     if (cmp.waiting && cmp.skillId !== skillId) {
-      return alert(`${skillById(cmp.skillId)?.name || '다른 스킬'}의 압축 답변을 기다리는 중입니다. 끝난 뒤에 다시 하세요.`);
+      return alert(tr('library.cmpBusy', { name: skillById(cmp.skillId)?.name || tr('library.otherSkill') }));
     }
     const resume = cmp.skillId === skillId && cmp.out !== null; // 같은 스킬로 돌아왔으면 칸의 글·상태를 그대로
     cmp.skillId = skillId;
@@ -686,13 +686,13 @@
     const base = PL.cleanSkill(s.body);
     $('#cmpTitle').textContent = s.name;
     $('#cmpSrc').textContent = base;
-    $('#cmpSrcCount').textContent = `${base.length.toLocaleString()}자 (정리 후)`;
+    $('#cmpSrcCount').textContent = tr('library.cmpSrcCount', { n: base.length.toLocaleString() });
     if (!resume) {
       cmp.panelId = null;
       cmp.out = null;
       $('#cmpLen').value = Math.max(500, Math.min(8000, Math.round((base.length * 0.3) / 100) * 100));
       $('#cmpOut').value = s.compact || '';
-      setCmpStatus(open.length || localHeadless ? '압축을 맡길 AI와 목표 길이를 고르고 "압축 요청"을 누르세요' : '열린 패널이 없습니다 — 압축본을 직접 붙여 넣을 수도 있습니다');
+      setCmpStatus(open.length || localHeadless ? tr('library.cmpReady') : tr('library.cmpNoPanel'));
     } else $('#cmpOut').value = cmp.out;
     cmpCount();
     host.setView('compress');
@@ -716,7 +716,7 @@
     setCmpStatus(status, kind);
     cmpCount();
     if (state?.chatView !== 'compress' && kind === 'ok') {
-      $('#sendHint').textContent = `${cmpSkill()?.name || '스킬'} 압축본을 읽어 왔습니다 — lib(라이브러리) → 스킬 → AI로 압축에서 확인하고 저장하세요`;
+      $('#sendHint').textContent = tr('library.cmpGotHint', { name: cmpSkill()?.name || tr('library.skill') });
     }
   }
 
@@ -734,7 +734,7 @@
     if (!s || !id || cmp.waiting) return;
     const target = Math.max(200, Math.min(PL.LIMITS.skillBody, Number($('#cmpLen').value) || 2000));
     const hits = scanSecrets(s.body);
-    if (hits.length && !confirm(`지침에 비밀 정보로 보이는 문자열이 있습니다: ${describeSecrets(hits)}\n그래도 ${nameOfSvc(id)}에 보낼까요?`)) return;
+    if (hits.length && !confirm(tr('library.secretSend', { what: describeSecrets(hits), name: nameOfSvc(id) }))) return;
     if (id === LOCAL_ASK) return compressLocal(s, target);
     cmp.waiting = { id, sent: false };
     cmp.panelId = id;
@@ -742,19 +742,19 @@
     cmpCount();
     try {
       if ($('#cmpNew').checked) {
-        setCmpStatus(`${nameOfSvc(id)}에서 새 대화를 여는 중…`);
+        setCmpStatus(tr('library.cmpNewChat', { name: nameOfSvc(id) }));
         host.panelAction(id, 'newchat');
         await waitPanelReady(id);
       }
       if (!cmp.waiting) return; // 그사이 취소
-      setCmpStatus(`${nameOfSvc(id)}에 압축을 요청하는 중…`);
+      setCmpStatus(tr('library.cmpSending', { name: nameOfSvc(id) }));
       const res = await host.sendFollowUp(id, PL.compressRequest(s, target), [], { noHistory: true });
-      if (!res?.ok) throw new Error(res?.error || '보내지 못했습니다');
+      if (!res?.ok) throw new Error(res?.error || tr('library.sendFailed'));
       if (cmp.waiting) cmp.waiting.sent = true;
-      setCmpStatus(`${nameOfSvc(id)}의 답변을 기다리는 중… 패널로 가서 봐도 됩니다 (끝나면 아래에 자동으로 넣습니다)`);
+      setCmpStatus(tr('library.cmpWaiting', { name: nameOfSvc(id) }));
     } catch (err) {
       cmp.waiting = null;
-      setCmpStatus(`압축을 요청하지 못했습니다: ${err.message}`, 'error');
+      setCmpStatus(tr('library.cmpFailed', { error: err.message }), 'error');
     }
     cmpCount();
   });
@@ -775,10 +775,10 @@
     const r = await host.local.ask(req).catch((err) => ({ ok: false, error: err.message }));
     cmp.waiting = null;
     if (!r?.ok) {
-      setCmpStatus(`압축을 요청하지 못했습니다: ${r?.error || ''}`, 'error');
+      setCmpStatus(tr('library.cmpFailed', { error: r?.error || '' }), 'error');
       return cmpCount();
     }
-    putCompressed(PL.extractCompressed(r.text), '압축본을 읽어 왔습니다 — 빠진 규칙이 없는지 확인하고 저장하세요', 'ok');
+    putCompressed(PL.extractCompressed(r.text), tr('library.cmpGot'), 'ok');
   }
 
   // renderer.js가 패널 상태가 바뀔 때마다 알려 준다 (압축 화면을 보고 있지 않아도)
@@ -787,15 +787,15 @@
     if (!w || w.id !== id || !w.sent || !['done', 'timeout', 'no-answer'].includes(answer)) return;
     cmp.waiting = null;
     if (answer !== 'done') {
-      setCmpStatus(`답변이 끝나지 않았습니다 (${answer === 'timeout' ? '시간 초과' : '답변이 시작되지 않음'}) — 답변이 끝난 뒤 "패널에서 다시 읽기"를 누르세요`, 'error');
+      setCmpStatus(tr('library.cmpNotDone', { why: answer === 'timeout' ? tr('library.timeout') : tr('library.noAnswer') }), 'error');
       return cmpCount();
     }
     const text = await readCompressed(id);
     if (!text) {
-      setCmpStatus('답변을 읽지 못했습니다 — "패널에서 다시 읽기"를 누르거나 패널에서 직접 복사해 붙여 넣으세요', 'error');
+      setCmpStatus(tr('library.cmpReadFailed'), 'error');
       return cmpCount();
     }
-    putCompressed(text, '압축본을 읽어 왔습니다 — 빠진 규칙이 없는지 확인하고 저장하세요', 'ok');
+    putCompressed(text, tr('library.cmpGot'), 'ok');
   };
 
   // 자동으로 못 가져왔을 때 · 답변이 끝난 뒤 다시 가져올 때
@@ -803,9 +803,9 @@
     const id = cmp.panelId || $('#cmpTarget').value;
     if (!id || cmp.waiting) return;
     const text = await readCompressed(id);
-    if (!text) return setCmpStatus(`${nameOfSvc(id)} 패널에서 읽을 답변이 없습니다`, 'error');
-    if ($('#cmpOut').value.trim() && $('#cmpOut').value.trim() !== text && !confirm('압축본 칸의 지금 글을 패널의 최신 답변으로 바꿀까요?')) return;
-    putCompressed(text, `${nameOfSvc(id)} 패널의 최신 답변을 읽어 왔습니다 — 확인하고 저장하세요`, 'ok');
+    if (!text) return setCmpStatus(tr('library.cmpNothing', { name: nameOfSvc(id) }), 'error');
+    if ($('#cmpOut').value.trim() && $('#cmpOut').value.trim() !== text && !confirm(tr('library.cmpReplace'))) return;
+    putCompressed(text, tr('library.cmpGotLatest', { name: nameOfSvc(id) }), 'ok');
   });
 
   $('#cmpOut').addEventListener('input', () => {
@@ -818,16 +818,16 @@
     const s = cmpSkill();
     const text = $('#cmpOut').value.trim();
     if (!s || !text) return;
-    if (text.length > PL.LIMITS.skillBody) return alert(`압축본이 너무 깁니다 (${PL.LIMITS.skillBody.toLocaleString()}자까지)`);
+    if (text.length > PL.LIMITS.skillBody) return alert(tr('library.compactTooLong', { n: PL.LIMITS.skillBody.toLocaleString() }));
     const hits = scanSecrets(text);
-    if (hits.length && !confirm(`압축본에 비밀 정보로 보이는 문자열이 있습니다: ${describeSecrets(hits)}\n그래도 저장할까요?`)) return;
+    if (hits.length && !confirm(tr('library.secretCompact', { what: describeSecrets(hits) }))) return;
     Object.assign(s, { compact: text, compactOf: PL.textHash(s.body), useCompact: true });
     await save();
     const sid = s.id;
     Object.assign(cmp, { skillId: null, panelId: null, waiting: null, out: null });
     refreshAll(); // skill: 합계도 압축본 길이로
     openLibrary('skills', sid);
-    flash($('#libInfo'), '압축본을 저장했습니다 (보낼 때 압축본을 씁니다)');
+    flash($('#libInfo'), tr('library.compactSaved'));
   });
 
   // 돌아가도 기다리기는 계속된다 (다시 "AI로 압축"을 누르면 이어서 봄)
@@ -853,14 +853,14 @@
   });
 
   $('#libExport').addEventListener('click', () => {
-    if (!lib.templates.length && !lib.skills.length && !lib.presets.length) return alert('내보낼 내 템플릿·스킬이 없습니다');
+    if (!lib.templates.length && !lib.skills.length && !lib.presets.length) return alert(tr('library.nothingToExport'));
     download(`multitude-llm-library-${new Date().toISOString().slice(0, 10)}.json`, PL.exportLibrary(lib), 'application/json');
   });
 
   $('#libImport').addEventListener('click', () => $('#libImportFile').click());
 
   async function readSmallText(file) {
-    if (file.size > PL.LIMITS.skillFileBytes * 20) throw new Error('파일이 너무 큽니다');
+    if (file.size > PL.LIMITS.skillFileBytes * 20) throw new Error(tr('library.fileTooBig'));
     return file.text();
   }
 
@@ -874,14 +874,14 @@
       const t = got.templates.slice(0, Math.max(0, room.t));
       const s = got.skills.slice(0, Math.max(0, room.s));
       const pr = got.presets.slice(0, Math.max(0, PL.LIMITS.presets - lib.presets.length)); // 프리셋 (v0.29.0)
-      if (!confirm(`가져올까요?\n- 템플릿 ${t.length}개\n- 스킬 ${s.length}개${pr.length ? `\n- ${MLA.i18n.t('preset.importCount', { n: pr.length })}` : ''}${t.length < got.templates.length || s.length < got.skills.length ? '\n(저장 한도를 넘는 것은 뺍니다)' : ''}\n\n가져온 지침은 질문과 함께 AI 서비스로 보내지므로, 믿을 수 있는 파일인지 확인하세요.`)) return;
+      if (!confirm(tr('library.confirmImport', { t: t.length, s: s.length, presets: pr.length ? `\n- ${MLA.i18n.t('preset.importCount', { n: pr.length })}` : '', over: t.length < got.templates.length || s.length < got.skills.length ? tr('library.importOver') : '' }))) return;
       lib.templates.push(...t);
       lib.skills.push(...s);
       lib.presets.push(...pr);
       await save();
       refreshAll();
     } catch (err) {
-      alert(`가져오지 못했습니다: ${err.message}`);
+      alert(tr('library.importFailed', { error: err.message }));
     }
   });
 
@@ -892,23 +892,23 @@
     const skipped = [];
     for (const f of files) {
       if (f.size > PL.LIMITS.skillFileBytes) {
-        skipped.push(`${f.name}: 100KB 초과`);
+        skipped.push(`${f.name}: ${tr('library.skipBig')}`);
         continue;
       }
       const s = PL.parseSkillMd(await f.text(), f.name.replace(/(\.skill)?\.(md|txt|markdown)$/i, ''));
-      if (!s) skipped.push(`${f.name}: 지침 본문이 없음`);
-      else if (lib.skills.length + added.length >= PL.LIMITS.skills) skipped.push(`${f.name}: 스킬 ${PL.LIMITS.skills}개 한도`);
+      if (!s) skipped.push(`${f.name}: ${tr('library.skipEmpty')}`);
+      else if (lib.skills.length + added.length >= PL.LIMITS.skills) skipped.push(`${f.name}: ${tr('library.skipLimit', { n: PL.LIMITS.skills })}`);
       else added.push({ id: PL.newId('s'), ...s });
     }
     const secret = added.filter((s) => scanSecrets(s.body).length).map((s) => s.name);
-    if (secret.length && !confirm(`비밀 정보로 보이는 문자열이 있는 스킬: ${secret.join(', ')}\n그래도 가져올까요?`)) return;
+    if (secret.length && !confirm(tr('library.secretImport', { names: secret.join(', ') }))) return;
     lib.skills.push(...added);
     if (added.length) {
       ui.sel = added[added.length - 1].id;
       await save();
       refreshAll();
     }
-    if (skipped.length) alert(`가져오지 못한 파일:\n${skipped.join('\n')}`);
+    if (skipped.length) alert(tr('library.skippedFiles', { list: skipped.join('\n') }));
   });
 
   // ---------- 시작 · 상태 ----------

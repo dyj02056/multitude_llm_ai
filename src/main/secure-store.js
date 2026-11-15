@@ -34,7 +34,7 @@ function createSecureStore({ safeStorage, fs, now = () => Date.now() }) {
   /** 저장된 바이트 → 글. 암호문이면 풀고(못 풀면 오류), 아니면 평문 그대로 → { text, encrypted } */
   function decode(buf) {
     if (!isEncrypted(buf)) return { text: buf.toString('utf8'), encrypted: false };
-    if (!available()) throw new Error('이 환경에서는 암호를 풀 수 없습니다');
+    if (!available()) throw new Error(require('../shared/i18n').t('main.secure.cannotDecrypt'));
     return { text: safeStorage.decryptString(buf.subarray(MAGIC.length)), encrypted: true };
   }
 

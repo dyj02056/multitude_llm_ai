@@ -17,20 +17,28 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // 화면 문구 (v0.30.0): 부를 때마다 사전에서 찾는다 (언어를 바꾸면 바로 반영). 사전이 없는 곳(서비스 페이지 등)에서는 키 이름 그대로
+  const t = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
+  // label은 부를 때마다 labelKey로 사전에서 찾는다 (아래 defineProperty)
   const SHORTCUTS = [
-    { keys: 'Ctrl+L', action: 'focus-composer', label: '공통 입력창으로 이동' },
-    { keys: 'Ctrl+Shift+N', browserKeys: 'Alt+Shift+N', action: 'newchat-all', label: '모두 새 대화' },
-    { keys: 'Ctrl+Shift+S', action: 'synth', label: '종합 요청' },
-    { keys: 'Ctrl+Shift+C', action: 'copy-all', label: '모든 답변 복사 (Markdown)' },
-    { keys: 'Ctrl+Shift+D', action: 'view:compare', label: '답변 비교 화면 열기/닫기' },
-    { keys: 'Ctrl+Shift+P', browserKeys: 'Alt+Shift+P', action: 'view:changes', label: '변경 제안(프로젝트 수정안) 화면 열기/닫기' },
-    { keys: 'Ctrl+H', action: 'view:history', label: '기록 화면 열기/닫기' },
-    { keys: 'Ctrl+Shift+R', action: 'reload-all', label: '모두 새로고침' },
-    { keys: 'Ctrl+1~9', browserKeys: 'Alt+Shift+1~6', action: 'target:N', label: 'N번째 보낼 대상 켜기/끄기' },
-    { keys: 'Alt+1~9', browserKeys: 'Alt+1~6', action: 'panel:N', label: 'N번째 패널로 포커스 이동' },
-    { keys: 'Ctrl+/', action: 'view:help', label: '단축키 도움말' },
-    { keys: 'Esc', action: 'view:panels', label: '비교·변경 제안·파일 편집·git 콘솔·라이브러리·기록·도움말 화면에서 패널로 돌아가기 (변수 입력은 취소)' },
+    { keys: 'Ctrl+L', action: 'focus-composer', labelKey: 'main.shortcut.focusComposer' },
+    { keys: 'Ctrl+Shift+N', browserKeys: 'Alt+Shift+N', action: 'newchat-all', labelKey: 'main.shortcut.newchatAll' },
+    { keys: 'Ctrl+Shift+S', action: 'synth', labelKey: 'main.shortcut.synth' },
+    { keys: 'Ctrl+Shift+C', action: 'copy-all', labelKey: 'main.shortcut.copyAll' },
+    { keys: 'Ctrl+Shift+D', action: 'view:compare', labelKey: 'main.shortcut.compare' },
+    { keys: 'Ctrl+Shift+P', browserKeys: 'Alt+Shift+P', action: 'view:changes', labelKey: 'main.shortcut.changes' },
+    { keys: 'Ctrl+H', action: 'view:history', labelKey: 'main.shortcut.history' },
+    { keys: 'Ctrl+Shift+R', action: 'reload-all', labelKey: 'main.shortcut.reloadAll' },
+    { keys: 'Ctrl+1~9', browserKeys: 'Alt+Shift+1~6', action: 'target:N', labelKey: 'main.shortcut.target' },
+    { keys: 'Alt+1~9', browserKeys: 'Alt+1~6', action: 'panel:N', labelKey: 'main.shortcut.panel' },
+    { keys: 'Ctrl+/', action: 'view:help', labelKey: 'main.shortcut.help' },
+    { keys: 'Esc', action: 'view:panels', labelKey: 'main.shortcut.back' },
   ];
+  for (const s of SHORTCUTS) Object.defineProperty(s, 'label', { get: () => t(s.labelKey), enumerable: true });
 
   /** 도움말 표에 보여 줄 목록 [{ keys, label }] */
   function shortcutList({ browser = false } = {}) {

@@ -11,6 +11,7 @@ const { dev } = require('./dev');
 const { pageFocusInput, pageRefocusInput, pageClickSend } = require('../shared/page');
 const { attachFiles, cleanupTemp } = require('./attach');
 const { isServiceUrl } = require('../shared/services');
+const { t } = require('../shared/i18n');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -38,12 +39,12 @@ async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
   // 패널이 링크·리다이렉트로 서비스 밖 사이트에 가 있으면 질문·프로젝트 내용·첨부를 넣지 않는다.
   // 첨부·입력 사이에 페이지가 바뀔 수 있어서 넣기 직전마다 다시 본다.
   const offHost = () => !isServiceUrl(svc, wc.getURL());
-  const OFF_HOST = { ok: false, error: `패널이 ${svc.name} 주소가 아닙니다 (⌂로 처음 주소로 돌아간 뒤 다시 보내세요)` };
+  const OFF_HOST = { ok: false, error: t('main.inject.offHost', { name: svc.name }) };
   if (offHost()) return OFF_HOST;
 
   const focus = await run(wc, pageFocusInput, cfg);
   // code 'no-input': 입력창을 못 찾음 — 셀렉터 자가진단(shared/diag.js)이 "화면이 바뀐 것 같음"으로 본다
-  if (!focus.ok) return { ok: false, error: focus.error || '입력창에 포커스를 줄 수 없습니다', code: focus.error ? 'no-input' : undefined };
+  if (!focus.ok) return { ok: false, error: focus.error || t('main.inject.noFocus'), code: focus.error ? 'no-input' : undefined };
 
   let attach;
   if (files.length) {
@@ -53,7 +54,7 @@ async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
       text = fallbackText;
       attach = { ...attach, fallback: true };
     }
-    if (!text && !attach.ok) return { ok: false, error: `첨부하지 못해 보낼 내용이 없습니다 (${attach.error})` };
+    if (!text && !attach.ok) return { ok: false, error: t('main.inject.attachNothing', { error: attach.error }) };
   }
 
   if (offHost()) return OFF_HOST;

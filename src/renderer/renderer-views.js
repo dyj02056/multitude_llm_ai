@@ -29,7 +29,7 @@ const saveCompareView = () => {
 /** 답변 비교 화면: 마지막 질문과 각 AI의 최신 답변(또는 분석 결과)을 보여 줍니다. */
 async function renderCompare() {
   const { question, answers, analysis, analyses, chain, debates } = await host.getAnswers();
-  $('#compareQuestion').textContent = question || '(아직 공통 입력창으로 보낸 질문이 없습니다)';
+  $('#compareQuestion').textContent = question || t('ui.compare.noQuestion');
   compareView.answers = answers;
   compareView.analysis = analysis || null;
   compareView.analyses = analyses || []; // 이번 질문의 분석 전부 (v0.26.0 다시 분석 비교)
@@ -56,7 +56,7 @@ function renderCompareTabs() {
   }
   const n = compareView.analysis ? AN.parseAnalysis(compareView.analysis.md || compareView.analysis.text, { names: compareView.analysis.names }) : null;
   const tab = document.querySelector('#compareTabs [data-ctab="analysis"]');
-  tab.textContent = n?.ok ? `분석 · 이견 ${n.disagreements.length}` : '분석';
+  tab.textContent = n?.ok ? t('ui.compare.analysisTabCount', { n: n.disagreements.length }) : t('ui.compare.analysisTab');
   const count = (compareView.chain || []).length + (compareView.debates || []).length;
   document.querySelector('#compareTabs [data-ctab="chain"]').textContent = count ? t('compare.chainTabCount', { n: count }) : t('compare.chainTab');
 }
@@ -71,7 +71,7 @@ function renderCompareAnswers() {
     ...withText.map((a) => {
       const opt = document.createElement('option');
       opt.value = a.id;
-      opt.textContent = `기준: ${a.name}`;
+      opt.textContent = t('ui.compare.baseOption', { name: a.name });
       return opt;
     }),
   );
@@ -88,9 +88,9 @@ function renderCompareAnswers() {
   cols.replaceChildren(
     ...answers.map((a) => {
       if (!base || !a.text) return answerColumn(a);
-      if (a.id === base.id) return answerColumn({ ...a, badge: '기준' });
+      if (a.id === base.id) return answerColumn({ ...a, badge: t('ui.compare.baseBadge') });
       const marks = AN.diffMarks(base.text, a.text);
-      return answerColumn({ ...a, marks, badge: `새 내용 ${Math.round(AN.changedRatio(marks) * 100)}%` });
+      return answerColumn({ ...a, marks, badge: t('ui.compare.newBadge', { n: Math.round(AN.changedRatio(marks) * 100) }) });
     }),
   );
 }
@@ -100,19 +100,19 @@ function renderCompareAnalysis() {
   const box = $('#analysisView');
   const run = $('#analysisRun');
   run.disabled = !!compareView.pending || compareView.answers.filter((a) => a.text).length < 2;
-  run.textContent = compareView.analysis ? '다시 분석' : '분석 요청';
+  run.textContent = compareView.analysis ? t('ui.analysis.rerun') : t('ui.analysis.run');
   const pending = compareView.pending
-    ? [span('analysis-note pending', `${compareView.pending}이(가) 분석하는 중입니다… 끝나면 여기에 표로 나옵니다`)]
+    ? [span('analysis-note pending', t('ui.analysis.pending', { name: compareView.pending }))]
     : compareView.error
       ? [span('analysis-note', compareView.error)] // 지난 분석 요청이 실패한 이유 (시간 초과 · 답변 없음 등)
       : [];
   if (!compareView.analysis) {
     const empty = document.createElement('div');
     empty.className = 'analysis-empty';
-    const judge = state.services.find((s) => s.id === $('#synthTarget').value)?.name || '종합 담당 AI';
+    const judge = state.services.find((s) => s.id === $('#synthTarget').value)?.name || t('ui.analysis.judgeFallback');
     empty.append(
-      span('analysis-empty-title', '아직 분석 결과가 없습니다'),
-      span('muted-label', `분석 요청을 누르면 ${judge}에게 답변들의 공통 의견 · 이견 · 근거 부족 · 최종 답변을 정해진 형식으로 정리해 달라고 보냅니다. 판정 AI는 입력창 아래 종합 담당에서 고릅니다.`),
+      span('analysis-empty-title', t('ui.analysis.emptyTitle')),
+      span('muted-label', t('ui.analysis.emptyBody', { judge })),
     );
     return box.replaceChildren(...pending, empty);
   }
@@ -161,28 +161,28 @@ function analysisBlock(entry, { onJump, unique } = {}) {
 
   const head = document.createElement('div');
   head.className = 'analysis-head';
-  const meta = span('muted-label', `판정 ${entry.judge} · ${fmtTime(entry.at)}`);
+  const meta = span('muted-label', t('ui.analysis.meta', { judge: entry.judge, time: fmtTime(entry.at) }));
   head.append(
     meta,
-    button('분석 복사', '분석 답변을 Markdown 그대로 복사', async () => {
+    button(t('ui.analysis.copy'), t('ui.analysis.copyTitle'), async () => {
       await host.copyText(raw);
-      flash(meta, '복사했습니다');
+      flash(meta, t('ui.copied'));
     }),
   );
   wrap.append(head);
 
   if (!res.ok) {
-    const note = span('analysis-note', `정해진 형식이 아니라서 글 그대로 보여 줍니다 (${res.reason})`);
+    const note = span('analysis-note', t('ui.analysis.unparsed', { reason: res.reason }));
     const body = document.createElement('div');
     body.className = 'analysis-raw';
-    body.textContent = raw || '(빈 답변)';
+    body.textContent = raw || t('ui.analysis.emptyAnswer');
     wrap.append(note, body);
     return wrap;
   }
 
   const colorOf = (name) => state.services.find((s) => s.name === name)?.color || 'var(--muted)';
   const nameChip = (name, query) => {
-    const b = button(name, `${name} 답변으로 이동`, () => onJump?.(name, query));
+    const b = button(name, t('ui.analysis.jumpTitle', { name }), () => onJump?.(name, query));
     b.className = 'an-chip';
     b.style.setProperty('--svc', colorOf(name));
     b.disabled = !onJump || !state.services.some((s) => s.name === name);
@@ -208,20 +208,20 @@ function analysisBlock(entry, { onJump, unique } = {}) {
   };
 
   // 공통 의견
-  const common = section('공통 의견', res.common.length);
-  common.append(res.common.length ? list(res.common, (li, t) => (li.textContent = t)) : span('muted-label', '정리된 공통 의견이 없습니다'));
+  const common = section(t('ui.analysis.common'), res.common.length);
+  common.append(res.common.length ? list(res.common, (li, t) => (li.textContent = t)) : span('muted-label', t('ui.analysis.noCommon')));
 
   // 이견 표: 쟁점 | AI별 입장 | 판단
-  const dis = section('이견', res.disagreements.length);
+  const dis = section(t('ui.analysis.disagreements'), res.disagreements.length);
   dis.classList.add('an-disagree');
-  if (!res.disagreements.length) dis.append(span('an-agree', '이견이 없습니다 — 답변들이 같은 방향입니다'));
+  if (!res.disagreements.length) dis.append(span('an-agree', t('ui.analysis.noDisagreements')));
   else {
     const cols = [...new Set([...names, ...res.disagreements.flatMap((d) => d.positions.map((p) => p.name))])];
     const hasText = res.disagreements.some((d) => d.positions.some((p) => p.text));
     const table = document.createElement('table');
     table.className = 'an-table';
     const tr = document.createElement('tr');
-    for (const label of ['쟁점', ...(hasText ? cols : ['언급한 AI']), '판단']) {
+    for (const label of [t('ui.analysis.issue'), ...(hasText ? cols : [t('ui.analysis.mentionedBy')]), t('ui.analysis.verdict')]) {
       const th = document.createElement('th');
       if (hasText && cols.includes(label)) th.append(nameChip(label));
       else th.textContent = label;
@@ -271,25 +271,25 @@ function analysisBlock(entry, { onJump, unique } = {}) {
   }
 
   // 근거 부족
-  const weak = section('근거 부족', res.unsupported.length);
+  const weak = section(t('ui.analysis.unsupported'), res.unsupported.length);
   weak.append(
     res.unsupported.length
       ? list(res.unsupported, (li, u) => {
           if (u.name) li.append(nameChip(u.name, u.text), ' ');
           li.append(u.text);
         })
-      : span('muted-label', '근거가 부족하다고 짚은 내용이 없습니다'),
+      : span('muted-label', t('ui.analysis.noUnsupported')),
   );
 
   // 최종 답변
-  const fin = section('최종 답변');
+  const fin = section(t('ui.analysis.final'));
   fin.classList.add('an-final');
   const finBody = document.createElement('div');
   finBody.className = 'analysis-raw';
   finBody.textContent = res.final;
-  const copyFinal = button('복사', '최종 답변 복사', async () => {
+  const copyFinal = button(t('ui.copy'), t('ui.analysis.copyFinal'), async () => {
     await host.copyText(res.final);
-    flash(meta, '최종 답변을 복사했습니다');
+    flash(meta, t('ui.analysis.finalCopied'));
   });
   fin.querySelector('h3').append(copyFinal);
   fin.append(finBody);
@@ -308,10 +308,10 @@ function answerColumn(a) {
   col.style.setProperty('--svc', a.color);
   const head = document.createElement('div');
   head.className = 'compare-col-head';
-  const count = span('muted-label', a.text ? `${a.text.length.toLocaleString()}자` : a.note || '답변 없음');
-  const copy = button('복사', `${a.name} 답변 복사`, async () => {
+  const count = span('muted-label', a.text ? t('preview.chars', { n: a.text.length.toLocaleString() }) : a.note || t('ui.answerState.noAnswer'));
+  const copy = button(t('ui.copy'), t('ui.answer.copyTitle', { name: a.name }), async () => {
     await host.copyText(a.md || a.text); // Markdown이 있으면 서식(표·코드)을 살려 복사
-    flash(count, '복사했습니다');
+    flash(count, t('ui.copied'));
   });
   copy.disabled = !a.text;
   head.append(span('dot ready'), span('name', a.name));
@@ -331,7 +331,7 @@ function answerColumn(a) {
         body.append(mark);
       }
     }
-  } else body.textContent = a.text || a.emptyText || '이 패널에는 아직 답변이 없습니다.';
+  } else body.textContent = a.text || a.emptyText || t('ui.answer.none');
   body.classList.toggle('empty', !a.text);
   col.append(head, body);
   return col;
@@ -364,7 +364,7 @@ $('#analysisRun').addEventListener('click', async () => {
   const r = await host.runSynth($('#synthTarget').value || state.synthTarget, 'analysis');
   if (!r?.ok) {
     renderCompareAnalysis();
-    $('#analysisView').prepend(span('analysis-note', r?.error || '분석을 요청하지 못했습니다'));
+    $('#analysisView').prepend(span('analysis-note', r?.error || t('ui.analysis.requestFailed')));
   }
 });
 
@@ -381,7 +381,8 @@ $('#compareRefresh').addEventListener('click', renderCompare);
 const fmtTime = (ms) =>
   new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-const NO_TEXT = '(글 없이 첨부 파일만 보냄)';
+// 글 없이 첨부만 보낸 기록의 질문 자리 (언어를 바꾸면 그때 글로)
+Object.defineProperty(window, 'NO_TEXT', { get: () => t('ui.noText') });
 const filesLine = (files) => files.map((f) => `${f.name} (${fmtSize(f.size)})`).join(' · ');
 
 // 기록 하나(질문 + 각 AI 답변 + 종합 · 분석)를 Markdown 글 하나로 엮습니다 (복사 · 내보내기 — shared/export.js).
@@ -392,8 +393,8 @@ const recordToMarkdown = (rec) => EX.toMarkdown(EX.docFromRecord(rec));
 async function exportDoc(doc, kind, el) {
   const text = kind === 'html' ? EX.toHtml(doc) : EX.toMarkdown(doc);
   const r = await host.saveFile({ name: EX.fileName(doc, kind), text, kind }).catch((err) => ({ ok: false, error: err.message }));
-  if (r?.ok) flash(el, `저장했습니다: ${String(r.path).split(/[\\/]/).pop()}`);
-  else if (!r?.cancelled) flash(el, r?.error || '저장하지 못했습니다');
+  if (r?.ok) flash(el, t('ui.saved', { name: String(r.path).split(/[\\/]/).pop() }));
+  else if (!r?.cancelled) flash(el, r?.error || t('ui.saveFailed'));
 }
 
 // ---------- 단축키 ----------
@@ -430,20 +431,24 @@ for (const box of document.querySelectorAll('[data-notify]')) {
   box.addEventListener('change', () => host.setSettings({ notify: { [box.dataset.notify]: box.checked } }));
 }
 
-const REMOTE_SOURCE = { builtin: '앱에 들어 있는 셀렉터', cache: '저장해 둔 원격 셀렉터', remote: '원격 셀렉터' };
+const REMOTE_SOURCE = {
+  get builtin() { return t('ui.remote.builtin'); },
+  get cache() { return t('ui.remote.cache'); },
+  get remote() { return t('ui.remote.remote'); },
+};
 
 // 설정 화면의 "사이트 셀렉터 원격 갱신" 상태 글
 function renderRemoteStatus() {
   const r = state.remote || {};
   const parts = [
-    `지금 쓰는 것: ${REMOTE_SOURCE[r.source] || r.source}${r.version ? ` (버전 ${r.version}${r.updated ? `, ${r.updated}` : ''})` : ''}`,
+    `${t('ui.remote.using', { source: REMOTE_SOURCE[r.source] || r.source })}${r.version ? ` (${t('ui.remote.version', { v: r.version })}${r.updated ? `, ${r.updated}` : ''})` : ''}`,
   ];
-  if (r.services?.length) parts.push(`바뀐 서비스: ${r.services.join(', ')}`);
-  if (r.ignored?.length) parts.push(`보안상 무시한 항목: ${r.ignored.slice(0, 6).join(', ')}${r.ignored.length > 6 ? ' 외' : ''} (앱 업데이트로만 바뀜)`);
-  if (r.checkedAt) parts.push(`마지막 확인 ${fmtTime(r.checkedAt)}`);
-  if (r.error) parts.push(`확인 실패: ${r.error}`);
+  if (r.services?.length) parts.push(t('ui.remote.changed', { list: r.services.join(', ') }));
+  if (r.ignored?.length) parts.push(t('ui.remote.ignored', { list: r.ignored.slice(0, 6).join(', ') + (r.ignored.length > 6 ? t('ui.remote.more') : '') }));
+  if (r.checkedAt) parts.push(t('ui.remote.checked', { time: fmtTime(r.checkedAt) }));
+  if (r.error) parts.push(t('ui.remote.checkFailed', { error: r.error }));
   $('#remoteStatus').textContent =
-    `서비스 화면이 바뀌어 입력창·답변을 못 찾을 때, 앱을 다시 설치하지 않고 GitHub에서 고친 셀렉터를 받아 씁니다. ${parts.join(' · ')}`;
+    t('ui.remote.status', { parts: parts.join(' · ') });
   $('#remoteToggle').checked = !!state.remoteSelectors;
   $('#remoteRefresh').disabled = !state.remoteSelectors;
 }
@@ -454,14 +459,14 @@ $('#localEnabled').addEventListener('change', async (e) => {
   const r = await host.local.setPrefs({ enabled: e.target.checked });
   if (!r?.ok) {
     e.target.checked = false;
-    $('#localStatus').textContent = r?.error || '켜지 못했습니다';
+    $('#localStatus').textContent = r?.error || t('ui.local.enableFailed');
   }
   renderLocalSettings();
   if (r?.ok && r.local.enabled) refreshLocalModels();
 });
 $('#localBase').addEventListener('change', async (e) => {
   const r = await host.local.setPrefs({ baseUrl: e.target.value });
-  $('#localStatus').textContent = r?.ok ? '주소를 저장했습니다 — 연결 확인을 누르세요' : r?.error || '저장하지 못했습니다';
+  $('#localStatus').textContent = r?.ok ? t('ui.local.urlSaved') : r?.error || t('ui.saveFailed');
   if (!r?.ok) e.target.value = state.local?.baseUrl || '';
 });
 $('#localModel').addEventListener('change', (e) => host.local.setPrefs({ model: e.target.value }));
@@ -476,7 +481,7 @@ $('#remoteRefresh').addEventListener('click', async () => {
 
 // ---------- 응답 통계 (v0.13.0) ----------
 // 기록에 남은 숫자(보내기 성공 · 완료 · 실패 · 시간 · 글자 수)로 AI별 표를 그린다. 정확도는 재지 않는다.
-const fmtSec = (ms) => (ms == null ? '–' : ms >= 60000 ? `${Math.floor(ms / 60000)}분 ${Math.round((ms % 60000) / 1000)}초` : `${(ms / 1000).toFixed(1)}초`);
+const fmtSec = (ms) => (ms == null ? '–' : ms >= 60000 ? t('ui.time.minSec', { m: Math.floor(ms / 60000), s: Math.round((ms % 60000) / 1000) }) : t('ui.time.sec', { s: (ms / 1000).toFixed(1) }));
 const pct = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : '–');
 
 // 만족도 (v0.23): "75% (3/4)" — 평가가 하나도 없으면 "—"
@@ -491,8 +496,8 @@ async function renderStatsTable() {
   const table = $('#statsTable');
   if (!table) return;
   const apply = window.projectApplyStats?.() || null; // 이 프로젝트의 적용 기록 { AI 이름: { applied, reverted } }
-  const cols = ['서비스', '질문', '답변 완료', '시간 초과 · 답 없음', '보내기 실패', '사용 한도', '첫 응답 (중앙값)', '완료까지 (중앙값)', '평균 글자 수', '만족도'];
-  if (apply) cols.push('수정안 적용 · 되돌림');
+  const cols = ['service', 'asked', 'done', 'timeout', 'sendFail', 'limit', 'first', 'doneTime', 'chars', 'satisfaction'].map((k) => t(`ui.stats.${k}`));
+  if (apply) cols.push(t('ui.stats.applied'));
   const head = document.createElement('tr');
   for (const t of cols) head.append(Object.assign(document.createElement('th'), { textContent: t }));
   const rows = (st?.rows || []).map((r) => {
@@ -511,24 +516,24 @@ async function renderStatsTable() {
     };
     cell(String(r.asked));
     cell(`${r.done} (${pct(r.done, r.asked)})`);
-    cell(String(r.timeout + r.noAnswer), `시간 초과 ${r.timeout} · 답변 없음 ${r.noAnswer}`);
+    cell(String(r.timeout + r.noAnswer), t('ui.stats.timeoutTitle', { timeout: r.timeout, none: r.noAnswer }));
     cell(String(r.sendFail));
     const lim = cell(String(r.limit));
     if (r.limit) lim.dataset.state = 'warn';
     cell(fmtSec(r.firstMedianMs));
     cell(fmtSec(r.doneMedianMs));
     cell(r.charsAvg == null ? '–' : r.charsAvg.toLocaleString());
-    cell(fmtSatisfaction(r), '패널 머리줄의 [+1] 좋았음 / [-1] 별로였음으로 센 만족도: 좋았음 / (좋았음 + 별로였음)');
+    cell(fmtSatisfaction(r), t('ui.stats.satisfactionTitle'));
     if (apply) {
       const a = apply[svc?.name || r.name];
-      cell(a ? `${a.applied} · ${a.reverted}` : '–', '이 프로젝트의 적용 기록에서 센 수 (적용 · 그중 되돌린 것)');
+      cell(a ? `${a.applied} · ${a.reverted}` : '–', t('ui.stats.appliedTitle'));
     }
     return tr;
   });
-  const empty = Object.assign(document.createElement('tr'), { textContent: '아직 기록이 없습니다' });
+  const empty = Object.assign(document.createElement('tr'), { textContent: t('ui.history.empty') });
   table.replaceChildren(head, ...(rows.length ? rows : [empty]));
   $('#statsNote').textContent = st?.records
-    ? `기록 ${st.records}개 기준 (${fmtTime(st.since)}부터). 기록을 지우면 통계도 함께 지워집니다. 정확도는 재지 않습니다 — 보내기 · 완료 · 시간 · 글자 수만 셉니다. v0.13.0 이전 기록에는 시간 정보가 없어 –로 나옵니다.`
+    ? t('ui.stats.note', { n: st.records, since: fmtTime(st.since) })
     : '';
 }
 
@@ -538,10 +543,10 @@ function renderStorage() {
   const el = $('#storageStatus');
   if (!el || !s) return;
   el.textContent = s.extension
-    ? '기록 · 설정 · 라이브러리는 크롬 프로필의 확장 저장소에 암호화 없이 저장됩니다. 크롬 확장에는 OS 열쇠 보관소가 없어 암호화해도 열쇠를 데이터 옆에 둘 수밖에 없기 때문입니다. 필요하면 기록 화면의 "기록 전체 삭제"로 지우세요.'
+    ? t('ui.storage.extension')
     : s.encrypted
-      ? '기록 · 설정 · 라이브러리 · 프로젝트 상태(되돌리기용 원본 포함)를 이 PC의 앱 데이터 폴더에 암호화해 저장합니다 (Windows DPAPI — 같은 Windows 계정에서만 풀림). 파일만 복사해 가거나 다른 계정에서는 읽을 수 없고, 같은 계정에서 도는 프로그램까지 막지는 못합니다.'
-      : '이 환경에서는 암호화를 쓸 수 없어 기록 · 설정을 평문으로 저장합니다.';
+      ? t('ui.storage.encrypted')
+      : t('ui.storage.plain');
 }
 function renderSettings() {
   renderRemoteStatus();
@@ -552,7 +557,7 @@ function renderSettings() {
   renderLocalSettings();
   const select = $('#timeoutSelect');
   select.replaceChildren(
-    ...state.timeoutChoices.map((m) => Object.assign(document.createElement('option'), { value: m, textContent: `${m}분` })),
+    ...state.timeoutChoices.map((m) => Object.assign(document.createElement('option'), { value: m, textContent: t('ui.minutes', { n: m }) })),
   );
   select.value = String(state.answerTimeoutMin);
   const maxSel = $('#historyMaxSelect');

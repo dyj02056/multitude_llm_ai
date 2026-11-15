@@ -5,6 +5,7 @@
 // electron 없이 순수 함수로만 만들어 테스트(test/ipc-guard.test.js)에서 바로 불러 쓸 수 있다.
 
 const L = require('../shared/local-llm');
+const { t } = require('../shared/i18n');
 
 /**
  * 화면에서 받은 첨부 파일 검사.
@@ -14,20 +15,20 @@ const L = require('../shared/local-llm');
  */
 function checkFiles(files, limits) {
   if (files === undefined) return { ok: true, files: [] };
-  if (!Array.isArray(files)) return { ok: false, error: '첨부 파일 목록의 모양이 올바르지 않습니다' };
-  if (files.length > limits.maxFiles) return { ok: false, error: `첨부 파일은 ${limits.maxFiles}개까지 보낼 수 있습니다` };
+  if (!Array.isArray(files)) return { ok: false, error: t('main.guard.filesShape') };
+  if (files.length > limits.maxFiles) return { ok: false, error: t('main.guard.maxFiles', { n: limits.maxFiles }) };
   let total = 0;
   const out = [];
   for (const f of files) {
-    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ok: false, error: '첨부 파일의 모양이 올바르지 않습니다' };
-    if (typeof f.name !== 'string' || !f.name) return { ok: false, error: '첨부 파일 이름이 없습니다' };
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ok: false, error: t('main.guard.fileShape') };
+    if (typeof f.name !== 'string' || !f.name) return { ok: false, error: t('main.guard.noName') };
     // 내용은 ArrayBuffer 또는 Uint8Array만 받는다 (DataView · 다른 배열이나 숫자 · 문자열은 거절)
-    if (!(f.data instanceof ArrayBuffer || f.data instanceof Uint8Array)) return { ok: false, error: `첨부 파일 내용이 올바르지 않습니다: ${f.name.slice(0, 200)}` };
+    if (!(f.data instanceof ArrayBuffer || f.data instanceof Uint8Array)) return { ok: false, error: t('main.guard.badData', { name: f.name.slice(0, 200) }) };
     const size = f.data.byteLength;
-    if (!Number.isSafeInteger(size) || size < 0) return { ok: false, error: `첨부 파일 크기를 알 수 없습니다: ${f.name.slice(0, 200)}` };
-    if (size > limits.maxFileBytes) return { ok: false, error: `첨부 파일이 한도(${mb(limits.maxFileBytes)})를 넘었습니다: ${f.name.slice(0, 200)}` };
+    if (!Number.isSafeInteger(size) || size < 0) return { ok: false, error: t('main.guard.badSize', { name: f.name.slice(0, 200) }) };
+    if (size > limits.maxFileBytes) return { ok: false, error: t('main.guard.tooBig', { limit: mb(limits.maxFileBytes), name: f.name.slice(0, 200) }) };
     total += size;
-    if (total > limits.maxTotalBytes) return { ok: false, error: `첨부 파일 전체 크기가 한도(${mb(limits.maxTotalBytes)})를 넘었습니다` };
+    if (total > limits.maxTotalBytes) return { ok: false, error: t('main.guard.totalTooBig', { limit: mb(limits.maxTotalBytes) }) };
     out.push({ name: f.name.slice(0, 200), type: String(f.type || '').slice(0, 200), size, lastModified: Number(f.lastModified) || Date.now(), data: f.data });
   }
   return { ok: true, files: out };

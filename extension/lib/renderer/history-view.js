@@ -8,7 +8,11 @@
 
 const HSU = MLA.historySearch;
 const HISTORY_VIEW_KEY = 'mla-history-view'; // 묶는 방식(기록 하나씩 · 대화 줄기)만 기억한다
-const ANSWER_STATE_TEXT = { timeout: '시간 초과', 'no-answer': '답변 없음', error: '보내기 실패' };
+const ANSWER_STATE_TEXT = {
+  get timeout() { return t('ui.answerState.timeout'); },
+  get 'no-answer'() { return t('ui.answerState.noAnswer'); },
+  get error() { return t('ui.answerState.error'); },
+};
 // historySelected: 고른 기록 id 또는 대화 줄기 'thread:<id>'. picked: 내보내기로 고른 기록 id
 const historyView = { filters: HSU.cleanFilters({}), group: 'records', picked: new Set(), items: [] };
 let historySelected = null;
@@ -23,8 +27,8 @@ const kindLabel = (kind) => t(`kind.${kind}`);
 /** 목록 한 줄의 작은 설명 (시각 · 답변 수 · 첨부 · 종합 · 분석 · 이어 묻기 · 토론 · 보낸 곳 · 프로젝트 · 태그) */
 function historyMeta(it) {
   return (
-    `${fmtTime(it.at)} · 답변 ${it.answered}/${it.targets}` +
-    `${it.files ? ` · 첨부 ${it.files}` : ''}${it.synth ? ` · 종합 ${it.synth}` : ''}${it.analysis ? ` · 분석 ${it.analysis}` : ''}` +
+    `${fmtTime(it.at)} · ${t('ui.history.metaAnswered', { n: it.answered, total: it.targets })}` +
+    `${it.files ? ` · ${t('ui.history.metaFiles', { n: it.files })}` : ''}${it.synth ? ` · ${t('ui.history.metaSynth', { n: it.synth })}` : ''}${it.analysis ? ` · ${t('ui.history.metaAnalysis', { n: it.analysis })}` : ''}` +
     `${it.chain ? ` · ${t('history.chainCount', { n: it.chain })}` : ''}${it.debate ? ` · ${t('history.debateCount', { n: it.debate })}` : ''}` +
     `${it.source === 'side' ? ' · side' : ''}${it.project ? ` · ${t('history.projectBadge', { name: it.project })}` : ''}` +
     `${it.tags?.length ? ` · #${it.tags.join(' #')}` : ''}`
@@ -69,7 +73,7 @@ async function renderHistoryList() {
   const list = $('#historyList');
   const filtered = query || HSU.activeCount(historyView.filters);
   if (!items.length) {
-    list.replaceChildren(span('history-empty', filtered ? t('history.emptyFiltered') : '아직 기록이 없습니다'));
+    list.replaceChildren(span('history-empty', filtered ? t('history.emptyFiltered') : t('ui.history.empty')));
     $('#historyDetail').replaceChildren();
     renderPickedBar();
     return;
@@ -261,13 +265,13 @@ function recordColumns(rec) {
       color: svc?.color || 'var(--muted)',
       text: a?.text || '',
       md: a?.md,
-      note: a ? ANSWER_STATE_TEXT[a.state] : '기다리는 중',
-      emptyText: a ? '저장된 답변이 없습니다.' : '답변을 기다리는 중이거나, 앱이 닫혀 저장되지 않았습니다.',
+      note: a ? ANSWER_STATE_TEXT[a.state] : t('ui.history.waiting'),
+      emptyText: a ? t('ui.history.noSavedAnswer') : t('ui.history.answerPending'),
     };
   });
   for (const sy of rec.synth || []) {
     if (sy.mode === 'debate') columns.push({ name: t('chain.debateResultCol', { judge: sy.judge }), color: 'var(--ok)', text: sy.text, md: sy.md });
-    else if (sy.mode !== 'analysis') columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text, md: sy.md });
+    else if (sy.mode !== 'analysis') columns.push({ name: t('ui.history.synthColumn', { judge: sy.judge }), color: 'var(--accent)', text: sy.text, md: sy.md });
   }
   const cols = document.createElement('div');
   cols.className = 'compare-cols';
@@ -295,18 +299,18 @@ async function renderHistoryDetail(id) {
   const time = span('muted-label', fmtTime(rec.at));
   head.append(
     time,
-    button('질문 다시 쓰기', '이 질문을 입력창에 넣습니다', () => {
+    button(t('ui.history.reuse'), t('ui.history.reuseTitle'), () => {
       $('#prompt').value = rec.question;
       host.setView('panels');
       $('#prompt').focus();
     }),
-    button('Markdown 복사', '질문과 답변을 Markdown으로 복사', async () => {
+    button(t('ui.history.copyMd'), t('ui.history.copyMdTitle'), async () => {
       await host.copyText(recordToMarkdown(rec));
-      flash(time, '복사했습니다');
+      flash(time, t('ui.copied'));
     }),
-    button('MD 저장', '이 기록(질문 · 답변 · 종합 · 분석)을 Markdown 파일로 저장합니다', () => exportDoc(EX.docFromRecord(rec), 'md', time)),
-    button('HTML 저장', '이 기록을 밝은 문서 모양 HTML 파일로 저장합니다 (브라우저에서 인쇄하면 PDF)', () => exportDoc(EX.docFromRecord(rec), 'html', time)),
-    button('삭제', '이 기록을 지웁니다', async () => {
+    button(t('ui.history.saveMd'), t('ui.history.saveMdTitle'), () => exportDoc(EX.docFromRecord(rec), 'md', time)),
+    button(t('ui.history.saveHtml'), t('ui.history.saveHtmlTitle'), () => exportDoc(EX.docFromRecord(rec), 'html', time)),
+    button(t('ui.delete'), t('ui.history.deleteTitle'), async () => {
       await host.history.remove(rec.id);
       historyView.picked.delete(rec.id);
       historySelected = null;
@@ -379,7 +383,7 @@ $('#historySearch').addEventListener('input', () => {
 });
 $('#historyClose').addEventListener('click', () => host.setView('panels'));
 $('#historyClear').addEventListener('click', async () => {
-  if (!confirm('저장된 질문·답변 기록을 모두 지울까요? 되돌릴 수 없습니다.')) return;
+  if (!confirm(t('ui.history.clearConfirm'))) return;
   await host.history.clear();
   historyView.picked.clear();
   renderHistoryList();

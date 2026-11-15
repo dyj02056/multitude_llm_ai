@@ -69,7 +69,7 @@
   let bgPort = null;
   function allowFraming() {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('백그라운드가 응답하지 않습니다')), 10000);
+      const timer = setTimeout(() => reject(new Error(t('ext.side.bgNoAnswer'))), 10000);
       const port = (bgPort = chrome.runtime.connect({ name: 'mla-side' }));
       port.onMessage.addListener((msg) => {
         if (msg?.type !== 'ready') return;
@@ -105,7 +105,7 @@
   function renderPicker() {
     $('#spPickList').replaceChildren(
       ...webServices().map((s) => {
-        const b = button('', `${s.name} ${prefs.selected.includes(s.id) ? '닫기' : '열기'}`, () => {
+        const b = button('', t(prefs.selected.includes(s.id) ? 'ext.side.pickClose' : 'ext.side.pickOpen', { name: s.name }), () => {
           const r = SP.toggle(prefs.selected, s.id);
           $('#spPickNote').textContent = r.ok ? '' : r.error;
           if (!r.ok) return;
@@ -139,7 +139,7 @@
     const dot = span('dot loading');
     const url = span('url', svc.url);
     const status = span('status');
-    const loginBtn = button('로그인 탭', '새 탭에서 이 서비스에 로그인한 뒤, 돌아와서 ↻를 누르세요', () => chrome.tabs.create({ url: svc.url }));
+    const loginBtn = button(t('ext.side.loginTab'), t('ext.side.loginTabTitle'), () => chrome.tabs.create({ url: svc.url }));
     loginBtn.className = 'login-btn';
     loginBtn.hidden = true;
     head.append(
@@ -148,13 +148,13 @@
       url,
       status,
       loginBtn,
-      button('copy', '최신 답변 복사', () => copyAnswer(svc.id)),
-      button('+', '새 대화', () => {
+      button('copy', t('ext.side.copyTitle'), () => copyAnswer(svc.id)),
+      button('+', t('ext.side.newChat'), () => {
         p.sentKey = '';
         p.skillSent = '';
         navigate(svc.id, svc.newChatUrl || svc.url);
       }),
-      button('↻', '새로고침', () => {
+      button('↻', t('ext.side.reload'), () => {
         p.retried = false;
         navigate(svc.id, p.curUrl || svc.url);
       }),
@@ -176,7 +176,7 @@
         }
         setDot(p, 'error');
         p.loginBtn.hidden = false;
-        p.url.textContent = '연결되지 않았습니다 — "로그인 탭"에서 로그인한 뒤 ↻';
+        p.url.textContent = t('ext.side.notConnected');
       }, HELLO_TIMEOUT_MS);
     });
     panes.set(svc.id, p);
@@ -191,7 +191,7 @@
     try {
       p.port?.disconnect();
     } catch {}
-    for (const { reject } of p.pending.values()) reject(new Error('패널이 닫혔습니다'));
+    for (const { reject } of p.pending.values()) reject(new Error(t('ext.side.paneClosed')));
     p.el.remove();
     panes.delete(id);
   }
@@ -241,7 +241,7 @@
     if (splitBar) return splitBar;
     const bar = (splitBar = document.createElement('div'));
     bar.className = 'sp-split';
-    bar.title = '끌어서 위/아래 크기 조절 · 두 번 누르면 반반';
+    bar.title = t('ext.side.splitTitle');
     bar.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       bar.setPointerCapture(e.pointerId);
@@ -308,7 +308,7 @@
     port.onDisconnect.addListener(() => {
       if (p.port !== port) return;
       p.port = null;
-      for (const { reject } of p.pending.values()) reject(new Error('패널 페이지가 바뀌었습니다'));
+      for (const { reject } of p.pending.values()) reject(new Error(t('ext.side.pageChanged')));
       p.pending.clear();
     });
   });
@@ -316,12 +316,12 @@
   /** 패널 페이지의 content.js에 요청을 보내고 답을 받는다 */
   function call(id, msg, timeoutMs = CALL_TIMEOUT_MS) {
     const p = panes.get(id);
-    if (!p?.port) return Promise.reject(new Error('패널 페이지와 아직 연결되지 않았습니다'));
+    if (!p?.port) return Promise.reject(new Error(t('ext.side.notLinked')));
     const reqId = ++p.seq;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         p.pending.delete(reqId);
-        reject(new Error('패널 페이지가 응답하지 않습니다'));
+        reject(new Error(t('ext.side.paneNoAnswer')));
       }, timeoutMs);
       p.pending.set(reqId, {
         resolve: (v) => (clearTimeout(timer), resolve(v)),
@@ -345,8 +345,8 @@
         const out = await call(id, { type: 'mla:loggedOut', cfg: { loggedOut: svcOf(id).loggedOut || {} } }, 10000);
         setDot(p, out ? 'error' : 'ready');
         p.loginBtn.hidden = !out;
-        if (out) p.status.textContent = '로그인 필요';
-        else if (p.status.textContent === '로그인 필요') p.status.textContent = '';
+        if (out) p.status.textContent = t('ext.side.loginNeeded');
+        else if (p.status.textContent === t('ext.side.loginNeeded')) p.status.textContent = '';
       } catch {}
     }, LOGIN_CHECK_MS);
   }
@@ -359,12 +359,12 @@
     const p = panes.get(id);
     const snap = await snapshot(id, true);
     const text = snap?.md || snap?.text || '';
-    if (!text) return flash(p, '복사할 답변이 없습니다');
+    if (!text) return flash(p, t('ext.side.nothingToCopy'));
     try {
       await navigator.clipboard.writeText(text);
-      flash(p, '답변을 복사했습니다');
+      flash(p, t('ext.side.copied'));
     } catch {
-      flash(p, '복사하지 못했습니다');
+      flash(p, t('ext.side.copyFailed'));
     }
   }
 
@@ -388,28 +388,28 @@
     $('#spCtxToggle').textContent = prefs.ctxOn ? 'on' : 'off';
     $('#spCtxToggle').setAttribute('aria-pressed', String(prefs.ctxOn));
     if (state === 'error') {
-      text.textContent = autoRead ? `${ctxError}` : `${ctxError} — Alt+Shift+S로 다시 시도`;
+      text.textContent = autoRead ? `${ctxError}` : t('ext.side.ctxRetry', { error: ctxError });
       text.title = text.textContent;
       return;
     }
     if (!ctx) {
       // 확장을 업데이트로 받으면 크롬이 새 단축키를 지정하지 않을 때가 있다 — 그때는 지정하는 곳을 알려 준다
       text.textContent = autoRead
-        ? '없음 — 읽을 수 있는 웹페이지(http · https)가 아닙니다'
+        ? t('ext.side.ctxNoneAuto')
         : shortcut
-          ? `없음 — [자동 읽기 켜기]를 누르거나 ${shortcut}`
-          : '없음 — [자동 읽기 켜기]를 누르거나 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기';
-      text.title = '보고 있는 페이지의 본문을 가져와 질문과 함께 보냅니다';
+          ? t('ext.side.ctxNoneShortcut', { shortcut })
+          : t('ext.side.ctxNoneMenu');
+      text.title = t('ext.side.ctxTitle');
       return;
     }
     let host = ctx.url;
     try {
       host = new URL(ctx.url).hostname;
     } catch {}
-    const size = `${ctx.text.length.toLocaleString()}자${ctx.truncated ? '+' : ''}`;
+    const size = `${t('ext.side.chars', { n: ctx.text.length.toLocaleString() })}${ctx.truncated ? '+' : ''}`;
     text.replaceChildren(span('url', host || ctx.title), document.createTextNode(' '), span('ok', `✓ ${size}`), document.createTextNode(` ${ctx.title}`));
-    if (state === 'other') text.append(document.createTextNode(' · 다른 탭을 보는 중 — ↻ 또는 Alt+Shift+S'));
-    text.title = `${ctx.title}\n${ctx.url}\n${size}${state === 'other' ? '\n지금 보는 탭과 다른 페이지입니다' : ''}`;
+    if (state === 'other') text.append(document.createTextNode(t('ext.side.ctxOther')));
+    text.title = `${ctx.title}\n${ctx.url}\n${size}${state === 'other' ? `\n${t('ext.side.ctxOtherTitle')}` : ''}`;
   }
 
   function takeCtx(raw, quiet = false) {
@@ -424,7 +424,7 @@
       ctx = next;
       ctxError = '';
       if (!quiet) prefs.ctxOn = true;
-      if (!quiet || changed) hint(`페이지를 가져왔습니다 (${ctx.text.length.toLocaleString()}자) — 다음 질문에 본문을 함께 보냅니다`, 'ok');
+      if (!quiet || changed) hint(t('ext.side.ctxGot', { n: ctx.text.length.toLocaleString() }), 'ok');
     }
     renderCtx();
   }
@@ -438,7 +438,7 @@
         target: { tabId: tab.id },
         func: () => ({ title: document.title, url: location.href, text: (document.body?.innerText || '').slice(0, 400000) }),
       });
-      if (!res?.result?.text?.trim()) throw new Error('페이지 글이 없습니다');
+      if (!res?.result?.text?.trim()) throw new Error(t('ext.side.noPageText'));
       takeCtx({ ...res.result, tabId: tab.id, at: Date.now() }, quiet);
     } catch {
       if (autoRead) {
@@ -450,7 +450,7 @@
         return;
       }
       // 권한이 없는 탭(처음 보는 탭 · 다른 주소로 이동한 탭 · 크롬 설정 화면 등)
-      if (!quiet) hint(`이 탭은 ${shortcut || '오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기'}${shortcut ? '(또는 오른쪽 클릭 › 사이드탭에서 이 페이지로 묻기)' : ''}로 가져와 주세요`, 'error');
+      if (!quiet) hint(shortcut ? t('ext.side.grabShortcut', { shortcut }) : t('ext.side.grabMenu'), 'error');
     }
   }
 
@@ -461,7 +461,7 @@
     const text = $('#spPrompt').value.trim();
     if (!text || sending) return;
     const ids = prefs.selected.filter((id) => panes.get(id)?.port);
-    if (!ids.length) return hint('연결된 패널이 없습니다 — 패널이 다 뜬 뒤 보내세요', 'error');
+    if (!ids.length) return hint(t('ext.side.noPanes'), 'error');
     // 자동 읽기면 보낼 때마다 지금 탭을 다시 읽는다 (탭을 옮겼거나 페이지가 바뀌었을 수 있다).
     // 아니면 가져온 페이지가 없을 때만 한 번 조용히 읽어 본다 (그 탭에 한 번 권한이 남아 있을 때만 된다).
     if (prefs.ctxOn && (autoRead || !ctx)) await grabCtx(true);
@@ -469,13 +469,13 @@
     // 페이지 본문을 처음 보낼 때: 키 · 토큰처럼 보이는 것이 있으면 확인 (앱 탭의 오른쪽 클릭 메뉴와 같음)
     if (useCtx && ids.some((id) => panes.get(id).sentKey !== SP.contextKey(ctx))) {
       const found = scanSecrets(ctx.text);
-      if (found.length && !confirm(`페이지 본문에 비밀 정보로 보이는 것이 있습니다: ${describeSecrets(found)}\n그대로 보낼까요?`)) return;
+      if (found.length && !confirm(t('ext.side.secretConfirm', { what: describeSecrets(found) }))) return;
     }
     sending = true;
     $('#spSend').disabled = true;
     // 중간에 오류가 나도 보내기 버튼이 잠긴 채로 남지 않게 한다
     try {
-      hint(`보내는 중… (${ids.length}개)`);
+      hint(t('ext.side.sendingN', { n: ids.length }));
       const tpl = currentTemplate();
       const asked = SP.applyTemplate(text, tpl, PL);
       const hid = sideHistory.add({
@@ -491,7 +491,7 @@
       if (!bad.length) {
         $('#spPrompt').value = '';
         const how = results.map((r) => r.how).find(Boolean);
-        hint(`보냄 → ${ids.map((id) => svcOf(id).name).join(' · ')}${how ? ` · ${how}` : useCtx ? '' : ' · 페이지 없이 (Alt+Shift+S로 가져오기)'}`, useCtx || how ? 'ok' : 'error');
+        hint(`${t('ext.side.sentTo', { names: ids.map((id) => svcOf(id).name).join(' · ') })}${how ? ` · ${how}` : useCtx ? '' : t('ext.side.sentNoPage')}`, useCtx || how ? 'ok' : 'error');
       } else hint(bad.map((r) => `${svcOf(r.id).name}: ${r.error}`).join(' · '), 'error');
     } catch (err) {
       hint(err?.message || String(err), 'error');
@@ -509,7 +509,7 @@
     const sk = SP.withSkill(out.text, currentSkill(), p.skillSent, PL);
     out.text = sk.text;
     p.status.dataset.state = 'send-sending';
-    p.status.textContent = { inline: '페이지 본문과 함께 보내는 중…', file: 'page.md 첨부 후 보내는 중…' }[out.mode] || '보내는 중…';
+    p.status.textContent = { inline: t('ext.side.sendingInline'), file: t('ext.side.sendingFile') }[out.mode] || t('ext.side.sending');
     const before = await snapshot(id);
     let upload = null;
     let fallbackText;
@@ -524,13 +524,13 @@
     }
     let res;
     try {
-      res = (await call(id, { type: 'mla:send', cfg: sendCfg(svc), text: out.text, upload, fallbackText })) || { ok: false, error: '패널 페이지가 응답하지 않았습니다' };
+      res = (await call(id, { type: 'mla:send', cfg: sendCfg(svc), text: out.text, upload, fallbackText })) || { ok: false, error: t('ext.side.paneNoReply') };
     } catch (err) {
       res = { ok: false, error: err.message };
     }
     if (!res.ok) {
       p.status.dataset.state = 'send-error';
-      p.status.textContent = `보내기 실패: ${res.error}`;
+      p.status.textContent = t('ext.side.sendFailed', { error: res.error });
       sideHistory.setAnswer(hid, id, { state: 'send-error', error: String(res.error || '') });
       return { id, ok: false, error: res.error };
     }
@@ -539,11 +539,11 @@
     const attachWarn = out.page && !res.attach?.ok;
     p.status.dataset.state = attachWarn ? 'send-attach-warn' : 'send-sent';
     p.status.textContent = attachWarn
-      ? res.attach?.fallback ? '보냄 · 첨부 대신 본문에 넣음' : '보냄 · 첨부 실패'
-      : { inline: '보냄 · 페이지 본문 포함', file: '보냄 · page.md 첨부' }[out.mode] || '보냄';
+      ? res.attach?.fallback ? t('ext.side.sentFallback') : t('ext.side.sentAttachFailed')
+      : { inline: t('ext.side.sentInline'), file: t('ext.side.sentFile') }[out.mode] || t('ext.side.sent');
     watch(id, before, hid);
-    const size = pageCtx ? `${pageCtx.text.length.toLocaleString()}자` : '';
-    return { id, ok: true, how: { inline: `페이지 본문 ${size} 포함`, file: `page.md(${size}) 첨부` }[out.mode] || '' };
+    const size = pageCtx ? t('ext.side.chars', { n: pageCtx.text.length.toLocaleString() }) : '';
+    return { id, ok: true, how: { inline: t('ext.side.howInline', { size }), file: t('ext.side.howFile', { size }) }[out.mode] || '' };
   }
 
   /** 보낸 뒤 답변이 끝날 때까지 머리줄 상태를 바꾼다: 답변 중… → 완료 */
@@ -558,7 +558,7 @@
         const snap = await snapshot(id, true);
         sideHistory.setAnswer(hid, id, { text: snap?.text || '', md: snap?.md || snap?.text || '', state: 'done', chars: (snap?.text || '').length });
       } else if (state !== 'answering') sideHistory.setAnswer(hid, id, { state, text: '' });
-      const text = { answering: '답변 중…', done: `완료 · ${(info.chars || 0).toLocaleString()}자`, timeout: '시간 초과 (계속 지켜봄)', 'no-answer': '답변 없음' }[state];
+      const text = { answering: t('ext.side.answering'), done: t('ext.side.done', { n: (info.chars || 0).toLocaleString() }), timeout: t('ext.side.timeout'), 'no-answer': t('ext.side.noAnswer') }[state];
       p.status.dataset.state = `answer-${state}`;
       p.status.textContent = text || '';
     }, { maxMs: ANSWER_MAX_MS });
@@ -630,7 +630,7 @@
     if (ask) await chrome.storage.session.set({ 'mla:ask': ask }).catch(() => {});
     const wasOpen = await focusApp();
     if (ask && wasOpen) chrome.runtime.sendMessage({ type: 'mla:ask' }).catch(() => {});
-    if (ask) hint(ask.kind === 'page' ? '앱 탭에 페이지 본문과 질문을 넘겼습니다' : '앱 탭에 질문을 넘겼습니다', 'ok');
+    if (ask) hint(ask.kind === 'page' ? t('ext.side.toAppPage') : t('ext.side.toApp'), 'ok');
   }
 
   /** 앱 탭을 앞으로 가져오거나 새로 연다 → 이미 열려 있었는지 */
@@ -656,10 +656,10 @@
   function renderLibrary() {
     const opt = (value, text) => Object.assign(document.createElement('option'), { value, textContent: text });
     const tpls = SP.usableTemplates(window.TEMPLATES, lib, PL);
-    $('#spTpl').replaceChildren(opt('', 'tpl: 없음'), ...tpls.map((t) => opt(t.id, `${t.mine ? '' : '[기본] '}${t.name}`)));
+    $('#spTpl').replaceChildren(opt('', t('ext.side.tplNone')), ...tpls.map((tpl) => opt(tpl.id, tpl.mine ? tpl.name : t('ext.side.builtinTpl', { name: tpl.name }))));
     $('#spTpl').value = currentTemplate() ? prefs.tpl : '';
     $('#spTpl').classList.toggle('on', !!currentTemplate());
-    $('#spSkill').replaceChildren(opt('', 'skill: 없음'), ...(lib.skills || []).map((s) => opt(s.id, s.name)));
+    $('#spSkill').replaceChildren(opt('', t('ext.side.skillNone')), ...(lib.skills || []).map((s) => opt(s.id, s.name)));
     $('#spSkill').value = currentSkill() ? prefs.skill : '';
     $('#spSkill').classList.toggle('on', !!currentSkill());
   }
@@ -697,12 +697,12 @@
   $('#spCtxAuto').addEventListener('click', () => {
     chrome.permissions.request({ origins: AUTO_ORIGINS }).then(
       (granted) => {
-        if (!granted) return hint('허용하지 않아 자동 읽기를 켜지 못했습니다 — Alt+Shift+S로 가져올 수 있습니다', 'error');
+        if (!granted) return hint(t('ext.side.autoDenied'), 'error');
         autoRead = true;
         renderCtx();
         grabCtx();
       },
-      (err) => hint(`자동 읽기를 켜지 못했습니다: ${err.message}`, 'error'),
+      (err) => hint(t('ext.side.autoFailed', { error: err.message }), 'error'),
     );
   });
   chrome.permissions.onRemoved?.addListener(async () => {
@@ -782,7 +782,7 @@
     takeCtx(got?.[CTX_KEY()]);
     if (!ctx) renderCtx();
     if (autoRead) grabCtx(true);
-    hint('Enter 보내기 · Shift+Enter 줄바꿈');
+    hint(t('ext.side.hint'));
     renderModels();
     await allowFraming();
     syncPanes();
@@ -790,6 +790,6 @@
 
   init().catch((err) => {
     console.error(err);
-    hint(`시작하지 못했습니다: ${err.message}`, 'error');
+    hint(t('ext.side.startFailed', { error: err.message }), 'error');
   });
 })();

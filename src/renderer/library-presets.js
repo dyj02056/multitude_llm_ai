@@ -16,7 +16,7 @@
   const PL = MLA.promptLib;
   const api = () => window.libApi;
   const LAYOUTS = ['grid', 'row', 'main', 'tall'];
-  const LAYOUT_TEXT = { grid: '격자', row: '가로', main: '큰 패널 + 나머지', tall: '세로' };
+  const LAYOUT_KEYS = ['grid', 'row', 'main', 'tall']; // 배치 이름은 'library.layout.<배치>'
   const PANEL_WAIT_MS = 20000; // 패널을 다시 연 뒤 보낼 대상 · 종합을 맞추기까지 기다리는 최대 시간
   let waits = []; // [{ panels, until, fn }] 패널이 다 열리면(또는 시간이 지나면) 마저 할 일
   let verSel = { skill: null, index: -1 }; // 이전 버전 고른 것
@@ -76,7 +76,7 @@
       [t('preset.sumSkills'), skills.length ? skills.map((n, i) => `${i + 1}. ${n}`).join('  ') : t('preset.noneValue')],
       [t('preset.sumPanels'), p.selected.length ? p.selected.map(nameOf).join(', ') : t('preset.noneValue')],
       [t('preset.sumTargets'), p.targets.length ? p.targets.map(nameOf).join(', ') : t('preset.allOpen')],
-      [t('preset.sumLayout'), LAYOUT_TEXT[p.layout] || t('preset.noneValue')],
+      [t('preset.sumLayout'), (LAYOUT_KEYS.includes(p.layout) ? t(`library.layout.${p.layout}`) : t('preset.noneValue'))],
       [t('preset.sumSynth'), `${p.synth.target ? nameOf(p.synth.target) : t('preset.noneValue')}${p.synth.auto ? ` · ${t('preset.sumAuto')}` : ''}`],
     ];
     if (p.debate) {

@@ -10,6 +10,8 @@
 (() => {
   const { looksBinary, MAX_FILE_BYTES } = MLA.projectIgnore;
   const { safeRelPath, isGitInternal } = MLA.patch;
+  // 화면 문구 (i18n-*-ext.js). 사전이 없으면 키 이름을 그대로 쓴다 (부서지지 않게)
+  const tr = (key, vars) => (MLA.i18n ? MLA.i18n.t(key, vars) : key);
 
   const DB = 'mla-project';
   const STORE = 'handles';
@@ -117,7 +119,7 @@
   }
 
   async function pick() {
-    if (typeof window.showDirectoryPicker !== 'function') throw new Error('이 크롬에서는 폴더 열기를 쓸 수 없습니다');
+    if (typeof window.showDirectoryPicker !== 'function') throw new Error(tr('ext.fs.noPicker'));
     let h;
     try {
       h = await window.showDirectoryPicker({ id: 'mla-project', mode: 'readwrite' });
@@ -146,7 +148,7 @@
   async function reconnect() {
     const e = await currentEntry();
     if (!e) return null;
-    if ((await permission(e.handle, true)) !== 'granted') throw new Error('폴더 접근을 허용하지 않았습니다');
+    if ((await permission(e.handle, true)) !== 'granted') throw new Error(tr('ext.fs.denied'));
     rootHandle = e.handle;
     rootId = e.id;
     return info();
@@ -163,13 +165,13 @@
   function parts(rel) {
     if (rel === '') return [];
     const clean = safeRelPath(rel);
-    if (clean === null) throw new Error(`허용되지 않는 경로입니다: ${rel}`);
+    if (clean === null) throw new Error(tr('ext.fs.badPath', { path: rel }));
     return clean.split('/');
   }
 
   // 경로 조각을 따라 폴더를 찾아 들어갑니다. create가 true면 없는 폴더를 만듭니다.
   async function dirHandle(segs, create = false) {
-    if (!rootHandle) throw new Error('프로젝트가 열려 있지 않습니다');
+    if (!rootHandle) throw new Error(tr('ext.fs.notOpen'));
     let h = rootHandle;
     for (const s of segs) h = await h.getDirectoryHandle(s, { create });
     return h;
@@ -210,12 +212,12 @@
 
   // git 내부(.git 안쪽)에는 쓰거나 지우지 않는다 (훅·설정으로 코드가 실행될 수 있음)
   function refuseGitInternal(rel) {
-    if (isGitInternal(rel)) throw new Error(`git 내부 파일은 바꿀 수 없습니다: ${rel}`);
+    if (isGitInternal(rel)) throw new Error(tr('ext.fs.gitInternal', { path: rel }));
   }
 
   /** 파일 쓰기 (필요한 폴더는 만듦). .git 안쪽에는 쓰지 않습니다. */
   async function writeFile(rel, text) {
-    if (typeof text !== 'string') throw new Error('쓸 내용이 없습니다');
+    if (typeof text !== 'string') throw new Error(tr('ext.fs.noText'));
     refuseGitInternal(rel);
     const segs = parts(rel);
     const dir = await dirHandle(segs.slice(0, -1), true);

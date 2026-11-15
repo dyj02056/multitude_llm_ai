@@ -30,21 +30,21 @@ let state = null;
 // 실행 환경(Electron 앱 / 크롬 확장 프로그램)마다 다른 화면 문구. host.ui로 바꿀 수 있다.
 const UI = {
   hints: {
-    login: 'Google 계정으로 로그인해 주세요',
-    pick: '로그인됨 · 모델을 선택하세요',
-    chat: '패널마다 Google로 자동 로그인을 시도합니다',
+    get login() { return t('ui.hint.login'); },
+    get pick() { return t('ui.hint.pick'); },
+    get chat() { return t('ui.hint.chat'); },
   },
-  pickNote: '선택한 모델만 패널로 열고, 각 서비스에는 Google 계정으로 로그인합니다.',
-  loginButton: { label: 'G 로그인', title: 'Google로 다시 로그인 시도' },
+  get pickNote() { return t('ui.pick.note'); },
+  get loginButton() { return { label: t('ui.loginButton'), title: t('ui.loginButtonTitle') }; },
   devtools: true, // 패널 머리줄의 개발자 도구 버튼
   ...(host.ui || {}),
 };
 
 const LOGIN_TEXT = {
-  'needs-login': '로그인 필요',
-  'logging-in': 'Google로 로그인 중…',
-  google: 'Google 화면에서 계속해 주세요',
-  captcha: '사람 확인(캡차)을 직접 풀어 주세요',
+  get 'needs-login'() { return t('ui.login.needed'); },
+  get 'logging-in'() { return t('ui.login.loggingIn'); },
+  get google() { return t('ui.login.google'); },
+  get captcha() { return t('ui.login.captcha'); },
   ready: '',
 };
 
@@ -71,7 +71,7 @@ const pickedIds = () => [...document.querySelectorAll('#modelList input:checked'
 
 /** 모델 고르기 화면을 그립니다: 서비스마다 체크 상자, 최대 6개까지 고르기 */
 function renderPick() {
-  $('#pickNote').textContent = `${UI.pickNote} 한 번에 최대 ${state.maxSelected}개까지 고를 수 있습니다.`;
+  $('#pickNote').textContent = `${UI.pickNote} ${t('ui.pick.max', { n: state.maxSelected })}`;
   const list = $('#modelList');
   list.replaceChildren();
   for (const svc of state.services) {
@@ -98,14 +98,14 @@ function updatePickLimit() {
     box.disabled = full && !box.checked;
     box.closest('.model').classList.toggle('disabled', box.disabled);
   }
-  $('#pickCount').textContent = `${count} / ${state.maxSelected} 선택${count > 4 ? ' · 패널마다 메모리를 수백 MB 씁니다' : ''}`;
+  $('#pickCount').textContent = t('ui.pick.count', { n: count, max: state.maxSelected }) + (count > 4 ? t('ui.pick.memoryWarn') : '');
   $('#pickCount').classList.toggle('full', full);
 }
 
 $('#openBtn').addEventListener('click', () => {
   const ids = pickedIds();
-  if (!ids.length) return alert('모델을 하나 이상 선택해 주세요.');
-  if (ids.length > state.maxSelected) return alert(`모델은 최대 ${state.maxSelected}개까지 고를 수 있습니다.`);
+  if (!ids.length) return alert(t('ui.pick.none'));
+  if (ids.length > state.maxSelected) return alert(t('ui.pick.tooMany', { n: state.maxSelected }));
   host.openModels(ids);
 });
 
@@ -129,7 +129,7 @@ function syncPanels() {
     p.el.hidden = !!r.hidden;
     p.el.classList.toggle('focused', !!r.focused);
     p.focusBtn.textContent = r.focused ? '⤡' : '⤢';
-    p.focusBtn.title = r.focused ? '원래 배치로 돌아가기' : '이 패널만 크게 보기';
+    p.focusBtn.title = r.focused ? t('ui.panel.unfocus') : t('ui.panel.focus');
     Object.assign(p.el.style, {
       left: `${r.frame.x}px`,
       top: `${r.frame.y}px`,
@@ -171,13 +171,13 @@ function createPanel(svc) {
   const loginBtn = button(UI.loginButton.label, UI.loginButton.title, () => host.panelAction(svc.id, 'login'));
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
-  const focusBtn = button('⤢', '이 패널만 크게 보기', () => host.setFocus(svc.id));
+  const focusBtn = button('⤢', t('ui.panel.focus'), () => host.setFocus(svc.id));
   // 넘기기 (v0.26.0): 이 패널의 최신 답변을 다른 패널에 보내 검토 · 반박 · 이어서 쓰기 (panel-offers.js가 패널 아래 바를 띄움)
   const handoffBtn = button('→', t('handoff.btnTitle'), () => window.onHandoffClick?.(svc.id));
   handoffBtn.className = 'handoff-btn';
   // 답변 평가 (v0.23): 공통 입력창 질문의 답변이 끝나면 띄운다. 같은 것을 다시 누르면 지운다.
-  const goodBtn = button('[+1]', '이 답변이 좋았음', () => setFeedback(svc.id, 1));
-  const badBtn = button('[-1]', '이 답변이 별로였음', () => setFeedback(svc.id, -1));
+  const goodBtn = button('[+1]', t('ui.panel.good'), () => setFeedback(svc.id, 1));
+  const badBtn = button('[-1]', t('ui.panel.bad'), () => setFeedback(svc.id, -1));
   for (const b of [goodBtn, badBtn]) {
     b.classList.add('fb-btn');
     b.setAttribute('aria-pressed', 'false');
@@ -198,24 +198,24 @@ function createPanel(svc) {
     collectBtn,
     needBtn,
     loginBtn,
-    button('copy', '최신 답변 복사', async () => {
+    button('copy', t('ui.panel.copyLatest'), async () => {
       const r = await host.copyAnswer(svc.id);
-      flash(status, r.copied ? '답변을 복사했습니다' : '복사할 답변이 없습니다');
+      flash(status, r.copied ? t('ui.panel.answerCopied') : t('ui.copyAnswers.none'));
     }),
     handoffBtn,
     focusBtn,
-    button('+', '새 대화', () => host.panelAction(svc.id, 'newchat')),
+    button('+', t('ui.panel.newChat'), () => host.panelAction(svc.id, 'newchat')),
   );
   // 웹페이지 패널에만: 뒤로 · 처음 주소 · 새로고침 · 개발자 도구. 로컬 LLM 패널은 대신 ■ 답 그만 받기.
   const isLocalPanel = svc.kind === 'local';
-  if (isLocalPanel) head.append(button('■', '답 그만 받기', () => host.panelAction(svc.id, 'stop')));
+  if (isLocalPanel) head.append(button('■', t('ui.panel.stop'), () => host.panelAction(svc.id, 'stop')));
   else {
     head.append(
-      button('←', '뒤로', () => host.panelAction(svc.id, 'back')),
-      button('⌂', '처음 주소로', () => host.panelAction(svc.id, 'home')),
-      button('↻', '새로고침', () => host.panelAction(svc.id, 'reload')),
+      button('←', t('ui.panel.back'), () => host.panelAction(svc.id, 'back')),
+      button('⌂', t('ui.panel.home'), () => host.panelAction(svc.id, 'home')),
+      button('↻', t('ui.panel.reload'), () => host.panelAction(svc.id, 'reload')),
     );
-    if (UI.devtools) head.append(button('{ }', '개발자 도구', () => host.panelAction(svc.id, 'devtools')));
+    if (UI.devtools) head.append(button('{ }', t('ui.panel.devtools'), () => host.panelAction(svc.id, 'devtools')));
   }
   // 프로젝트 모드: 답변에 수정안이 있으면 project.js가 패널 아래에 이 바를 채워 띄운다 (setChangeBar)
   const changeBar = document.createElement('div');
@@ -277,7 +277,7 @@ async function setFeedback(id, value) {
   const r = await host.history.feedback?.(id, next).catch(() => null);
   if (r === null || r === undefined) {
     const p = panels.get(id);
-    if (p) flash(p.status, '평가를 남기지 못했습니다');
+    if (p) flash(p.status, t('ui.feedback.failed'));
     return;
   }
   if (next) feedback.value[id] = next;
@@ -301,12 +301,12 @@ function renderDiagBadge(id) {
   p.diagBadge.classList.toggle('limit', limit);
   if (!broken && !limit) return;
   if (limit) {
-    p.diagBadge.textContent = '[limit] 사용 한도에 걸린 것 같음';
-    p.diagBadge.title = [`화면 문구: "${d.limit}"`, '', d.limitHint, '', '누르면 자세히'].join('\n');
+    p.diagBadge.textContent = t('ui.diag.limitBadge');
+    p.diagBadge.title = [t('ui.diag.pageText', { text: d.limit }), '', d.limitHint, '', t('ui.diag.clickMore')].join('\n');
     return;
   }
-  p.diagBadge.textContent = '⚠ 화면이 바뀐 것 같음';
-  p.diagBadge.title = [d.message, ...d.notes, '', d.hint, '', '누르면 자세히 · 고치는 버튼'].join('\n');
+  p.diagBadge.textContent = t('ui.diag.changedBadge');
+  p.diagBadge.title = [d.message, ...d.notes, '', d.hint, '', t('ui.diag.clickMoreFix')].join('\n');
 }
 
 // ---------- 셀렉터 자가진단 창 (v0.21.1) ----------
@@ -334,7 +334,7 @@ function renderDiagModal() {
   const D = MLA.diag;
   const svc = state.services.find((s) => s.id === diagOpen.id);
   const d = diagById[diagOpen.id] || {};
-  $('#diagTitle').textContent = `${svc?.name || diagOpen.id} — ${d.limit ? '사용 한도에 걸린 것 같음' : d.level === 'broken' ? '화면이 바뀐 것 같음' : '서비스 화면 상태'}`;
+  $('#diagTitle').textContent = `${svc?.name || diagOpen.id} — ${d.limit ? t('ui.diag.limitHit') : d.level === 'broken' ? t('ui.diag.changed') : t('ui.diag.status')}`;
   $('#diagSub').textContent = panels.get(diagOpen.id)?.url.textContent || '';
   const row = (cells, tag = 'td') => {
     const tr = document.createElement('tr');
@@ -342,20 +342,20 @@ function renderDiagModal() {
     return tr;
   };
   $('#diagParts').replaceChildren(
-    row(['항목', '상태'], 'th'),
+    row([t('ui.diag.item'), t('ui.diag.state')], 'th'),
     ...D.PARTS.map((p) => {
       const tr = row([D.PART_TEXT[p], `${D.MARK[d[p]] || '–'} ${D.STATE_TEXT[d[p]] || D.STATE_TEXT.unknown}`]);
       tr.lastChild.dataset.state = d[p] || 'unknown';
       return tr;
     }),
-    ...(d.limit ? [row(['사용 한도 문구', `"${d.limit}"`])] : []),
+    ...(d.limit ? [row([t('ui.diag.limitText'), `"${d.limit}"`])] : []),
   );
-  $('#diagMsg').textContent = [d.limit ? d.limitHint : d.hint, ...(d.notes || [])].filter(Boolean).join(' · ') || '지금은 문제가 없습니다.';
+  $('#diagMsg').textContent = [d.limit ? d.limitHint : d.hint, ...(d.notes || [])].filter(Boolean).join(' · ') || t('ui.diag.noProblem');
   const r = state.remote || {};
   $('#diagRemote').textContent =
-    `셀렉터: ${r.version ? `원격 v${r.version}${r.updated ? ` (${r.updated})` : ''}` : '앱 내장'}` +
-    `${r.checkedAt ? ` · 마지막 확인 ${fmtTime(r.checkedAt)}` : ''}${r.error ? ` · 확인 실패: ${r.error}` : ''}` +
-    (state.remoteSelectors ? '' : ' · 자동 갱신이 꺼져 있습니다 (설정에서 켜기)');
+    t('ui.diag.selectors', { src: r.version ? t('ui.diag.remoteVer', { v: r.version }) + (r.updated ? ` (${r.updated})` : '') : t('ui.diag.builtin') }) +
+    `${r.checkedAt ? ` · ${t('ui.remote.checked', { time: fmtTime(r.checkedAt) })}` : ''}${r.error ? ` · ${t('ui.remote.checkFailed', { error: r.error })}` : ''}` +
+    (state.remoteSelectors ? '' : t('ui.diag.autoOff'));
   $('#diagRefresh').disabled = !state.remoteSelectors;
 }
 function diagReportText() {
@@ -389,17 +389,17 @@ $('#diagHome').addEventListener('click', () => {
 });
 $('#diagCopy').addEventListener('click', async () => {
   await host.copyText(diagReportText());
-  diagSay('진단 정보를 복사했습니다 — 질문 · 답변 글은 들어 있지 않습니다', 'ok');
+  diagSay(t('ui.diag.copied'), 'ok');
 });
 $('#diagRefresh').addEventListener('click', async () => {
   const before = state.remote?.version;
   $('#diagRefresh').disabled = true;
-  diagSay('GitHub에서 셀렉터를 확인하는 중…');
+  diagSay(t('ui.diag.checking'));
   const r = (await host.refreshRemote()) || {};
   $('#diagRefresh').disabled = false;
-  if (r.error) diagSay(`확인 실패: ${r.error}`, 'error');
-  else if (r.version && r.version !== before) diagSay(`새 셀렉터 v${r.version}을 받았습니다 — 다시 확인합니다. 그래도 같으면 [처음 화면으로]`, 'ok');
-  else diagSay('새로 고친 셀렉터가 아직 없습니다 — 패널에서 직접 입력하고, 앱 업데이트를 기다려 주세요');
+  if (r.error) diagSay(t('ui.remote.checkFailed', { error: r.error }), 'error');
+  else if (r.version && r.version !== before) diagSay(t('ui.diag.gotNew', { v: r.version }), 'ok');
+  else diagSay(t('ui.diag.noNew'));
   renderDiagModal();
 });
 
@@ -462,19 +462,19 @@ function drawLocalChat(id, view) {
   head.className = 'local-head';
   const models = localModels;
   const sel = document.createElement('select');
-  sel.title = '로컬 LLM 모델 (설정 › 로컬 LLM › 연결 확인으로 목록을 받습니다)';
+  sel.title = t('ui.local.modelTitle');
   const cur = view.model || state.local?.model || '';
   const names = [...new Set([cur, ...models].filter(Boolean))];
-  sel.replaceChildren(...(names.length ? names : ['(모델을 고르세요)']).map((n) => Object.assign(document.createElement('option'), { value: names.length ? n : '', textContent: n })));
+  sel.replaceChildren(...(names.length ? names : [t('ui.local.pickModel')]).map((n) => Object.assign(document.createElement('option'), { value: names.length ? n : '', textContent: n })));
   sel.value = cur;
   sel.addEventListener('change', () => host.local.setPrefs({ model: sel.value }));
-  const conn = button('모델 목록', '이 PC의 로컬 LLM 서버에서 모델 목록을 받아 옵니다', () => refreshLocalModels(conn));
-  head.append(span('muted-label', '모델'), sel, conn);
+  const conn = button(t('ui.local.modelList'), t('ui.local.modelListTitle'), () => refreshLocalModels(conn));
+  head.append(span('muted-label', t('ui.local.model')), sel, conn);
   const list = document.createElement('div');
   list.className = 'local-messages';
   if (!view.messages.length) {
     list.append(
-      span('local-empty', view.error ? `⚠ ${view.error}` : '공통 입력창으로 질문하면 이 PC의 로컬 LLM이 답합니다. 대화는 앱을 닫으면 사라지고, 질문 · 답변은 기록에 남습니다.'),
+      span('local-empty', view.error ? `⚠ ${view.error}` : t('ui.local.empty')),
     );
   }
   for (const m of view.messages) {
@@ -482,7 +482,7 @@ function drawLocalChat(id, view) {
     b.className = `local-msg ${m.role === 'user' ? 'user' : 'bot'}`;
     if (m.role === 'user') {
       b.textContent = m.text;
-      if (m.images) b.append(span('local-img', ` [img] 이미지 ${m.images}개`));
+      if (m.images) b.append(span('local-img', ` ${t('ui.local.images', { n: m.images })}`));
     } else {
       const src = m.text || (view.streaming ? '…' : '');
       const i = nextMd.length;
@@ -495,7 +495,7 @@ function drawLocalChat(id, view) {
   // 컨텍스트 한도 (v0.29.0): 지금까지 대화가 설정한 한도를 넘을 것 같으면 알린다 (서버가 앞부분을 잘라 먹을 수 있음)
   const ctx = MLA.sendPlan.contextCheck(view.messages.map((m) => m.text).join('\n'), state.local?.contextTokens);
   if (ctx.over) list.append(span('local-warn', t('local.ctxPanel', { n: ctx.tokens.toLocaleString(), max: ctx.limit.toLocaleString() })));
-  if (view.streaming) list.append(span('local-typing', '답하는 중…'));
+  if (view.streaming) list.append(span('local-typing', t('ui.local.typing')));
   else if (view.error && view.messages.length) list.append(span('local-error', `⚠ ${view.error}`));
   p.localMd = nextMd;
   box.replaceChildren(head, list);
@@ -506,13 +506,13 @@ function drawLocalChat(id, view) {
 async function refreshLocalModels(el) {
   const r = await host.local.models($('#localBase')?.value || state.local?.baseUrl);
   if (!r?.ok) {
-    if (el) flash(el, '연결 실패');
-    $('#localStatus') && ($('#localStatus').textContent = `연결하지 못했습니다: ${r?.error || '알 수 없는 오류'}`);
+    if (el) flash(el, t('ui.local.connFail'));
+    $('#localStatus') && ($('#localStatus').textContent = t('ui.local.connError', { error: r?.error || t('ui.unknownError') }));
     return null;
   }
   localModels = r.models;
   if (!state.local?.model && r.models[0]) await host.local.setPrefs({ model: r.models[0] });
-  $('#localStatus') && ($('#localStatus').textContent = r.models.length ? `연결됨 · 모델 ${r.models.length}개` : '연결됐지만 모델이 없습니다 (ollama pull 모델이름 으로 받으세요)');
+  $('#localStatus') && ($('#localStatus').textContent = r.models.length ? t('ui.local.connected', { n: r.models.length }) : t('ui.local.noModels'));
   renderLocalSettings();
   for (const id of Object.keys(localViews)) renderLocalChat(id, localViews[id]);
   return r.models;
@@ -526,7 +526,7 @@ function renderLocalSettings() {
   if (document.activeElement !== $('#localBase')) $('#localBase').value = L.baseUrl || '';
   const sel = $('#localModel');
   const names = [...new Set([L.model, ...localModels].filter(Boolean))];
-  sel.replaceChildren(...(names.length ? names : ['']).map((n) => Object.assign(document.createElement('option'), { value: n, textContent: n || '(연결 확인으로 목록 받기)' })));
+  sel.replaceChildren(...(names.length ? names : ['']).map((n) => Object.assign(document.createElement('option'), { value: n, textContent: n || t('ui.local.getList') })));
   sel.value = L.model || '';
   // 컨텍스트 한도 (v0.29.0): 2k ~ 128k 토큰, 기본 8k
   const ctxSel = $('#localCtx');
@@ -543,9 +543,9 @@ function renderDiagTable() {
   const ids = state.rects.map((r) => r.id).filter((id) => state.services.find((s) => s.id === id)?.kind !== 'local');
   const table = $('#diagTable');
   const head = document.createElement('tr');
-  for (const t of ['서비스', ...D.PARTS.map((p) => D.PART_TEXT[p]), '사용 한도', '상태']) head.append(Object.assign(document.createElement('th'), { textContent: t }));
-  const LEVEL = { ok: '정상', warn: '주의', broken: '⚠ 화면이 바뀐 것 같음', unknown: '아직 확인 전' };
-  const STATE = { ok: '찾음', warn: '다른 방법으로 됨', fail: '못 찾음', unknown: '확인 전' };
+  for (const label of [t('ui.stats.service'), ...D.PARTS.map((p) => D.PART_TEXT[p]), t('ui.stats.limit'), t('ui.diag.state')]) head.append(Object.assign(document.createElement('th'), { textContent: label }));
+  const LEVEL = { ok: t('ui.diag.level.ok'), warn: t('ui.diag.level.warn'), broken: t('ui.diag.changedBadge'), unknown: t('ui.diag.level.unknown') };
+  const STATE = { ok: t('ui.diag.part.ok'), warn: t('ui.diag.part.warn'), fail: t('ui.diag.part.fail'), unknown: t('ui.diag.part.unknown') };
   const rows = ids.map((id) => {
     const svc = state.services.find((s) => s.id === id);
     const d = diagById[id] || { input: 'unknown', send: 'unknown', response: 'unknown', level: 'unknown', notes: [] };
@@ -563,8 +563,8 @@ function renderDiagTable() {
     }
     const lim = document.createElement('td');
     lim.dataset.state = d.limit ? 'warn' : 'unknown';
-    lim.textContent = d.limit ? '[limit] 걸린 것 같음' : '–';
-    if (d.limit) lim.title = `화면 문구: "${d.limit}"`;
+    lim.textContent = d.limit ? t('ui.diag.limitCell') : '–';
+    if (d.limit) lim.title = t('ui.diag.pageText', { text: d.limit });
     tr.append(lim);
     const st = document.createElement('td');
     st.textContent = LEVEL[d.level];
@@ -572,7 +572,7 @@ function renderDiagTable() {
     tr.append(st);
     return tr;
   });
-  table.replaceChildren(head, ...(rows.length ? rows : [Object.assign(document.createElement('tr'), { textContent: '열린 패널이 없습니다' })]));
+  table.replaceChildren(head, ...(rows.length ? rows : [Object.assign(document.createElement('tr'), { textContent: t('ui.diag.noPanels') })]));
   const broken = ids.filter((id) => diagById[id]?.level === 'broken');
   $('#diagHint').textContent = broken.length ? MLA.diag.HINT : '';
 }
@@ -605,14 +605,14 @@ function syncPanelBar(id) {
 const FINISHED_STATES = new Set(['done', 'timeout', 'no-answer']);
 
 const ANSWER_TEXT = {
-  answering: '답변 중…',
-  done: '답변 완료',
-  timeout: '시간 초과 — 계속 기다리는 중…',
-  'no-answer': '답변이 시작되지 않았습니다',
+  get answering() { return t('ui.answer.answering'); },
+  get done() { return t('ui.answer.done'); },
+  get timeout() { return t('ui.answer.timeout'); },
+  get 'no-answer'() { return t('ui.answer.noStart'); },
   clear: '',
 };
 
-// 상태 글자를 1.8초 동안만 다른 글로 바꿔 보여 주고 원래대로 돌립니다 (예: "답변을 복사했습니다").
+// 상태 글자를 1.8초 동안만 다른 글로 바꿔 보여 주고 원래대로 돌립니다 (예: t('ui.panel.answerCopied')).
 function flash(el, text) {
   const prev = { text: el.textContent, state: el.dataset.state };
   el.textContent = text;
@@ -624,13 +624,23 @@ function flash(el, text) {
   }, 1800);
 }
 
-const SEND_TEXT = { sending: '보내는 중…', sent: '보냄', error: '보내기 실패', retrying: t('retry.retrying') };
-const ATTACH_TEXT = { failed: '첨부 없이 보냄', skipped: '첨부 없이 보냄', partial: '일부 파일은 빼고 보냄', fallback: '업로드 실패 → 본문으로 보냄' };
+const SEND_TEXT = {
+  get sending() { return t('ui.send.sending'); },
+  get sent() { return t('ui.send.sentShort'); },
+  get error() { return t('ui.answerState.error'); },
+  get retrying() { return t('retry.retrying'); },
+};
+const ATTACH_TEXT = {
+  get failed() { return t('ui.attach.noAttach'); },
+  get skipped() { return t('ui.attach.noAttach'); },
+  get partial() { return t('ui.attach.partial'); },
+  get fallback() { return t('ui.attach.fallback'); },
+};
 
 // 답변을 기다리는 동안 걸린 시간을 1초마다 보여 준다.
 const fmtElapsed = (ms) => {
   const s = Math.floor(ms / 1000);
-  return s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`;
+  return s < 60 ? t('ui.time.sec', { s }) : t('ui.time.minSec', { m: Math.floor(s / 60), s: s % 60 });
 };
 
 // 답변을 기다리는 패널마다 "답변 중… 12초"처럼 기다린 시간을 1초마다 고쳐 씁니다.
@@ -638,7 +648,7 @@ function tickAnswerTimers() {
   for (const p of panels.values()) {
     const st = p.status.dataset.state;
     if (!p.answerStart || (st !== 'answer-answering' && st !== 'answer-timeout')) continue;
-    const label = st === 'answer-answering' ? '답변 중…' : '시간 초과 — 계속 기다리는 중…';
+    const label = st === 'answer-answering' ? ANSWER_TEXT.answering : ANSWER_TEXT.timeout;
     p.status.textContent = `${label} ${fmtElapsed(Date.now() - p.answerStart)}`;
   }
 }
@@ -681,7 +691,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
       setChangeBar(id, false); // 페이지에서 직접 물어본 경우에도 지난 답변의 변경 바는 내린다
     }
     p.status.textContent =
-      answer === 'done' ? `${ANSWER_TEXT.done} · ${chars}자${late ? ' (늦게 끝남)' : ''}` : ANSWER_TEXT[answer];
+      answer === 'done' ? `${ANSWER_TEXT.done} · ${t('preview.chars', { n: chars })}${late ? t('ui.answer.late') : ''}` : ANSWER_TEXT[answer];
     p.status.dataset.state = `answer-${answer}`;
     tickAnswerTimers();
     updateAnswerSummary();
@@ -706,12 +716,12 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
       p.needBtn.hidden = true;
       p.collectBtn.hidden = true;
       setChangeBar(id, false);
-      if (attaching) p.status.textContent = `파일 ${attaching}개 첨부 후 보내는 중…`;
+      if (attaching) p.status.textContent = t('ui.send.attaching', { n: attaching });
     }
     // 첨부에 실패한 패널은 글만 보냈다. 머리줄에 표시를 남겨 둔다 (다음에 보내거나 새 대화를 열 때까지).
     const warn = send === 'sent' && attach && ATTACH_TEXT[attach.state];
     if (warn) {
-      p.status.textContent = `보냄 · ${warn}`;
+      p.status.textContent = `${SEND_TEXT.sent} · ${warn}`;
       p.status.dataset.state = 'send-attach-warn';
       p.attachBadge.hidden = false;
       p.attachBadge.textContent = `[+] ${warn}`;
@@ -724,7 +734,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
     return;
   }
   if (error) {
-    p.url.textContent = `오류: ${error}`;
+    p.url.textContent = t('ui.panel.error', { error });
     p.dot.classList.add('error');
   }
   if (login) {
@@ -750,7 +760,7 @@ function renderStatusLine() {
   el.dataset.state = bad ? 'error' : all.length && ready === all.length ? 'ok' : 'wait';
   if (Date.now() < remoteFlashUntil && state?.remote?.version) {
     const rb = span('remote-badge', `selectors v${state.remote.version}`);
-    rb.title = '사이트 셀렉터를 새로 받았습니다 (설정 › 사이트 셀렉터 자동 갱신)';
+    rb.title = t('ui.remote.gotBadge');
     el.append(rb);
   }
   // 새 버전이 있으면 "update 0.20.1" (누르면 설정 화면의 업데이트 칸)
@@ -771,10 +781,10 @@ function renderUpdate() {
   const box = $('#updateStatus');
   if (!box) return;
   if (!u || !MLA.update) {
-    box.textContent = '이 실행 환경에서는 업데이트를 확인하지 않습니다.';
+    box.textContent = t('ui.update.unsupported');
     return;
   }
-  box.textContent = MLA.update.statusText(u) + (u.checkedAt ? ` · 마지막 확인 ${fmtTime(u.checkedAt)}` : '');
+  box.textContent = MLA.update.statusText(u) + (u.checkedAt ? ` · ${t('ui.remote.checked', { time: fmtTime(u.checkedAt) })}` : '');
   box.dataset.state = u.state;
   $('#updateAuto').checked = state.autoUpdate !== false;
   $('#updateCheck').disabled = ['checking', 'downloading', 'dev'].includes(u.state);
@@ -786,7 +796,7 @@ $('#updateAuto').addEventListener('change', (e) => host.setSettings({ autoUpdate
 $('#updateCheck').addEventListener('click', () => host.update?.check());
 $('#updateDownload').addEventListener('click', () => host.update?.download());
 $('#updateInstall').addEventListener('click', () => {
-  if (confirm('앱을 닫고 새 버전을 설치한 뒤 다시 켭니다. 답변을 기다리는 패널이 있으면 끊깁니다. 계속할까요?')) host.update?.install();
+  if (confirm(t('ui.update.installConfirm'))) host.update?.install();
 });
 $('#updateOpen').addEventListener('click', () => host.update?.openReleases());
 
@@ -798,7 +808,7 @@ function updateAnswerSummary() {
   const asked = states.filter((s) => s.startsWith('answer-') && s !== 'answer-clear').length;
   if (!asked) return;
   const done = states.filter((s) => s === 'answer-done').length;
-  $('#sendHint').textContent = done === asked ? `답변 ${done}개 모두 완료` : `답변 완료 ${done}/${asked}`;
+  $('#sendHint').textContent = done === asked ? t('ui.answer.allDone', { n: done }) : t('ui.answer.progress', { n: done, total: asked });
 }
 
 const targets = new Set(); // 보낼 대상 서비스 id
@@ -815,7 +825,7 @@ function renderTargets() {
   box.replaceChildren();
   for (const id of open) {
     const svc = state.services.find((s) => s.id === id);
-    const chip = button(svc.name, '눌러서 켜기/끄기', () => {
+    const chip = button(svc.name, t('ui.target.toggle'), () => {
       targets.has(id) ? targets.delete(id) : targets.add(id);
       renderTargets();
     });

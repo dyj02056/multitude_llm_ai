@@ -63,9 +63,9 @@ function setupGitCommit({ ipcMain, getRoot, isBusy = () => false, gitExe = () =>
   /** 저장소인지 · 프로젝트 폴더의 저장소 안 위치 · 브랜치 → { ok, exe, root, prefix, branch } | { ok: false, error, notRepo? } */
   async function repoOf() {
     const root = getRoot();
-    if (!root) return { ok: false, error: '프로젝트가 열려 있지 않습니다' };
+    if (!root) return { ok: false, error: t('main.noProject') };
     const exe = gitExe();
-    if (!exe) return { ok: false, error: 'git을 찾지 못했습니다. Git for Windows를 설치하고 PATH에 넣은 뒤 앱을 다시 시작하세요' };
+    if (!exe) return { ok: false, error: t('main.noGitInstall') };
     const top = await runGit(exe, [...C.PREFIX, 'rev-parse', '--show-prefix'], root);
     if (top.code !== 0) return { ok: false, notRepo: true, error: t('commit.notRepo') };
     const branch = await runGit(exe, [...C.PREFIX, 'rev-parse', '--abbrev-ref', 'HEAD'], root);
@@ -89,7 +89,7 @@ function setupGitCommit({ ipcMain, getRoot, isBusy = () => false, gitExe = () =>
   // 커밋: add → commit. 경로를 붙인 commit이라 다른 스테이징 파일은 들어가지 않는다
   ipcMain.handle('git:commit', async (_e, raw) => {
     if (running) return { ok: false, error: t('commit.busy') };
-    if (isBusy()) return { ok: false, error: '테스트 실행 중에는 파일을 바꿀 수 없습니다 (끝나거나 중지한 뒤 다시 하세요)' };
+    if (isBusy()) return { ok: false, error: t('main.busyTest') };
     running = true;
     try {
       const req = C.checkCommitRequest(raw);

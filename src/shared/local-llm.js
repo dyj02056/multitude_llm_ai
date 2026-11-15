@@ -13,6 +13,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // 화면 문구 (v0.30.0): 부를 때마다 사전에서 찾는다 (언어를 바꾸면 바로 반영). 사전이 없는 곳(서비스 페이지 등)에서는 키 이름 그대로
+  const t = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   const LOCAL_ID = 'local';
   const DEFAULT_BASE = 'http://localhost:11434'; // Ollama 기본 주소 (LM Studio는 http://localhost:1234)
   const MAX_TURNS = 40; // 대화에 남기는 최대 메시지 수 (오래된 것부터 뺀다)
@@ -55,9 +61,9 @@
   /** 서버의 모델 목록 → [이름] (OpenAI 호환 /v1/models) */
   async function listModels(fetchFn, baseUrl, { signal } = {}) {
     const base = normalizeBaseUrl(baseUrl);
-    if (!base) throw new Error('주소는 이 PC(localhost · 127.0.0.1)만 쓸 수 있습니다');
+    if (!base) throw new Error(t('main.local.onlyThisPc'));
     const res = await fetchFn(`${base}/v1/models`, { signal, headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`모델 목록을 받지 못했습니다 (HTTP ${res.status})`);
+    if (!res.ok) throw new Error(t('main.local.modelsFailed', { status: res.status }));
     const data = await res.json();
     return (Array.isArray(data?.data) ? data.data : []).map((m) => cleanModel(m?.id)).filter(Boolean).slice(0, 200);
   }
@@ -123,12 +129,12 @@
 
     /** 질문을 보낸다. 서버가 받아들이면 { ok: true, via: 'local' }, 아니면 { ok: false, error } (답은 이어서 스트리밍) */
     async function send(text, images = []) {
-      if (streaming) return { ok: false, error: '로컬 LLM이 아직 답하는 중입니다 (중지하거나 끝난 뒤 보내세요)' };
+      if (streaming) return { ok: false, error: t('main.local.busy') };
       const cfg = getConfig() || {};
       const base = normalizeBaseUrl(cfg.baseUrl);
       model = cleanModel(cfg.model);
-      if (!base) return { ok: false, error: '로컬 LLM 주소가 올바르지 않습니다 (설정 › 로컬 LLM)' };
-      if (!model) return { ok: false, error: '로컬 LLM 모델을 고르세요 (설정 › 로컬 LLM › 연결 확인)' };
+      if (!base) return { ok: false, error: t('main.local.badBase') };
+      if (!model) return { ok: false, error: t('main.local.noModel') };
       const user = { role: 'user', text: String(text || ''), images: images.length ? images : undefined };
       const history = [...messages, user].slice(-MAX_TURNS).map((m) => ({ role: m.role, content: m.role === 'user' ? toContent(m.text, m.images || []) : m.text }));
       ctrl = new AbortController();
@@ -141,9 +147,9 @@
           signal: ctrl.signal,
         });
       } catch (err) {
-        error = `연결하지 못했습니다: ${err.message}`;
+        error = t('main.local.connectFailed', { error: err.message });
         changed();
-        return { ok: false, error: `로컬 LLM에 ${error} (서버가 켜져 있는지 확인하세요)` };
+        return { ok: false, error: t('main.local.connectHint', { error }) };
       }
       if (!res.ok) {
         let why = `HTTP ${res.status}`;
@@ -153,7 +159,7 @@
         } catch {}
         error = why;
         changed();
-        return { ok: false, error: `로컬 LLM이 질문을 받지 않았습니다 (${why})` };
+        return { ok: false, error: t('main.local.rejected', { why }) };
       }
       error = '';
       messages.push(user);
@@ -195,7 +201,7 @@
           if (buf) answer.text += parseSSE(`${buf}\n`).deltas.join('');
         }
       } catch (err) {
-        if (err.name !== 'AbortError') error = `답을 받다가 끊겼습니다: ${err.message}`;
+        if (err.name !== 'AbortError') error = t('main.local.streamCut', { error: err.message });
       } finally {
         streaming = false;
         ctrl = null;
@@ -232,9 +238,9 @@
     const cfg = (getConfig && getConfig()) || {};
     const base = normalizeBaseUrl(cfg.baseUrl);
     const model = cleanModel(cfg.model);
-    if (!base) return { ok: false, error: '로컬 LLM 주소가 올바르지 않습니다 (설정 › 로컬 LLM)' };
-    if (!model) return { ok: false, error: '로컬 LLM 모델을 고르세요 (설정 › 로컬 LLM › 연결 확인)' };
-    if (typeof text !== 'string' || !text.trim()) return { ok: false, error: '보낼 내용이 없습니다' };
+    if (!base) return { ok: false, error: t('main.local.badBase') };
+    if (!model) return { ok: false, error: t('main.local.noModel') };
+    if (typeof text !== 'string' || !text.trim()) return { ok: false, error: t('main.nothingToSend') };
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     signal?.addEventListener?.('abort', () => ctrl.abort());
@@ -245,12 +251,12 @@
         body: JSON.stringify({ model, messages: [{ role: 'user', content: text }], stream: false }),
         signal: ctrl.signal,
       });
-      if (!res.ok) return { ok: false, error: `로컬 LLM이 질문을 받지 않았습니다 (HTTP ${res.status})` };
+      if (!res.ok) return { ok: false, error: t('main.local.rejected', { why: `HTTP ${res.status}` }) };
       const j = await res.json();
       const answer = String(j?.choices?.[0]?.message?.content ?? j?.message?.content ?? '');
-      return answer.trim() ? { ok: true, text: answer } : { ok: false, error: '로컬 LLM의 답이 비어 있습니다' };
+      return answer.trim() ? { ok: true, text: answer } : { ok: false, error: t('main.local.emptyAnswer') };
     } catch (err) {
-      return { ok: false, error: err.name === 'AbortError' ? '로컬 LLM이 시간 안에 답하지 않았습니다' : `로컬 LLM에 연결하지 못했습니다: ${err.message}` };
+      return { ok: false, error: err.name === 'AbortError' ? t('main.local.timeout') : t('main.local.connectFailedLocal', { error: err.message }) };
     } finally {
       clearTimeout(timer);
     }

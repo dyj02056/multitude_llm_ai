@@ -39,14 +39,14 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
    * → { ok, checks: [{ name, script, pre?, post? }], test: test 스크립트 정보 | 오류, npmCli, nodeExe, pkgText } | { ok: false, error }
    */
   async function scriptInfo() {
-    if (!root()) return { ok: false, error: '프로젝트가 열려 있지 않습니다' };
+    if (!root()) return { ok: false, error: t('main.noProject') };
     const r = await project.readFile('package.json').catch(() => ({ missing: true }));
     const pkgText = typeof r.text === 'string' ? r.text : undefined;
     const test = R.readTestScript(pkgText);
     const avail = R.availableChecks(pkgText);
     if (!avail.ok) return test.ok ? avail : test; // package.json이 없거나 깨졌거나, 검사 스크립트가 하나도 없음
     const npmCli = R.findNpmCli({ exists: (p) => fs.existsSync(p) });
-    if (!npmCli) return { ok: false, error: 'npm을 찾지 못했습니다. Node.js를 설치하고 PATH에 넣은 뒤 앱을 다시 시작하세요' };
+    if (!npmCli) return { ok: false, error: t('main.devtest.noNpm') };
     return { ok: true, checks: avail.checks, test, npmCli, nodeExe: R.findNodeFor(npmCli, { exists: (p) => fs.existsSync(p) }) };
   }
 
@@ -54,7 +54,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
   function runOnce(npmCli, label, nodeExe = null, script = 'test') {
     const spec = R.buildTestSpawn({ root: root(), npmCli, execPath: process.execPath, isElectron, nodeExe, script });
     if (!R.isAllowedTestSpawn(spec, { root: root(), execPath: process.execPath, nodeExe, script })) {
-      return Promise.resolve({ ok: false, error: '허용되지 않는 실행 방법입니다', output: '' });
+      return Promise.resolve({ ok: false, error: t('main.devtest.notAllowedRun'), output: '' });
     }
     const started = Date.now();
     return new Promise((resolve) => {
@@ -75,7 +75,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
         size += buf.length;
         if (size > R.MAX_OUTPUT) {
           cut = true;
-          out += '\n… 출력이 2MB를 넘어 나머지는 보이지 않습니다\n';
+          out += `\n${t('main.outputCut')}\n`;
           return;
         }
         out += decoder.write(buf);
@@ -151,11 +151,11 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
 
   // rawScripts: 화면에서 고른 검사 이름 (없으면 예전처럼 test 하나). 이름만 받고, 실행할 스크립트 글은 package.json에서 읽는다
   ipcMain.handle('devtest:trial', async (_e, rawChanges, rawScripts) => {
-    if (busy) return { ok: false, error: '이미 테스트를 실행하고 있습니다' };
+    if (busy) return { ok: false, error: t('main.devtest.busy') };
     busy = true; // 확인 창·파일 읽기를 기다리는 동안 두 번째 실행이 끼어들지 않게 바로 잡아 둔다 (취소·오류에서도 finally가 푼다)
     try {
       const changes = R.checkTrialChanges(rawChanges);
-      if (!changes) return { ok: false, error: '테스트할 수정안이 올바르지 않거나 너무 큽니다 (파일 200개 · 파일당 5MB · 전체 50MB까지)' };
+      if (!changes) return { ok: false, error: t('main.devtest.badChanges') };
       const info = await scriptInfo();
       if (!info.ok) return info;
       const wantTest = rawScripts === undefined || (Array.isArray(rawScripts) && rawScripts.includes('test'));
@@ -173,22 +173,22 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
       }
       const warn = R.trialWarnings(withBefore, executionRisk, names);
       const warnText = [
-        ...(warn.scriptLines.length ? ['', '⚠ 수정안이 테스트 스크립트를 바꿉니다 — "적용 후" 실행에서는 바뀐 스크립트가 돕니다:', ...warn.scriptLines] : []),
-        ...(warn.riskLines.length ? ['', '⚠ 실행에 영향을 주는 파일이 들어 있습니다:', ...warn.riskLines] : []),
+        ...(warn.scriptLines.length ? ['', t('main.devtest.warnScripts'), ...warn.scriptLines] : []),
+        ...(warn.riskLines.length ? ['', t('main.devtest.warnRisk'), ...warn.riskLines] : []),
       ].join('\n');
       const { response } = await dialog.showMessageBox(getWin(), {
         type: 'warning',
-        buttons: ['테스트 실행', '취소'],
+        buttons: [t('devtest.run'), t('main.cancel')],
         defaultId: 0,
         cancelId: 1,
-        title: '테스트 실행 확인',
-        message: '이 PC에서 프로젝트의 테스트를 실행합니다',
+        title: t('main.devtest.confirmTitle'),
+        message: t('main.devtest.confirmMessage'),
         detail:
           `${scripts.join('\n')}\n\n` +
-          `1) 지금 파일 그대로 실행 → 2) 체크한 수정안 ${changes.length}개 파일을 잠깐 써 두고 실행 → 3) 원래 파일로 되돌림\n` +
-          `AI가 고친 코드(테스트 코드 포함)가 실제로 실행됩니다. 시간 제한 스크립트마다 ${R.TEST_TIMEOUT_MS / 60000}분.${warnText ? `\n${warnText}` : ''}\n\n폴더: ${root()}`,
+          `${t('main.devtest.confirmSteps', { n: changes.length })}\n` +
+          `${t('main.devtest.confirmNote', { min: R.TEST_TIMEOUT_MS / 60000 })}${warnText ? `\n${warnText}` : ''}\n\n${t('main.folderLine', { path: root() })}`,
       });
-      if (response !== 0) return { ok: false, error: '취소했습니다', cancelled: true };
+      if (response !== 0) return { ok: false, error: t('main.cancelled'), cancelled: true };
 
       // 결과: 고른 스크립트마다 { name, script, before, after } (v0.28.0). 예전 모양(script · before · after)은 test 것으로 함께 준다
       const results = checks.map((c) => ({ name: c.name, script: c.script, before: null, after: null }));
@@ -209,7 +209,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
         const r = await project.readFile(c.path, { maxBytes: 5 * 1024 * 1024 });
         if (r.missing) backup.push({ path: c.path, existed: false });
         else if (typeof r.text === 'string') backup.push({ path: c.path, existed: true, text: r.text });
-        else return { ...reply(), ok: false, error: `${c.path}: ${r.binary ? '바이너리 파일' : '파일이 너무 큽니다'}라 테스트할 수 없습니다` };
+        else return { ...reply(), ok: false, error: t(r.binary ? 'main.devtest.binary' : 'main.devtest.tooLarge', { path: c.path }) };
       }
       // 2) 잠깐 써 두고 스크립트마다 실행 → 3) 무슨 일이 있어도 원래대로 (앱이 꺼져도 다음에 열 때 되돌리도록 먼저 적어 둔다)
       writeRecovery({ root: root(), at: Date.now(), files: backup });
@@ -226,7 +226,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
           if (r.after.stopped) break;
         }
       } catch (err) {
-        const failed = { ok: false, error: `임시 적용 실패: ${err.message}`, output: '' };
+        const failed = { ok: false, error: t('main.devtest.trialFailed', { error: err.message }), output: '' };
         for (const r of results) if (!r.after) r.after = failed;
       } finally {
         const failed = await restore(restoreList);

@@ -46,6 +46,7 @@ const { setupGitCommit } = require('./gitcommit');
 const { createUpdater } = require('./updater');
 const secure = require('./secure-store'); // 기록 · 설정 · 라이브러리 · 프로젝트 상태 암호화 (v0.22.1)
 const notifyCore = require('../shared/notify');
+const { t } = require('../shared/i18n');
 const { createOsNotifier } = require('./notifier'); // OS 알림 (v0.25.0)
 
 // ---------- 화면 크기 관련 숫자 (단위: 픽셀) ----------
@@ -153,7 +154,7 @@ function normalizeLocalPrefs(v) {
 }
 /** 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 판정 · 압축): 패널 대화와 따로인 임시 대화 — 켜 두었을 때만 */
 function askLocal(text) {
-  if (!prefs.local?.enabled) return Promise.resolve({ ok: false, error: '로컬 LLM이 꺼져 있습니다 (설정 › 로컬 LLM)' });
+  if (!prefs.local?.enabled) return Promise.resolve({ ok: false, error: t('main.localOff') });
   return L.askOnce({ fetchFn: (url, opts) => net.fetch(url, opts), getConfig: () => prefs.local, text });
 }
 const localSvc = () => L.localService(prefs.local);
@@ -276,7 +277,7 @@ function guardPopups(wc, svc) {
       try {
         host = new URL(url).host;
       } catch {}
-      if (svc) sendPanel(svc.id, { notice: `로그인 창이 허용 밖 주소(${host || '알 수 없음'})로 가서 기본 브라우저로 열었습니다` });
+      if (svc) sendPanel(svc.id, { notice: t('main.popupBlocked', { host: host || t('main.unknownHost') }) });
     };
     cwc.on('will-navigate', (e, url) => check(e, url));
     cwc.on('will-redirect', (e, url) => check(e, url));
@@ -692,13 +693,13 @@ const rounds = createRounds({
   hasPanel: hasPanelId,
   sendPrompt: (id, text, files, extra) => {
     if (isLocal(id)) {
-      if (!localChat) return { ok: false, error: '패널이 닫혔습니다' };
+      if (!localChat) return { ok: false, error: t('main.panelClosed') };
       const images = files.map((f) => L.imageDataUrl(f, (d) => Buffer.from(d).toString('base64'))).filter(Boolean);
       return localChat.send(text, images);
     }
     return panels.has(id)
       ? sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text, files, extra)
-      : { ok: false, error: '패널이 닫혔습니다' };
+      : { ok: false, error: t('main.panelClosed') };
   },
   snapshot: (id, opts) => {
     if (isLocal(id)) return localChat ? localChat.snapshot() : null;
@@ -782,7 +783,7 @@ function sendOpts(opts) {
 
 // 패널 하나에만 이어서 보내기 (프로젝트 모드: 요청한 파일 보내기, 전체 파일 다시 요청)
 ipcMain.handle('prompt:followup', async (_e, { id, text, files, opts }) => {
-  if (typeof id !== 'string' || typeof text !== 'string' || !text.trim()) return { ok: false, error: '보낼 내용이 없습니다' };
+  if (typeof id !== 'string' || typeof text !== 'string' || !text.trim()) return { ok: false, error: t('main.nothingToSend') };
   const checked = checkFiles(files);
   if (!checked.ok) return { id, ok: false, error: checked.error };
   return rounds.sendFollowUp(id, text, checked.files, sendOpts(opts));

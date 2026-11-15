@@ -15,11 +15,13 @@
   'use strict';
 
   const AN = analysis || require('./analysis');
-  const t = (i18n || require('./i18n')).t;
-  const NO_TEXT = '(글 없이 첨부 파일만 보냄)';
+  const I18N = i18n || require('./i18n');
+  const t = I18N.t;
+  const lang = () => (I18N.getLang ? I18N.getLang() : 'ko');
+  const noText = () => t('main.export.noText'); // 글 없이 첨부 파일만 보낸 기록의 질문 자리
 
   const fmtTime = (ms) =>
-    new Date(ms).toLocaleString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    new Date(ms).toLocaleString(lang() === 'en' ? 'en-US' : 'ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const fmtSize = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`);
 
   /**
@@ -40,9 +42,9 @@
     const analyses = (rec.synth || []).filter((s) => s.mode === 'analysis');
     const last = analyses[analyses.length - 1];
     return {
-      title: (rec.question || NO_TEXT).split('\n')[0].slice(0, 120),
+      title: (rec.question || noText()).split('\n')[0].slice(0, 120),
       at: rec.at || Date.now(),
-      question: rec.question || NO_TEXT,
+      question: rec.question || noText(),
       files: (rec.files || []).map((f) => ({ name: f.name, size: f.size })),
       answers,
       synth,
@@ -70,11 +72,11 @@
     }
     return out;
   }
-  const synthTitle = (s) => (s.mode === 'debate' ? t('chain.debateResult') : '종합');
+  const synthTitle = (s) => (s.mode === 'debate' ? t('chain.debateResult') : t('notify.synth'));
 
   /** 답변 비교 화면 → 문서 (지금 열린 패널의 최신 답변과 이번 질문의 분석) */
   function docFromCompare({ question, answers, analysis: an, chain, debates }) {
-    const q = question || '(질문 없음)';
+    const q = question || t('main.export.noQuestion');
     return {
       title: q.split('\n')[0].slice(0, 120),
       at: Date.now(),
@@ -107,7 +109,7 @@
   /** 대화 줄기 → 문서 (오래된 질문부터, 제목은 첫 질문) */
   function docFromThread(recs) {
     const list = (Array.isArray(recs) ? recs : []).filter((r) => r && typeof r === 'object').sort((a, b) => (a.at || 0) - (b.at || 0));
-    const first = list[0] ? (list[0].question || NO_TEXT).split('\n')[0].slice(0, 80) : '';
+    const first = list[0] ? (list[0].question || noText()).split('\n')[0].slice(0, 80) : '';
     return docFromRecords(list, { title: t('export.threadTitle', { q: first, n: list.length }) });
   }
 
@@ -116,9 +118,9 @@
   /** 기록 문서 하나의 Markdown 줄들. depth: 머리글을 몇 단계 내릴지 (여러 기록 문서 안에서는 1), prefix: 제목 앞 번호 */
   function recordMd(doc, depth = 0, prefix = '') {
     const h = (n) => '#'.repeat(Math.min(6, n + depth));
-    const parts = [`${h(1)} ${prefix}${doc.title}`, '', `> ${fmtTime(doc.at)} · Multitude LLM`, '', `${h(2)} 질문`, '', doc.question];
-    if (doc.files.length) parts.push('', `첨부: ${doc.files.map((f) => `${f.name} (${fmtSize(f.size || 0)})`).join(' · ')}`);
-    if (doc.analysis) parts.push('', `${h(2)} 분석 (판정 ${doc.analysis.judge})`, '', doc.analysis.md);
+    const parts = [`${h(1)} ${prefix}${doc.title}`, '', `> ${fmtTime(doc.at)} · Multitude LLM`, '', `${h(2)} ${t('main.export.question')}`, '', doc.question];
+    if (doc.files.length) parts.push('', t('main.export.files', { files: doc.files.map((f) => `${f.name} (${fmtSize(f.size || 0)})`).join(' · ') }));
+    if (doc.analysis) parts.push('', `${h(2)} ${t('main.export.analysisMd', { judge: doc.analysis.judge })}`, '', doc.analysis.md);
     for (const a of doc.answers) parts.push('', `${h(2)} ${a.name}`, '', a.text);
     for (const s of doc.synth) parts.push('', `${h(2)} ${synthTitle(s)} (${s.judge})`, '', s.text);
     const chain = doc.chain || [];
@@ -212,14 +214,14 @@
     const res = AN.parseAnalysis(an.md, { names: an.names || [] });
     const h2 = `h${2 + depth}`;
     const h3 = `h${3 + depth}`;
-    const head = `<${h2}>분석 <small>판정 ${esc(an.judge)}${an.at ? ` · ${esc(fmtTime(an.at))}` : ''}</small></${h2}>`;
-    if (!res.ok) return `${head}\n<p class="note">정해진 형식이 아니라서 글 그대로 넣었습니다 (${esc(res.reason)})</p>\n<div class="answer">${mdToHtml(res.raw)}</div>`;
-    const list = (items, render) => (items.length ? `<ul>${items.map((x) => `<li>${render(x)}</li>`).join('')}</ul>` : '<p class="muted">없음</p>');
-    let dis = '<p class="muted">이견이 없습니다 — 답변들이 같은 방향입니다</p>';
+    const head = `<${h2}>${esc(t('main.export.analysis'))} <small>${esc(t('main.export.judge', { judge: an.judge }))}${an.at ? ` · ${esc(fmtTime(an.at))}` : ''}</small></${h2}>`;
+    if (!res.ok) return `${head}\n<p class="note">${esc(t('main.export.notFormatted', { reason: res.reason }))}</p>\n<div class="answer">${mdToHtml(res.raw)}</div>`;
+    const list = (items, render) => (items.length ? `<ul>${items.map((x) => `<li>${render(x)}</li>`).join('')}</ul>` : `<p class="muted">${esc(t('main.export.none'))}</p>`);
+    let dis = `<p class="muted">${esc(t('main.export.noDisagree'))}</p>`;
     if (res.disagreements.length) {
       const cols = [...new Set([...(an.names || []), ...res.disagreements.flatMap((d) => d.positions.map((p) => p.name))])];
       dis =
-        `<table><thead><tr><th>쟁점</th>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}<th>판단</th></tr></thead><tbody>` +
+        `<table><thead><tr><th>${esc(t('main.export.topic'))}</th>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}<th>${esc(t('main.export.verdict'))}</th></tr></thead><tbody>` +
         res.disagreements
           .map((d) => {
             const cell = (name) => {
@@ -233,13 +235,13 @@
     }
     return [
       head,
-      `<${h3}>이견 <span class="count">${res.disagreements.length}</span></${h3}>`,
+      `<${h3}>${esc(t('main.export.disagree'))} <span class="count">${res.disagreements.length}</span></${h3}>`,
       dis,
-      `<${h3}>공통 의견 <span class="count">${res.common.length}</span></${h3}>`,
+      `<${h3}>${esc(t('main.export.common'))} <span class="count">${res.common.length}</span></${h3}>`,
       list(res.common, esc),
-      `<${h3}>근거 부족 <span class="count">${res.unsupported.length}</span></${h3}>`,
+      `<${h3}>${esc(t('main.export.unsupported'))} <span class="count">${res.unsupported.length}</span></${h3}>`,
       list(res.unsupported, (u) => `${u.name ? `<b>[${esc(u.name)}]</b> ` : ''}${esc(u.text)}`),
-      `<${h3}>최종 답변</${h3}>`,
+      `<${h3}>${esc(t('main.export.final'))}</${h3}>`,
       `<div class="answer final">${mdToHtml(res.final)}</div>`,
     ].join('\n');
   }
@@ -282,9 +284,9 @@ footer { margin-top: 30px; color: #9aa1b1; font-size: 12px; text-align: center; 
   /** 기록 문서 하나의 본문 HTML 조각들 (머리말 제외). depth: 머리글을 몇 단계 내릴지 (여러 기록 문서 안에서는 1) */
   function recordHtml(doc, depth = 0) {
     const tag = (n, inner) => `<h${Math.min(6, n + depth)}>${inner}</h${Math.min(6, n + depth)}>`;
-    const files = doc.files.length ? `<div class="files">첨부: ${doc.files.map((f) => `${esc(f.name)} (${esc(fmtSize(f.size || 0))})`).join(' · ')}</div>` : '';
+    const files = doc.files.length ? `<div class="files">${esc(t('main.export.files', { files: doc.files.map((f) => `${f.name} (${fmtSize(f.size || 0)})`).join(' · ') }))}</div>` : '';
     return [
-      tag(2, '질문'),
+      tag(2, esc(t('main.export.question'))),
       `<div class="question">${esc(doc.question)}</div>`,
       files,
       doc.analysis ? analysisHtml(doc.analysis, depth) : '',
@@ -310,7 +312,7 @@ footer { margin-top: 30px; color: #9aa1b1; font-size: 12px; text-align: center; 
 
   /** 문서 → HTML 파일 한 개 (밝은 문서 모양, 바깥 파일 없음, 스크립트 없음). 여러 기록 문서도 같은 모양 */
   function toHtml(doc) {
-    const meta = doc.multi ? t('export.multiCount', { n: doc.items.length }) : `AI 답변 ${doc.answers.length}개${doc.analysis ? ' · 분석 포함' : ''}`;
+    const meta = doc.multi ? t('export.multiCount', { n: doc.items.length }) : `${t('main.export.answerCount', { n: doc.answers.length })}${doc.analysis ? ` · ${t('main.export.withAnalysis')}` : ''}`;
     const body = [
       '<header>',
       '<div class="brand">Multitude LLM</div>',
@@ -318,12 +320,12 @@ footer { margin-top: 30px; color: #9aa1b1; font-size: 12px; text-align: center; 
       `<div class="meta">${esc(fmtTime(doc.at))} · ${esc(meta)}</div>`,
       '</header>',
       ...(doc.multi ? multiHtml(doc) : recordHtml(doc)),
-      `<footer>Multitude LLM에서 내보냄 · ${esc(fmtTime(Date.now()))}</footer>`,
+      `<footer>${esc(t('main.export.footer', { time: fmtTime(Date.now()) }))}</footer>`,
     ]
       .filter(Boolean)
       .join('\n');
     return (
-      '<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n' +
+      `<!doctype html>\n<html lang="${lang()}">\n` + '<head>\n<meta charset="utf-8">\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
       // 이 파일 안의 스크립트 · 바깥 파일은 쓰지 않는다 (답변 글은 이스케이프되어 있지만 한 번 더 막는다)
       `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">\n` +
@@ -336,7 +338,7 @@ footer { margin-top: 30px; color: #9aa1b1; font-size: 12px; text-align: center; 
     const d = new Date(doc.at);
     const pad = (n) => String(n).padStart(2, '0');
     const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const title = doc.title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50).replace(/[. ]+$/, '') || '답변';
+    const title = doc.title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50).replace(/[. ]+$/, '') || t('main.answerFileName');
     return `${day} ${title}.${ext}`;
   }
 

@@ -21,6 +21,7 @@ const { execFile } = require('child_process');
 const { dialog, app } = require('electron');
 const { looksBinary, MAX_FILE_BYTES } = require('../shared/project-ignore');
 const { safeRelPath, isGitInternal } = require('../shared/patch');
+const { t } = require('../shared/i18n');
 
 // 화면이 읽기 한도(maxBytes)를 정해 보낼 때 앱 쪽에서 허용하는 최대값 (수정안 · 테스트 실행 원본 읽기가 5MB를 쓴다)
 const READ_MAX_BYTES = 5 * 1024 * 1024;
@@ -34,7 +35,7 @@ const info = () => (root ? { name: path.basename(root) || root, id: root } : nul
 async function open(dir) {
   const abs = path.resolve(dir);
   const st = await fsp.stat(abs);
-  if (!st.isDirectory()) throw new Error('폴더가 아닙니다');
+  if (!st.isDirectory()) throw new Error(t('main.project.notFolder'));
   root = abs;
   realRoot = await fsp.realpath(abs);
   return info();
@@ -42,7 +43,7 @@ async function open(dir) {
 
 /** 폴더 선택 창을 띄워 사용자가 고르게 합니다. 취소하면 null. */
 async function pick(win) {
-  const r = await dialog.showOpenDialog(win, { title: '프로젝트 폴더 선택', properties: ['openDirectory'] });
+  const r = await dialog.showOpenDialog(win, { title: t('main.project.pickTitle'), properties: ['openDirectory'] });
   if (r.canceled || !r.filePaths?.[0]) return null;
   return open(r.filePaths[0]);
 }
@@ -57,15 +58,15 @@ const inside = (real) => real === realRoot || real.startsWith(realRoot + path.se
 
 /** 상대 경로를 프로젝트 안의 절대 경로로. 밖으로 나가면(.., 절대 경로, 링크) 오류 */
 async function resolveSafe(rel) {
-  if (!root) throw new Error('프로젝트가 열려 있지 않습니다');
+  if (!root) throw new Error(t('main.noProject'));
   const clean = rel === '' ? '' : safeRelPath(rel);
-  if (clean === null) throw new Error(`허용되지 않는 경로입니다: ${rel}`);
+  if (clean === null) throw new Error(t('main.project.badPath', { path: rel }));
   const abs = path.join(root, clean);
   // 있는 가장 가까운 상위 경로의 실제 위치가 프로젝트 안이어야 한다 (링크로 밖을 가리키는 경우 차단).
   let probe = abs;
   for (;;) {
     try {
-      if (!inside(await fsp.realpath(probe))) throw new Error(`프로젝트 밖을 가리키는 경로입니다: ${rel}`);
+      if (!inside(await fsp.realpath(probe))) throw new Error(t('main.project.outside', { path: rel }));
       return abs;
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
@@ -126,7 +127,7 @@ async function readFile(rel, { maxBytes = MAX_FILE_BYTES } = {}) {
 
 /** git 내부(.git 안쪽)에는 쓰거나 지우지 않는다 (훅·설정으로 코드가 실행될 수 있음) */
 function refuseGitInternal(rel) {
-  if (isGitInternal(rel)) throw new Error(`git 내부 파일은 바꿀 수 없습니다: ${rel}`);
+  if (isGitInternal(rel)) throw new Error(t('main.project.gitInternal', { path: rel }));
 }
 
 /**
@@ -135,11 +136,11 @@ function refuseGitInternal(rel) {
  */
 async function recheckTarget(abs, rel) {
   const parentReal = await fsp.realpath(path.dirname(abs));
-  if (!inside(parentReal)) throw new Error(`프로젝트 밖을 가리키는 경로입니다: ${rel}`);
+  if (!inside(parentReal)) throw new Error(t('main.project.outside', { path: rel }));
   try {
     const st = await fsp.lstat(abs);
-    if (st.isSymbolicLink()) throw new Error(`바로가기(링크) 파일은 바꿀 수 없습니다: ${rel}`);
-    if (st.isDirectory()) throw new Error(`폴더입니다: ${rel}`);
+    if (st.isSymbolicLink()) throw new Error(t('main.project.symlink', { path: rel }));
+    if (st.isDirectory()) throw new Error(t('main.project.isFolder', { path: rel }));
   } catch (err) {
     if (err.code !== 'ENOENT') throw err;
   }
@@ -148,7 +149,7 @@ async function recheckTarget(abs, rel) {
 
 /** 파일 쓰기 (없으면 새로 만들고, 필요한 상위 폴더도 만듦). 쓰기 직전에 실제 경로가 프로젝트 안쪽인지 다시 확인합니다. */
 async function writeFile(rel, text) {
-  if (typeof text !== 'string') throw new Error('쓸 내용이 없습니다');
+  if (typeof text !== 'string') throw new Error(t('main.project.noText'));
   refuseGitInternal(rel);
   const abs = await resolveSafe(rel);
   await fsp.mkdir(path.dirname(abs), { recursive: true });
@@ -217,7 +218,7 @@ async function globalExclude() {
   for (const file of candidates) {
     try {
       const content = await fsp.readFile(file, 'utf8');
-      return { source: 'git 전역 제외 파일', content };
+      return { source: t('main.project.globalIgnore'), content };
     } catch {}
   }
   return null;

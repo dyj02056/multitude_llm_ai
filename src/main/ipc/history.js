@@ -9,10 +9,11 @@ const fs = require('fs');
 const path = require('path');
 const { cleanFilters } = require('../../shared/history-search');
 const { okRecordId } = require('../../shared/history-core');
+const { t } = require('../../shared/i18n');
 
 // 내보내기 (v0.14.0): 저장 창에서 고른 곳에 Markdown · HTML 글을 씁니다. 이름은 화면이 정한 기본값, 종류는 md · html만.
 // mla: 설정 옮기기 파일 (v0.29.0, .mla.json — 설정 · 라이브러리, 비밀번호를 걸면 암호화된 글)
-const SAVE_KINDS = { md: { name: 'Markdown', ext: 'md' }, html: { name: 'HTML 문서', ext: 'html' }, mla: { name: 'Multitude LLM 설정', ext: 'mla.json', filter: 'json' } };
+const SAVE_KINDS = { md: { name: 'Markdown', ext: 'md' }, html: { nameKey: 'main.save.html', ext: 'html' }, mla: { nameKey: 'main.save.mla', ext: 'mla.json', filter: 'json' } }; // nameKey: 사전 키 (저장 창을 열 때 t()로)
 
 /**
  * ctx: { ipcMain, history, rounds(), roundHistoryId(), clipboard, dialog, app, win() }
@@ -54,12 +55,12 @@ function register(ctx) {
 
   ipcMain.handle('file:save', async (_e, { name, text, kind } = {}) => {
     const k = SAVE_KINDS[kind];
-    if (!k || typeof text !== 'string' || text.length > 20 * 1024 * 1024) return { ok: false, error: '저장할 내용이 올바르지 않습니다' };
-    const base = (typeof name === 'string' ? name : '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 120) || `답변.${k.ext}`;
+    if (!k || typeof text !== 'string' || text.length > 20 * 1024 * 1024) return { ok: false, error: t('main.save.badContent') };
+    const base = (typeof name === 'string' ? name : '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 120) || `${t('main.answerFileName')}.${k.ext}`;
     const { canceled, filePath } = await dialog.showSaveDialog(ctx.win(), {
-      title: '내보내기',
+      title: t('main.save.title'),
       defaultPath: path.join(app.getPath('downloads'), base.endsWith(`.${k.ext}`) ? base : `${base}.${k.ext}`),
-      filters: [{ name: k.name, extensions: [k.filter || k.ext] }],
+      filters: [{ name: k.nameKey ? t(k.nameKey) : k.name, extensions: [k.filter || k.ext] }],
     });
     if (canceled || !filePath) return { ok: false, cancelled: true };
     await fs.promises.writeFile(filePath, text, 'utf8');

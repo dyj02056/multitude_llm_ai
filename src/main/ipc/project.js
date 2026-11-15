@@ -6,6 +6,8 @@
 // [쉽게 말하면] 프로젝트 사이드바가 "폴더 열어 줘", "이 파일 읽어 줘/써 줘" 할 때 처리하는 곳입니다.
 // 테스트 실행이 수정안을 잠깐 써 둔 동안에는 파일을 바꾸는 요청을 받지 않습니다.
 
+const { t } = require('../../shared/i18n');
+
 /** 성공하면 { ok: true, value }, 오류가 나면 { ok: false, error } — 오류가 나도 앱이 멈추지 않고 화면이 이유를 보여 줄 수 있게 */
 const projectCall = (fn) => async (_e, ...args) => {
   try {
@@ -44,7 +46,7 @@ function register(ctx) {
 
   // 테스트 실행이 수정안을 잠깐 써 둔 동안에는 화면에서 오는 쓰기·지우기와 프로젝트 바꾸기·닫기를 받지 않는다 (끝나면 원래 파일로 되돌리므로)
   const notDuringTest = () => {
-    if (ctx.devTest()?.isBusy()) throw new Error('테스트 실행 중에는 파일을 바꿀 수 없습니다 (끝나거나 중지한 뒤 다시 하세요)');
+    if (ctx.devTest()?.isBusy()) throw new Error(t('main.busyTest'));
   };
 
   ipcMain.handle('project:pick', projectCall(async () => {

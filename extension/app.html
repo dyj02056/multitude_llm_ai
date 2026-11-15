@@ -15,30 +15,30 @@
   <!-- 맨 위 툴바: 배치 고르기, 라이브러리, 프로젝트, 변경 제안, 기록, 답변 비교, 복사·새 대화·새로고침, 설정, 모델 선택, 로그아웃 -->
   <header id="toolbar">
     <strong class="brand" data-path="">multitude</strong>
-    <span class="status-line only-chat" id="statusLine" title="열린 패널 중 쓸 수 있는(로그인된) 패널 수"></span>
+    <span class="status-line only-chat" id="statusLine" data-i18n-title="ui.h.statusLine.title"></span>
     <span class="hint" id="hint"></span>
     <div class="spacer"></div>
-    <div class="seg only-chat" role="group" aria-label="레이아웃">
-      <button data-layout="grid" title="격자: 1~3개 한 줄 · 4개 2×2 · 5개 위 3·아래 2 · 6개 3×2">grid</button>
-      <button data-layout="row" title="가로: 한 줄에 모두">row</button>
-      <button data-layout="main" title="큰 칸: 첫 패널을 왼쪽에 크게, 나머지는 오른쪽에 위아래로">main</button>
-      <button data-layout="tall" title="2열: 두 열로 쌓기 (2개는 위아래, 6개는 2×3)">2col</button>
+    <div class="seg only-chat" role="group" data-i18n-aria="ui.h.layout.aria">
+      <button data-layout="grid" data-i18n-title="ui.h.layout.grid.title">grid</button>
+      <button data-layout="row" data-i18n-title="ui.h.layout.row.title">row</button>
+      <button data-layout="main" data-i18n-title="ui.h.layout.main.title">main</button>
+      <button data-layout="tall" data-i18n-title="ui.h.layout.tall.title">2col</button>
     </div>
     <span class="tb-sep only-chat"></span>
-    <button class="only-chat" id="libraryBtn" title="라이브러리: 내 템플릿(변수)과 스킬을 만들고 고칩니다">lib</button>
-    <button class="only-chat" id="projectBtn" title="프로젝트: 로컬 프로젝트 폴더를 열어 AI에게 코드 맥락을 함께 보냅니다">proj</button>
-    <button class="only-chat" id="changesBtn" title="변경 제안: AI 답변의 코드 수정안을 비교하고 적용합니다 (Ctrl+Shift+P)">diff</button>
-    <button class="only-chat" id="historyBtn" title="기록: 지금까지 보낸 질문과 답변 (Ctrl+H)">hist</button>
-    <button class="only-chat" id="compareBtn" title="답변 비교: 열린 패널의 최신 답변을 나란히 봅니다 (Ctrl+Shift+D)">cmp</button>
+    <button class="only-chat" id="libraryBtn" data-i18n-title="ui.h.libraryBtn.title">lib</button>
+    <button class="only-chat" id="projectBtn" data-i18n-title="ui.h.projectBtn.title">proj</button>
+    <button class="only-chat" id="changesBtn" data-i18n-title="ui.h.changesBtn.title">diff</button>
+    <button class="only-chat" id="historyBtn" data-i18n-title="ui.h.historyBtn.title">hist</button>
+    <button class="only-chat" id="compareBtn" data-i18n-title="ui.h.compareBtn.title">cmp</button>
     <span class="tb-sep only-chat"></span>
-    <button class="only-chat ghost" id="copyAll" title="모든 답변 복사: 열린 패널의 최신 답변을 한 번에 복사 (Ctrl+Shift+C)">copy</button>
-    <button class="only-chat ghost" id="newChatAll" title="모두 새 대화 (Ctrl+Shift+N)">new</button>
-    <button class="only-chat ghost" id="reloadAll" title="모두 새로고침 (Ctrl+Shift+R)">reload</button>
+    <button class="only-chat ghost" id="copyAll" data-i18n-title="ui.h.copyAll.title">copy</button>
+    <button class="only-chat ghost" id="newChatAll" data-i18n-title="ui.h.newChatAll.title">new</button>
+    <button class="only-chat ghost" id="reloadAll" data-i18n-title="ui.h.reloadAll.title">reload</button>
     <span class="tb-sep only-chat"></span>
-    <button class="only-chat" id="sideBtn" hidden title="사이드탭: 크롬 오른쪽 사이드 패널에 AI 최대 2개 + 보고 있는 페이지 (Alt+Shift+S, 크롬 확장 전용)">side</button>
-    <button class="only-chat" id="helpBtn" title="설정 · 단축키 (Ctrl+/)">?</button>
-    <button class="only-chat" id="pickBtn" title="모델 선택: 함께 쓸 AI를 다시 고릅니다">models</button>
-    <button class="only-auth danger" id="logoutBtn">로그아웃</button>
+    <button class="only-chat" id="sideBtn" hidden data-i18n-title="ui.h.sideBtn.title">side</button>
+    <button class="only-chat" id="helpBtn" data-i18n-title="ui.h.helpBtn.title">?</button>
+    <button class="only-chat" id="pickBtn" data-i18n-title="ui.h.pickBtn.title">models</button>
+    <button class="only-auth danger" id="logoutBtn" data-i18n="ui.h.logoutBtn"></button>
   </header>
 
   <!-- 모델 고르기 화면 (최대 6개) -->
@@ -46,8 +46,8 @@
   <section id="pick" class="only-pick">
     <div class="pick-inner">
       <div class="pick-head">
-        <span class="pick-eyebrow"># 여러 AI를 한 화면에서</span>
-        <h1>사용할 모델을 고르세요</h1>
+        <span class="pick-eyebrow" data-i18n="ui.h.pick.eyebrow"></span>
+        <h1 data-i18n="ui.h.pick.title"></h1>
         <p class="muted" id="pickNote"></p>
       </div>
       <!-- 질문 종류별 추천 조합 (v0.27.0, recommend-ui.js) — 기록이 모자라면 비어 있다 -->
@@ -55,23 +55,23 @@
       <div class="feature-grid">
         <article class="feature">
           <span class="feature-step">01</span>
-          <h3>모델 고르기</h3>
-          <p>아래에서 함께 쓸 AI를 최대 6개까지 고릅니다.</p>
+          <h3 data-i18n="ui.h.pick.step1"></h3>
+          <p data-i18n="ui.h.pick.step1Body"></p>
         </article>
         <article class="feature">
           <span class="feature-step">02</span>
-          <h3>한 번에 질문</h3>
-          <p>맨 아래 입력창에 쓰고 <kbd>Enter</kbd> — 모든 AI에게 동시에 보냅니다.</p>
+          <h3 data-i18n="ui.h.pick.step2"></h3>
+          <p><span data-i18n="ui.h.pick.step2Body"></span> <kbd>Enter</kbd> <span data-i18n="ui.h.pick.step2Body2"></span></p>
         </article>
         <article class="feature">
           <span class="feature-step">03</span>
-          <h3>비교 · 종합</h3>
-          <p>답변을 나란히 비교하고, 한 AI에게 최종 정리를 맡깁니다.</p>
+          <h3 data-i18n="ui.h.pick.step3"></h3>
+          <p data-i18n="ui.h.pick.step3Body"></p>
         </article>
       </div>
       <div id="modelList"></div>
       <div class="pick-foot">
-        <button id="openBtn" class="primary">선택한 모델 열기</button>
+        <button id="openBtn" class="primary" data-i18n="ui.h.openBtn"></button>
         <span id="pickCount" class="pick-count"></span>
       </div>
     </div>
@@ -84,38 +84,38 @@
   <aside id="projectSide" class="project-side">
     <div class="ps-head">
       <span class="ps-title">~/<b id="psName"></b></span>
-      <button id="psRescan" title="폴더를 다시 읽습니다 (AI에게 보낸 뒤 로컬에서 바뀐 파일이 있으면 바로 보낼 수 있게 알려 줍니다)">⟳</button>
-      <button id="psHide" title="사이드바 접기 (프로젝트는 열린 채로)">⟨</button>
-      <button id="psClose" class="danger" title="프로젝트 닫기">✕</button>
+      <button id="psRescan" data-i18n-title="ui.h.psRescan.title">⟳</button>
+      <button id="psHide" data-i18n-title="ui.h.psHide.title">⟨</button>
+      <button id="psClose" class="danger" data-i18n-title="ui.h.psClose.title">✕</button>
     </div>
     <div id="psConnect" class="ps-connect" hidden>
-      <span>크롬 정책상 폴더 접근을 다시 허용해야 합니다.</span>
-      <button id="psReconnect" class="primary">폴더 접근 허용</button>
+      <span data-i18n="ui.h.psConnect.text"></span>
+      <button id="psReconnect" class="primary" data-i18n="ui.h.psReconnect"></button>
     </div>
     <details id="psRules" class="ps-rules">
-      <summary>제외 규칙</summary>
+      <summary data-i18n="ui.h.psRules.summary"></summary>
       <div id="psRulesBody"></div>
     </details>
     <details id="psServices" class="ps-rules">
-      <summary>프로젝트 파일을 보낼 서비스</summary>
+      <summary data-i18n="ui.h.psServices.summary"></summary>
       <div id="psServicesBody"></div>
     </details>
     <div id="psTree" class="ps-tree"></div>
     <div class="ps-foot">
       <div class="ps-upload">
-        <span class="muted-label">올리는 방식</span>
+        <span class="muted-label" data-i18n="ui.h.psUploadMode.label"></span>
         <div id="psUploadMode" class="seg">
-          <button data-umode="bundle" title="구조와 파일 내용을 경로가 붙은 .md 파일로 묶어 올립니다 (크면 나눔)">묶음 파일</button>
-          <button data-umode="files" title="파일마다 하나씩 올립니다. 이름에 경로를 넣고(src__a__index.js), 한도를 넘으면 그번만 묶음 파일로 보냅니다">개별 파일</button>
+          <button data-umode="bundle" data-i18n-title="ui.h.umode.bundle.title" data-i18n="ui.h.umode.bundle"></button>
+          <button data-umode="files" data-i18n-title="ui.h.umode.files.title" data-i18n="ui.h.umode.files"></button>
         </div>
       </div>
-      <label class="check ps-split" title="고칠 파일이 많거나 길 때: 먼저 고칠 파일 목록(계획)만 받고, 한 파일씩 차례로 물어 모읍니다 — 답이 출력 한도로 끊기지 않게 (v0.18.0)"><input type="checkbox" id="psSplit" /> 큰 작업 — 계획 먼저 · 파일별로 받기</label>
-      <label class="check ps-split ps-sub" title="계획 답이 오면 [▶ 파일별로 받기 시작]을 누르지 않아도 바로 한 파일씩 받기 시작합니다 (v0.22.0)"><input type="checkbox" id="psAutoRun" /> 계획이 오면 바로 시작</label>
-      <label class="check ps-split" title="답이 출력 한도로 끊긴 파일이 있으면 [↪ 이어서 받기]를 누르지 않아도 같은 AI에게 나머지를 부탁합니다 — 한 파일 최대 3번 (v0.22.0)"><input type="checkbox" id="psAutoCont" /> 잘리면 자동으로 이어 받기</label>
-      <label class="check ps-split" title="첫 질문 뒤에는 그 AI에게 보낸 뒤로 내용이 바뀐 파일만 다시 올리고, 나머지는 &quot;앞서 보낸 그대로&quot; 목록으로만 알립니다 (v0.23.0)"><input type="checkbox" id="psIncremental" /> 바뀐 파일만 보내기</label>
-      <label class="check ps-split ps-sub" title="이어지는 질문에 지난번에 보낸 파일 목록(경로 · 줄 수)을 붙이고, 그중 바뀐 파일은 다시 올립니다 — 고른 파일이 없어도 (v0.23.0)"><input type="checkbox" id="psFollowList" /> 이어지는 질문에 지난 파일 목록 붙이기</label>
+      <label class="check ps-split" data-i18n-title="ui.h.psSplit.title"><input type="checkbox" id="psSplit" /> <span data-i18n="ui.h.psSplit"></span></label>
+      <label class="check ps-split ps-sub" data-i18n-title="ui.h.psAutoRun.title"><input type="checkbox" id="psAutoRun" /> <span data-i18n="ui.h.psAutoRun"></span></label>
+      <label class="check ps-split" data-i18n-title="ui.h.psAutoCont.title"><input type="checkbox" id="psAutoCont" /> <span data-i18n="ui.h.psAutoCont"></span></label>
+      <label class="check ps-split" data-i18n-title="ui.h.psIncremental.title"><input type="checkbox" id="psIncremental" /> <span data-i18n="ui.h.psIncremental"></span></label>
+      <label class="check ps-split ps-sub" data-i18n-title="ui.h.psFollowList.title"><input type="checkbox" id="psFollowList" /> <span data-i18n="ui.h.psFollowList"></span></label>
       <div id="psRestore" class="ps-restore" hidden></div>
-      <button id="psGit" title="이 프로젝트 폴더에서 git 명령을 실행합니다 (Windows 앱 전용)" hidden>git 콘솔</button>
+      <button id="psGit" data-i18n-title="ui.h.psGit.title" hidden data-i18n="ui.h.psGit"></button>
       <button id="psSync" class="primary" hidden></button>
       <span id="psSummary" class="muted-label"></span>
     </div>
@@ -124,22 +124,22 @@
   <!-- 답변 비교 화면 -->
   <section id="compare" class="only-compare" data-ctab="answers">
     <div class="compare-head">
-      <div id="compareTabs" class="seg" role="tablist" aria-label="답변 비교 보기">
-        <button data-ctab="answers" role="tab" title="AI마다 최신 답변을 나란히 봅니다">답변</button>
-        <button data-ctab="analysis" role="tab" title="판정 AI가 답변의 공통 의견 · 이견 · 근거 부족 · 최종 답변을 표로 정리합니다">분석</button>
+      <div id="compareTabs" class="seg" role="tablist" data-i18n-aria="ui.h.compareTabs.aria">
+        <button data-ctab="answers" role="tab" data-i18n-title="ui.h.ctab.answers.title" data-i18n="ui.h.ctab.answers"></button>
+        <button data-ctab="analysis" role="tab" data-i18n-title="ui.h.ctab.analysis.title" data-i18n="ui.h.ctab.analysis"></button>
         <button data-ctab="chain" role="tab" data-i18n="compare.chainTab" data-i18n-title="compare.chainTabTitle"></button>
       </div>
-      <span class="muted-label">질문</span>
+      <span class="muted-label" data-i18n="ui.h.compare.questionLabel"></span>
       <span id="compareQuestion" class="compare-question"></span>
       <span class="diff-tools only-ctab-answers">
-        <button id="diffToggle" aria-pressed="false" title="기준 답변과 다른 문장만 강조합니다">차이 강조</button>
-        <select id="diffBase" aria-label="기준 답변" title="이 답변과 비교합니다" hidden></select>
+        <button id="diffToggle" aria-pressed="false" data-i18n-title="ui.h.diffToggle.title" data-i18n="ui.h.diffToggle"></button>
+        <select id="diffBase" data-i18n-aria="ui.h.diffBase.aria" data-i18n-title="ui.h.diffBase.title" hidden></select>
       </span>
-      <button id="analysisRun" class="only-ctab-analysis" title="종합 담당 AI에게 답변 일치 · 이견 분석을 요청합니다">분석 요청</button>
-      <button id="compareExportMd" class="ghost" title="질문 · 지금 답변 · 분석을 Markdown 파일로 저장합니다">MD 저장</button>
-      <button id="compareExportHtml" class="ghost" title="질문 · 지금 답변 · 분석을 밝은 문서 모양 HTML 파일로 저장합니다 (브라우저에서 인쇄하면 PDF)">HTML 저장</button>
-      <button id="compareRefresh" title="답변을 다시 읽어 옵니다">새로고침</button>
-      <button id="compareClose">패널로 돌아가기</button>
+      <button id="analysisRun" class="only-ctab-analysis" data-i18n-title="ui.h.analysisRun.title" data-i18n="ui.h.analysisRun"></button>
+      <button id="compareExportMd" class="ghost" data-i18n-title="ui.h.compareExportMd.title" data-i18n="ui.h.compareExportMd"></button>
+      <button id="compareExportHtml" class="ghost" data-i18n-title="ui.h.compareExportHtml.title" data-i18n="ui.h.compareExportHtml"></button>
+      <button id="compareRefresh" data-i18n-title="ui.h.compareRefresh.title" data-i18n="ui.h.compareRefresh"></button>
+      <button id="compareClose" data-i18n="ui.h.compareClose"></button>
     </div>
     <div id="compareCols" class="compare-cols only-ctab-answers"></div>
     <div id="analysisView" class="analysis-view only-ctab-analysis"></div>
@@ -149,13 +149,13 @@
   <!-- 변경 제안 화면: AI별 코드 수정안 비교 (project.js) -->
   <section id="changes" class="only-changes">
     <div class="compare-head">
-      <span class="muted-label">변경 제안</span>
+      <span class="muted-label" data-i18n="ui.h.changes.label"></span>
       <span id="changesInfo" class="compare-question"></span>
-      <button id="changesLog" title="적용한 수정안 목록과 되돌리기">적용 기록</button>
+      <button id="changesLog" data-i18n-title="ui.h.changesLog.title" data-i18n="ui.h.changesLog"></button>
       <button id="changesMix" data-i18n="mix.button" data-i18n-title="mix.buttonTitle" disabled></button>
-      <button id="changesMerge" title="여러 AI의 수정안을 종합 담당 AI에게 하나로 합쳐 달라고 합니다">종합으로 합치기</button>
-      <button id="changesRefresh" title="답변을 다시 읽어 옵니다">새로고침</button>
-      <button id="changesClose">패널로 돌아가기</button>
+      <button id="changesMerge" data-i18n-title="ui.h.changesMerge.title" data-i18n="ui.h.changesMerge"></button>
+      <button id="changesRefresh" data-i18n-title="ui.h.changesRefresh.title" data-i18n="ui.h.changesRefresh"></button>
+      <button id="changesClose" data-i18n="ui.h.changesClose"></button>
     </div>
     <div id="changesCols" class="compare-cols"></div>
   </section>
@@ -163,26 +163,26 @@
   <!-- 라이브러리 화면: 내 템플릿 · 스킬 (library.js) -->
   <section id="library" class="only-library">
     <div class="compare-head">
-      <span class="muted-label">라이브러리</span>
+      <span class="muted-label" data-i18n="ui.h.library.label"></span>
       <div class="seg">
-        <button data-libtab="templates">템플릿</button>
-        <button data-libtab="skills">스킬</button>
+        <button data-libtab="templates" data-i18n="ui.h.libtab.templates"></button>
+        <button data-libtab="skills" data-i18n="ui.h.libtab.skills"></button>
         <button data-libtab="presets" data-i18n="preset.tab"></button>
       </div>
-      <label id="libWarn" class="check" title="보내는 글이 이 길이 이상이면 압축 권장 표시를 띄웁니다 (강력 권장은 2배, 합계 확인 창은 약 1.9배, &quot;매 질문마다&quot;면 기준의 0.6배)">압축 권장: 스킬 하나
-        <input id="libWarnOne" type="number" min="1000" max="20000" step="500" />자 · 합계
-        <input id="libWarnTotal" type="number" min="2000" max="30000" step="500" />자
+      <label id="libWarn" class="check" data-i18n-title="ui.h.libWarn.title"><span data-i18n="ui.h.libWarn.text"></span>
+        <input id="libWarnOne" type="number" min="1000" max="20000" step="500" /><span data-i18n="ui.h.libWarn.text2"></span>
+        <input id="libWarnTotal" type="number" min="2000" max="30000" step="500" /><span data-i18n="ui.h.libWarn.text3"></span>
       </label>
-      <label id="libMode" class="check" title="스킬 지침을 언제 붙일지">붙이는 때
+      <label id="libMode" class="check" data-i18n-title="ui.h.libMode.title"><span data-i18n="ui.h.libMode.text"></span>
         <select id="libSkillMode">
-          <option value="first">새 대화 첫 질문에만</option>
-          <option value="every">매 질문마다</option>
+          <option value="first" data-i18n="ui.h.libMode.first"></option>
+          <option value="every" data-i18n="ui.h.libMode.every"></option>
         </select>
       </label>
       <span class="spacer"></span>
-      <button id="libImport" title="내보낸 라이브러리 파일(.json)에서 템플릿·스킬을 가져와 지금 것에 더합니다">가져오기</button>
-      <button id="libExport" title="내 템플릿·스킬을 .json 파일로 내보냅니다">내보내기</button>
-      <button id="libClose">패널로 돌아가기</button>
+      <button id="libImport" data-i18n-title="ui.h.libImport.title" data-i18n="ui.h.libImport"></button>
+      <button id="libExport" data-i18n-title="ui.h.libExport.title" data-i18n="ui.h.libExport"></button>
+      <button id="libClose" data-i18n="ui.h.libClose"></button>
       <input type="file" id="libImportFile" accept=".json,application/json" hidden />
       <input type="file" id="libSkillFile" accept=".md,.markdown,.txt,text/markdown,text/plain" multiple hidden />
     </div>
@@ -204,21 +204,21 @@
           </div>
         </div>
         <div id="libEditor" class="lib-editor" hidden>
-          <label class="lib-field"><span class="muted-label">이름</span><input id="libName" maxlength="60" spellcheck="false" /></label>
+          <label class="lib-field"><span class="muted-label" data-i18n="ui.h.libName.label"></span><input id="libName" maxlength="60" spellcheck="false" /></label>
           <label class="lib-field"><span id="libHintLabel" class="muted-label"></span><input id="libHint" maxlength="200" spellcheck="false" /></label>
           <label class="lib-field grow"><span id="libTextLabel" class="muted-label"></span><textarea id="libText" spellcheck="false"></textarea></label>
           <div id="libSkillOpts" class="lib-skill-opts" hidden>
-            <label class="check" title="압축본이 있으면 고를 수 있습니다">보낼 때
+            <label class="check" data-i18n-title="ui.h.libUseCompact.title"><span data-i18n="ui.h.libUseCompact.label"></span>
               <select id="libUseCompact">
-                <option value="compact">압축본</option>
-                <option value="body">원문 (정리해서)</option>
+                <option value="compact" data-i18n="ui.h.libUseCompact.compact"></option>
+                <option value="body" data-i18n="ui.h.libUseCompact.body"></option>
               </select>
             </label>
-            <label class="check" title="원문을 보낼 때 '예시' · 'Example' 제목 아래 절을 뺍니다"><input type="checkbox" id="libDropEx" /> 예시 절 빼기</label>
-            <label class="check"><input type="checkbox" id="libNoWarn" /> 이 스킬은 압축 권장 알림 끄기</label>
+            <label class="check" data-i18n-title="ui.h.libDropEx.title"><input type="checkbox" id="libDropEx" /> <span data-i18n="ui.h.libDropEx"></span></label>
+            <label class="check"><input type="checkbox" id="libNoWarn" /> <span data-i18n="ui.h.libNoWarn"></span></label>
             <span class="spacer"></span>
-            <button id="libCompactDel" class="danger" title="압축본만 지웁니다 (원문은 그대로)">압축본 지우기</button>
-            <button id="libCompress" class="accent" title="열린 패널의 AI에게 압축을 부탁해 압축본을 만듭니다"></button>
+            <button id="libCompactDel" class="danger" data-i18n-title="ui.h.libCompactDel.title" data-i18n="ui.h.libCompactDel"></button>
+            <button id="libCompress" class="accent" data-i18n-title="ui.h.libCompress.title"></button>
           </div>
           <!-- 스킬 이전 버전 (v0.29.0, library-presets.js): 저장할 때마다 바로 전 본문을 남김 · 차이 보기 · 되돌리기 -->
           <details id="libVersions" class="lib-versions" hidden>
@@ -235,10 +235,10 @@
             <span id="libInfo" class="muted-label"></span>
             <span class="spacer"></span>
             <button id="libUse" class="accent"></button>
-            <button id="libExportMd" title="이 스킬을 SKILL.md 파일로 내보냅니다">SKILL.md 내보내기</button>
+            <button id="libExportMd" data-i18n-title="ui.h.libExportMd.title" data-i18n="ui.h.libExportMd"></button>
             <button id="libCopy"></button>
-            <button id="libDelete" class="danger">삭제</button>
-            <button id="libSave" class="primary">저장</button>
+            <button id="libDelete" class="danger" data-i18n="ui.h.libDelete"></button>
+            <button id="libSave" class="primary" data-i18n="ui.h.libSave"></button>
           </div>
         </div>
       </div>
@@ -248,50 +248,50 @@
   <!-- 스킬 "AI로 압축" 화면 -->
   <section id="compressView" class="only-compress">
     <div class="compare-head">
-      <span class="muted-label">스킬 압축</span>
+      <span class="muted-label" data-i18n="ui.h.compress.label"></span>
       <span id="cmpTitle" class="compare-question"></span>
-      <label class="check">맡길 AI <select id="cmpTarget"></select></label>
-      <label class="check">목표 <input id="cmpLen" type="number" min="200" max="20000" step="100" />자 이내</label>
-      <label class="check" title="일반 질문과 섞이지 않게 그 패널에서 새 대화를 연 뒤 요청합니다"><input type="checkbox" id="cmpNew" checked /> 새 대화에서</label>
-      <button id="cmpRun" class="primary">압축 요청</button>
-      <button id="cmpRead" title="고른 패널의 지금 최신 답변에서 압축본을 다시 읽어 옵니다 (자동으로 못 가져왔을 때)">패널에서 다시 읽기</button>
+      <label class="check"><span data-i18n="ui.h.cmpTarget.label"></span> <select id="cmpTarget"></select></label>
+      <label class="check"><span data-i18n="ui.h.cmpLen.label"></span> <input id="cmpLen" type="number" min="200" max="20000" step="100" /><span data-i18n="ui.h.cmpLen.unit"></span></label>
+      <label class="check" data-i18n-title="ui.h.cmpNew.title"><input type="checkbox" id="cmpNew" checked /> <span data-i18n="ui.h.cmpNew"></span></label>
+      <button id="cmpRun" class="primary" data-i18n="ui.h.cmpRun"></button>
+      <button id="cmpRead" data-i18n-title="ui.h.cmpRead.title" data-i18n="ui.h.cmpRead"></button>
       <span class="spacer"></span>
-      <button id="cmpClose">라이브러리로 돌아가기</button>
+      <button id="cmpClose" data-i18n="ui.h.cmpClose"></button>
     </div>
     <div id="cmpStatus" class="cmp-status"></div>
     <div class="cmp-body">
       <div class="cmp-col">
-        <span class="muted-label">원문 <span id="cmpSrcCount"></span></span>
+        <span class="muted-label"><span data-i18n="ui.h.cmpSrc.label"></span> <span id="cmpSrcCount"></span></span>
         <pre id="cmpSrc" class="vars-preview"></pre>
       </div>
       <div class="cmp-col">
-        <span class="muted-label">압축본 (고칠 수 있음) <span id="cmpOutCount"></span></span>
+        <span class="muted-label"><span data-i18n="ui.h.cmpOut.label"></span> <span id="cmpOutCount"></span></span>
         <textarea id="cmpOut" spellcheck="false"></textarea>
       </div>
     </div>
     <div class="lib-actions">
-      <span class="muted-label">저장하면 이 스킬 항목에 압축본으로 들어갑니다 (원문은 그대로 · 파일로 내려받지 않음)</span>
+      <span class="muted-label" data-i18n="ui.h.cmpSave.note"></span>
       <span class="spacer"></span>
-      <button id="cmpSave" class="primary" disabled>저장</button>
+      <button id="cmpSave" class="primary" disabled data-i18n="ui.h.cmpSave"></button>
     </div>
   </section>
 
   <!-- 템플릿 변수 입력 화면 -->
   <section id="varsView" class="only-vars">
     <div class="compare-head">
-      <span class="muted-label">템플릿 변수 입력</span>
+      <span class="muted-label" data-i18n="ui.h.vars.title"></span>
       <span id="varsTitle" class="compare-question"></span>
     </div>
     <form id="varsForm" class="vars-form">
       <div id="varsFields" class="vars-fields"></div>
       <span id="varsQ" class="muted-label"></span>
-      <span class="muted-label">보낼 글 미리보기</span>
+      <span class="muted-label" data-i18n="ui.h.vars.preview"></span>
       <pre id="varsPreview" class="vars-preview"></pre>
       <div class="lib-actions">
-        <span class="muted-label">Enter: 보내기 · Esc: 취소</span>
+        <span class="muted-label" data-i18n="ui.h.vars.keys"></span>
         <span class="spacer"></span>
-        <button id="varsCancel" type="button">취소</button>
-        <button type="submit" class="primary">보내기</button>
+        <button id="varsCancel" type="button" data-i18n="ui.h.varsCancel"></button>
+        <button type="submit" class="primary" data-i18n="ui.h.vars.send"></button>
       </div>
     </form>
   </section>
@@ -299,36 +299,36 @@
   <!-- git 콘솔 화면 (Windows 앱 전용) -->
   <section id="gitView" class="only-git">
     <div class="compare-head">
-      <span class="muted-label">git 콘솔</span>
+      <span class="muted-label" data-i18n="ui.h.git.label"></span>
       <span id="gitWhere" class="compare-question"></span>
-      <button data-git="git status" title="바뀐 파일 보기">status</button>
-      <button data-git="git diff --stat" title="바뀐 줄 수 요약">diff --stat</button>
-      <button data-git="git log --oneline -20" title="최근 커밋 20개">log</button>
-      <button data-git="git branch -vv" title="브랜치 목록">branch</button>
-      <button id="gitTerm" title="이 폴더에서 Windows 터미널(없으면 PowerShell)을 엽니다 — git 밖의 명령은 거기서 직접 실행하세요">터미널 열기</button>
-      <button id="gitClear">지우기</button>
-      <button id="gitClose">패널로 돌아가기</button>
+      <button data-git="git status" data-i18n-title="ui.h.git.gitStatus.title">status</button>
+      <button data-git="git diff --stat" data-i18n-title="ui.h.git.gitDiffStat.title">diff --stat</button>
+      <button data-git="git log --oneline -20" data-i18n-title="ui.h.git.gitLogOneline20.title">log</button>
+      <button data-git="git branch -vv" data-i18n-title="ui.h.git.gitBranchVv.title">branch</button>
+      <button id="gitTerm" data-i18n-title="ui.h.gitTerm.title" data-i18n="ui.h.gitTerm"></button>
+      <button id="gitClear" data-i18n="ui.h.gitClear"></button>
+      <button id="gitClose" data-i18n="ui.h.gitClose"></button>
     </div>
     <div id="gitNote" class="git-note" hidden></div>
     <pre id="gitOut" class="git-out"></pre>
     <form id="gitForm" class="git-form">
       <span class="git-prompt">&gt;</span>
-      <input id="gitInput" spellcheck="false" autocomplete="off" placeholder="git status · git add -A · git commit -m &quot;메시지&quot; · git push (↑↓ 이전 명령)" />
-      <button id="gitRun" class="primary" type="submit">실행</button>
-      <button id="gitStop" type="button" disabled>중지</button>
+      <input id="gitInput" spellcheck="false" autocomplete="off" data-i18n-placeholder="ui.h.gitInput.ph" />
+      <button id="gitRun" class="primary" type="submit" data-i18n="ui.h.gitRun"></button>
+      <button id="gitStop" type="button" disabled data-i18n="ui.h.gitStop"></button>
     </form>
   </section>
 
   <!-- 프로젝트 파일 편집기 -->
   <section id="editor" class="only-editor">
     <div class="compare-head">
-      <span class="muted-label">파일 편집</span>
+      <span class="muted-label" data-i18n="ui.h.editor.label"></span>
       <span id="edPath" class="compare-question"></span>
       <span id="edStatus" class="muted-label"></span>
-      <button id="edReload" title="디스크에서 다시 읽습니다 (고친 내용은 버립니다)">다시 읽기</button>
-      <button id="edSave" title="로컬 파일에 저장합니다 (Ctrl+S). 적용 기록에서 되돌릴 수 있습니다">저장</button>
-      <button id="edSaveSend" class="accent" title="저장한 뒤, 이 파일을 받은 적 있는 AI 탭에 바뀐 내용을 보냅니다">저장하고 AI에 보내기</button>
-      <button id="edClose">패널로 돌아가기</button>
+      <button id="edReload" data-i18n-title="ui.h.edReload.title" data-i18n="ui.h.edReload"></button>
+      <button id="edSave" data-i18n-title="ui.h.edSave.title" data-i18n="ui.h.edSave"></button>
+      <button id="edSaveSend" class="accent" data-i18n-title="ui.h.edSaveSend.title" data-i18n="ui.h.edSaveSend"></button>
+      <button id="edClose" data-i18n="ui.h.edClose"></button>
     </div>
     <textarea id="edText" class="ed-text" spellcheck="false" wrap="off"></textarea>
   </section>
@@ -342,10 +342,10 @@
       <div class="modal-foot">
         <span id="patchStatus" class="muted-label"></span>
         <span id="patchChecks" class="patch-checks" hidden></span>
-        <button id="patchTest" hidden title="package.json의 test(있으면 옆에서 고른 lint · typecheck · build도)를 적용 전 · 체크한 수정안을 잠깐 쓴 후 두 번 실행하고 원래 파일로 되돌립니다 (Windows 앱)">테스트 실행</button>
-        <button id="patchAll" title="실행 영향 파일과 삭제까지 모두 체크합니다">모두 선택</button>
-        <button id="patchApply" class="primary" title="Ctrl+Enter">선택한 파일 적용</button>
-        <button id="patchCancel">닫기</button>
+        <button id="patchTest" hidden data-i18n-title="ui.h.patchTest.title" data-i18n="ui.h.patchTest"></button>
+        <button id="patchAll" data-i18n-title="ui.h.patchAll.title" data-i18n="ui.h.patchAll"></button>
+        <button id="patchApply" class="primary" title="Ctrl+Enter" data-i18n="ui.h.patchApply"></button>
+        <button id="patchCancel" data-i18n="ui.h.patchCancel"></button>
       </div>
     </div>
   </div>
@@ -361,11 +361,11 @@
       </div>
       <div class="modal-foot">
         <span id="diagStatus" class="muted-label"></span>
-        <button id="diagRefresh" title="GitHub에서 고친 셀렉터가 있는지 지금 받아 봅니다">셀렉터 지금 확인</button>
-        <button id="diagHome" title="이 패널을 처음 주소로 다시 엽니다">처음 화면으로</button>
-        <button id="diagCopy" title="서비스 · 앱 버전 · 셀렉터 버전 · 찾은/못 찾은 항목을 복사합니다 (질문 · 답변 글은 넣지 않음)">진단 정보 복사</button>
-        <button id="diagSettings" class="ghost" title="설정의 서비스 화면 상태 표">전체 상태</button>
-        <button id="diagClose" class="primary">닫기</button>
+        <button id="diagRefresh" data-i18n-title="ui.h.diagRefresh.title" data-i18n="ui.h.diagRefresh"></button>
+        <button id="diagHome" data-i18n-title="ui.h.diagHome.title" data-i18n="ui.h.diagHome"></button>
+        <button id="diagCopy" data-i18n-title="ui.h.diagCopy.title" data-i18n="ui.h.diagCopy"></button>
+        <button id="diagSettings" class="ghost" data-i18n-title="ui.h.diagSettings.title" data-i18n="ui.h.diagSettings"></button>
+        <button id="diagClose" class="primary" data-i18n="ui.h.diagClose"></button>
       </div>
     </div>
   </div>
@@ -430,7 +430,7 @@
   <!-- 질문·답변 기록 화면 -->
   <section id="history" class="only-history">
     <aside class="history-side">
-      <input id="historySearch" type="search" placeholder="질문·답변에서 찾기" />
+      <input id="historySearch" type="search" data-i18n-placeholder="ui.h.historySearch.ph" />
       <!-- v0.27.0: 묶는 방식 · 거르기 (history-view.js) -->
       <div class="history-tools">
         <div id="historyGroup" class="seg">
@@ -486,8 +486,8 @@
         <button id="historyPickClear" data-i18n="history.selectClear"></button>
       </div>
       <div class="history-side-foot">
-        <button id="historyClear" class="danger">기록 전체 삭제</button>
-        <button id="historyClose">패널로 돌아가기</button>
+        <button id="historyClear" class="danger" data-i18n="ui.h.historyClear"></button>
+        <button id="historyClose" data-i18n="ui.h.historyClose"></button>
       </div>
     </aside>
     <div id="historyDetail" class="history-detail"></div>
@@ -496,14 +496,14 @@
   <!-- 설정·단축키(?) 화면 -->
   <section id="help" class="only-help">
     <div class="help-box">
-      <h2>설정</h2>
+      <h2 data-i18n="ui.h.settings.title"></h2>
       <div class="setting-row">
-        <label for="timeoutSelect">답변 최대 대기 시간</label>
+        <label for="timeoutSelect" data-i18n="ui.h.timeoutSelect.label"></label>
         <select id="timeoutSelect"></select>
       </div>
-      <p class="muted small">이 시간이 지나면 "시간 초과"로 표시하지만, 그 뒤에도 1시간 동안 계속 지켜보다가 끝나면 "완료"로 바꿉니다.</p>
+      <p class="muted small" data-i18n="ui.h.timeoutSelect.note"></p>
       <div class="setting-row">
-        <label for="historyMaxSelect" data-i18n="settings.historyMax">기록 최대 개수</label>
+        <label for="historyMaxSelect" data-i18n="settings.historyMax"></label>
         <select id="historyMaxSelect"></select>
       </div>
       <p class="muted small" data-i18n="settings.historyMaxNote"></p>
@@ -532,41 +532,41 @@
       </div>
       <p class="muted small" data-i18n="settings.notifyNote"></p>
       <div class="setting-row">
-        <label class="check-label"><input type="checkbox" id="remoteToggle" /> 사이트 셀렉터 자동 갱신</label>
-        <button id="remoteRefresh">지금 확인</button>
+        <label class="check-label"><input type="checkbox" id="remoteToggle" /> <span data-i18n="ui.h.remoteToggle"></span></label>
+        <button id="remoteRefresh" data-i18n="ui.h.remoteRefresh"></button>
       </div>
       <p class="muted small" id="remoteStatus"></p>
-      <h2>업데이트</h2>
+      <h2 data-i18n="ui.h.update.title"></h2>
       <div class="setting-row">
-        <label class="check-label"><input type="checkbox" id="updateAuto" /> 새 버전 자동 확인</label>
+        <label class="check-label"><input type="checkbox" id="updateAuto" /> <span data-i18n="ui.h.updateAuto"></span></label>
         <span class="row-actions">
-          <button id="updateCheck">지금 확인</button>
-          <button id="updateDownload" class="accent" hidden>다운로드</button>
-          <button id="updateInstall" class="primary" hidden>다시 시작해서 설치</button>
-          <button id="updateOpen" class="ghost" hidden title="GitHub Releases 페이지">releases ↗</button>
+          <button id="updateCheck" data-i18n="ui.h.updateCheck"></button>
+          <button id="updateDownload" class="accent" hidden data-i18n="ui.h.updateDownload"></button>
+          <button id="updateInstall" class="primary" hidden data-i18n="ui.h.updateInstall"></button>
+          <button id="updateOpen" class="ghost" hidden data-i18n-title="ui.h.updateOpen.title">releases ↗</button>
         </span>
       </div>
       <p class="muted small" id="updateStatus"></p>
-      <h2>저장</h2>
+      <h2 data-i18n="ui.h.storage.title"></h2>
       <p class="muted small" id="storageStatus"></p>
-      <h2>로컬 LLM (선택 기능)</h2>
+      <h2 data-i18n="ui.h.local.title"></h2>
       <div class="setting-row">
-        <label class="check-label"><input type="checkbox" id="localEnabled" /> 로컬 LLM 패널 쓰기</label>
+        <label class="check-label"><input type="checkbox" id="localEnabled" /> <span data-i18n="ui.h.localEnabled"></span></label>
       </div>
-      <p class="muted small">켜면 모델 고르기에 <b>로컬 LLM</b>이 생겨, 이 PC에서 돌아가는 Ollama · LM Studio · llama.cpp 같은 OpenAI 호환 서버에 웹 패널과 함께 질문합니다. 주소는 이 PC(localhost · 127.0.0.1)만 받고, API 키 · 바깥 주소는 쓰지 않습니다 — 질문과 프로젝트 코드가 PC 밖으로 나가지 않습니다. 첨부는 이미지만(비전 모델일 때) 보냅니다.</p>
+      <p class="muted small"><span data-i18n="ui.h.local.note1"></span> <b data-i18n="ui.h.local.noteName"></b><span data-i18n="ui.h.local.note2"></span></p>
       <div id="localBody" class="local-settings" hidden>
-        <label class="setting-row">주소 <input id="localBase" spellcheck="false" placeholder="http://localhost:11434" /></label>
+        <label class="setting-row"><span data-i18n="ui.h.localBase.label"></span> <input id="localBase" spellcheck="false" placeholder="http://localhost:11434" /></label>
         <div class="setting-row">
-          <label for="localModel">모델</label>
+          <label for="localModel" data-i18n="ui.h.localModel.label"></label>
           <select id="localModel"></select>
-          <button id="localCheck">연결 확인</button>
+          <button id="localCheck" data-i18n="ui.h.localCheck"></button>
         </div>
         <div class="setting-row">
           <label for="localCtx" data-i18n="local.ctxLabel"></label>
           <select id="localCtx"></select>
         </div>
         <p class="muted small" data-i18n="local.ctxNote"></p>
-        <p class="muted small" id="localStatus">Ollama는 http://localhost:11434, LM Studio는 http://localhost:1234 (서버 켜기 필요). 크롬 확장은 Ollama를 <code>OLLAMA_ORIGINS=chrome-extension://*</code>로 켜야 합니다.</p>
+        <p class="muted small" id="localStatus"><span data-i18n="ui.h.localStatus.text"></span> <code>OLLAMA_ORIGINS=chrome-extension://*</code><span data-i18n="ui.h.localStatus.text2"></span></p>
       </div>
       <!-- 설정 옮기기 (v0.29.0, settings-transfer-ui.js): .mla.json 파일로 내보내기 · 가져오기 (기록 · 프로젝트 · 로그인 정보는 넣지 않음) -->
       <h2 data-i18n="transfer.title"></h2>
@@ -579,55 +579,55 @@
         <input type="file" id="transferFile" accept=".json,application/json" hidden />
       </div>
       <p class="muted small" id="transferStatus"></p>
-      <h2>서비스 화면 상태</h2>
-      <p class="muted small">패널마다 앱이 입력창 · 보내기 버튼 · 답변 영역을 찾았는지입니다. 페이지가 열린 뒤와 질문을 보내고 답을 받을 때마다 갱신됩니다. ✕가 있으면 그 패널 머리줄에 <b>⚠ 화면이 바뀐 것 같음</b>이 뜹니다.</p>
+      <h2 data-i18n="ui.h.diag.title"></h2>
+      <p class="muted small"><span data-i18n="ui.h.diag.note1"></span> <b data-i18n="ui.h.diag.noteBadge"></b><span data-i18n="ui.h.diag.note2"></span></p>
       <table id="diagTable" class="diag-table"></table>
       <p class="muted small" id="diagHint"></p>
-      <h2>AI별 응답 통계</h2>
-      <p class="muted small">공통 입력창으로 보낸 질문의 기록에서 셉니다: 답변 완료 비율, 시간 초과 · 답변 없음, 보내기 실패, 사용 한도에 걸린 횟수, 첫 응답과 완료까지 걸린 시간(중앙값), 평균 글자 수, 만족도(답변이 끝난 패널 머리줄의 <b>[+1]</b> 좋았음 · <b>[-1]</b> 별로였음). 프로젝트가 열려 있으면 이 프로젝트에서 AI별로 수정안을 적용 · 되돌린 수도 보여 줍니다.</p>
+      <h2 data-i18n="ui.h.stats.title"></h2>
+      <p class="muted small"><span data-i18n="ui.h.stats.note1"></span> <b>[+1]</b> <span data-i18n="ui.h.stats.note2"></span> <b>[-1]</b> <span data-i18n="ui.h.stats.note3"></span></p>
       <div class="stats-wrap"><table id="statsTable" class="diag-table stats-table"></table></div>
       <p class="muted small" id="statsNote"></p>
       <h3 data-i18n="recommend.table"></h3>
       <p class="muted small" id="recommendNote"></p>
       <div id="recommendTable" class="recommend-table"></div>
-      <h2>단축키</h2>
-      <p class="muted">서비스 패널 안에 커서가 있어도 동작합니다.</p>
+      <h2 data-i18n="ui.h.shortcuts.title"></h2>
+      <p class="muted" data-i18n="ui.h.shortcuts.note"></p>
       <table id="helpTable"></table>
-      <button id="helpClose">닫기 (Esc)</button>
+      <button id="helpClose" data-i18n="ui.h.helpClose"></button>
     </div>
   </section>
 
   <!-- 맨 아래 공통 입력창: 보낼 대상, 첨부 파일, 템플릿·스킬, 종합, 질문 쓰는 칸, 보내기 -->
   <footer id="composer" class="only-chat">
     <div class="targets">
-      <span class="muted-label">보낼 대상</span>
+      <span class="muted-label" data-i18n="ui.h.targets.label"></span>
       <div id="targetChips"></div>
       <button id="recommendChip" class="recommend-chip" hidden></button>
-      <span class="hint" id="sendHint">Enter 보내기 · Shift+Enter 줄바꿈</span>
-      <div class="synth" title="다른 AI들의 답변을 모아 한 AI에게 비교·정리를 부탁합니다">
-        <span class="muted-label">종합</span>
-        <select id="synthTarget" aria-label="종합을 맡을 AI"></select>
-        <button id="synthBtn" title="Ctrl+Shift+S">종합 요청</button>
+      <span class="hint" id="sendHint" data-i18n="ui.h.sendHint"></span>
+      <div class="synth" data-i18n-title="ui.h.synth.title">
+        <span class="muted-label" data-i18n="ui.h.synth.label"></span>
+        <select id="synthTarget" data-i18n-aria="ui.h.synthTarget.aria"></select>
+        <button id="synthBtn" title="Ctrl+Shift+S" data-i18n="ui.h.synthBtn"></button>
         <button id="synthResult" class="accent" hidden data-i18n="local.synthResult" data-i18n-title="local.synthResultTitle"></button>
         <button id="debateBtn" data-i18n="debate.open" data-i18n-title="debate.openTitle"></button>
         <button id="debateStop" class="danger" hidden data-i18n="debate.stop" data-i18n-title="debate.stopTitle"></button>
-        <label class="check"><input type="checkbox" id="autoSynth" /> 완료 후 자동</label>
+        <label class="check"><input type="checkbox" id="autoSynth" /> <span data-i18n="ui.h.autoSynth"></span></label>
       </div>
     </div>
     <div class="attach-row" id="attachRow">
-      <button id="attachBtn" title="파일 첨부 — 끌어다 놓기나 Ctrl+V로도 올릴 수 있습니다">[+] 파일</button>
+      <button id="attachBtn" data-i18n-title="ui.h.attachBtn.title" data-i18n="ui.h.attachBtn"></button>
       <input type="file" id="fileInput" multiple hidden />
       <div id="attachList" class="attach-list"></div>
       <span id="attachHint" class="attach-hint"></span>
-      <button id="skillBtn" class="skill-btn" title="고른 스킬(최대 3개)의 지침을 질문 앞에 붙여 보냅니다">skill: 없음</button>
+      <button id="skillBtn" class="skill-btn" data-i18n-title="ui.h.skillBtn.title" data-i18n="ui.h.skillBtn"></button>
       <div class="skill-bar">
-        <span class="muted-label">스킬 (켠 순서 = 우선순위)</span>
+        <span class="muted-label" data-i18n="ui.h.skillBar.label"></span>
         <div id="skillChips" class="skill-chips"></div>
         <span id="skillTotal" class="muted-label skill-total"></span>
-        <button id="skillBarManage" title="라이브러리에서 스킬을 만들고 고칩니다">lib 관리</button>
-        <button id="skillBarClose" title="닫기">✕</button>
+        <button id="skillBarManage" data-i18n-title="ui.h.skillBarManage.title" data-i18n="ui.h.skillBarManage"></button>
+        <button id="skillBarClose" data-i18n-title="ui.h.skillBarClose.title">✕</button>
       </div>
-      <label id="projectChip" class="project-chip" hidden title="켜 두면 질문에 프로젝트 구조와 고른 파일 내용을 함께 보냅니다">
+      <label id="projectChip" class="project-chip" hidden data-i18n-title="ui.h.projectChip.title">
         <input type="checkbox" id="projectInclude" /> <span id="projectChipText"></span>
       </label>
     </div>
@@ -635,11 +635,11 @@
       <div class="tpl">
         <!-- 작업 프리셋 (v0.29.0, library-presets.js): 고르면 템플릿 · 스킬 · 패널 · 배치 · 종합 · 토론 설정을 한 번에 -->
         <select id="presetSelect" data-i18n-aria="preset.selectAria" data-i18n-title="preset.selectTitle"></select>
-        <select id="tplSelect" aria-label="질문 템플릿" title="질문 앞뒤에 붙일 템플릿"></select>
+        <select id="tplSelect" data-i18n-aria="ui.h.tplSelect.aria" data-i18n-title="ui.h.tplSelect.title"></select>
         <span id="tplPreview" class="tpl-preview"></span>
       </div>
-      <textarea id="prompt" rows="2" placeholder="모든 AI에게 한 번에 물어보기"></textarea>
-      <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle">보내기</button>
+      <textarea id="prompt" rows="2" data-i18n-placeholder="ui.h.prompt.ph"></textarea>
+      <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle" data-i18n="ui.h.sendBtn"></button>
     </div>
   </footer>
   <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → project.js → project-changes.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → library.js → library-presets.js → settings-transfer-ui.js (뒤의 것이 앞의 것을 씀) -->

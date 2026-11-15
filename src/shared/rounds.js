@@ -99,9 +99,9 @@
     function attachResult(sent, skipped, res) {
       if (!sent.length && !skipped.length) return undefined;
       const names = (list) => list.map((f) => f.name).join(', ');
-      if (!sent.length) return { state: 'skipped', error: `받지 않는 파일 종류: ${names(skipped)}` };
-      if (!res.attach?.ok) return { state: res.attach?.fallback ? 'fallback' : 'failed', error: res.attach?.error || '첨부하지 못했습니다' };
-      if (skipped.length) return { state: 'partial', error: `받지 않는 파일 종류: ${names(skipped)}` };
+      if (!sent.length) return { state: 'skipped', error: t('main.rounds.unsupportedTypes', { names: names(skipped) }) };
+      if (!res.attach?.ok) return { state: res.attach?.fallback ? 'fallback' : 'failed', error: res.attach?.error || t('main.attachFailed') };
+      if (skipped.length) return { state: 'partial', error: t('main.rounds.unsupportedTypes', { names: names(skipped) }) };
       return { state: 'ok' };
     }
 
@@ -144,7 +144,7 @@
         try {
           // 글 없이 파일만 보내는데 이 서비스가 받는 파일이 하나도 없으면 보낼 것이 없다.
           return !text && !sendFiles.length
-            ? { ok: false, error: `보낼 내용이 없습니다 (받지 않는 파일 종류: ${skipped.map((f) => f.name).join(', ')})` }
+            ? { ok: false, error: t('main.rounds.nothingUnsupported', { names: skipped.map((f) => f.name).join(', ') }) }
             : await a.sendPrompt(id, text, sendFiles, { fallbackText: sendFiles.length && typeof fallbackText === 'string' ? fallbackText : undefined });
         } catch (err) {
           return { ok: false, error: err.message };
@@ -266,7 +266,7 @@
      * 지금 라운드가 있으면 그 기록의 이 서비스 답변을 새 답변으로 바꿔 남긴다.
      */
     function sendFollowUp(id, text, files = [], opts = {}) {
-      if (!a.hasPanel(id)) return Promise.resolve({ id, ok: false, error: '패널이 열려 있지 않습니다' });
+      if (!a.hasPanel(id)) return Promise.resolve({ id, ok: false, error: t('handoff.errClosed') });
       const r = round;
       return sendToPanel(
         id,
@@ -289,8 +289,8 @@
      */
     async function runSynth(judgeId, cause = 'manual', mode = 'text') {
       const judge = judgeId || a.prefs().synthTarget;
-      if (!round) return fail('먼저 공통 입력창으로 질문을 보내 주세요');
-      if (!canJudge(judge)) return fail('종합을 맡을 AI 패널이 열려 있지 않습니다');
+      if (!round) return fail(t('main.rounds.askFirst'));
+      if (!canJudge(judge)) return fail(t('main.rounds.noJudge'));
 
       let answers = [];
       for (const svc of a.services) {
@@ -301,7 +301,7 @@
         if (md) answers.push({ name: svc.name, text: md }); // 표·코드가 살아 있도록 Markdown으로 넘긴다
         else a.log('synth', 'skipped (no answer text)', svc.id);
       }
-      if (!answers.length) return fail('종합할 다른 AI의 답변이 없습니다');
+      if (!answers.length) return fail(t('main.rounds.noAnswers'));
 
       const judgeName = nameOf(judge);
       const judgeAnswered = round.targets.includes(judge);
@@ -319,8 +319,8 @@
       const res = await sendToPanel(judge, text, async (state) => {
         if (state !== 'done') {
           // 분석은 화면이 "분석하는 중"을 기다리므로, 답이 오지 않고 끝나도(시간 초과 · 답변 없음) 알려 준다
-          const why = state === 'timeout' ? '시간 안에 답하지 않았습니다' : state === 'no-answer' ? '답변을 찾지 못했습니다' : '답하지 못했습니다';
-          if (mode === 'analysis' && state !== 'error') fail(`분석 실패: ${judgeName}이(가) ${why}`);
+          const why = t(state === 'timeout' ? 'main.rounds.whyTimeout' : state === 'no-answer' ? 'main.rounds.whyNoAnswer' : 'main.rounds.whyFailed');
+          if (mode === 'analysis' && state !== 'error') fail(t('main.rounds.analysisFailed', { name: judgeName, why }));
           else if (state !== 'error') a.notify?.({ kind: 'synth', ok: false, judge: judgeName, mode });
           return;
         }
@@ -334,7 +334,7 @@
           a.sendSynthStatus({ state: 'done', judge: judgeName, count: answers.length, cause, mode });
         }
       });
-      if (!res.ok) return fail(`${judgeName}에 보내지 못했습니다: ${res.error}`);
+      if (!res.ok) return fail(t('main.rounds.sendFailed', { name: judgeName, error: res.error }));
       a.sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause, mode, trimmed });
       return { ok: true, judge: judgeName, count: answers.length };
 
@@ -342,7 +342,7 @@
       async function localSynth() {
         a.sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause, mode, trimmed, headless: true });
         const got = await a.localJudge.ask(text);
-        if (!got?.ok) return fail(`${judgeName}: ${got?.error || '답하지 못했습니다'}`);
+        if (!got?.ok) return fail(`${judgeName}: ${got?.error || t('main.rounds.whyFailed')}`);
         const entry = { judge: judgeName, at: Date.now(), text: got.text, md: got.text, ...(mode === 'analysis' ? { mode, names } : {}) };
         a.history.addSynth(historyId, entry);
         a.notify?.({ kind: 'synth', ok: true, judge: judgeName, mode });

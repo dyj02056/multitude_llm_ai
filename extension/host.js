@@ -89,7 +89,7 @@
   };
   /** 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 판정 · 압축 — Windows 앱 main.js askLocal과 같음): 패널 대화와 따로인 임시 대화 */
   const askLocal = (text) =>
-    prefs.local?.enabled ? LL.askOnce({ fetchFn: (url, opts) => fetch(url, opts), getConfig: () => prefs.local, text }) : Promise.resolve({ ok: false, error: '로컬 LLM이 꺼져 있습니다 (설정 › 로컬 LLM)' });
+    prefs.local?.enabled ? LL.askOnce({ fetchFn: (url, opts) => fetch(url, opts), getConfig: () => prefs.local, text }) : Promise.resolve({ ok: false, error: MLA.i18n.t('ext.host.localOff') });
   const allServices = () => (prefs.local?.enabled ? [...SERVICES, LL.localService(prefs.local)] : SERVICES);
   const isLocal = (id) => id === LL.LOCAL_ID;
   let localChat = null;
@@ -178,7 +178,7 @@
   // background.js에 부탁합니다 (앱 탭을 떠나면 바로 해제).
   function allowFraming() {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('백그라운드가 응답하지 않습니다')), 10000);
+      const timer = setTimeout(() => reject(new Error(MLA.i18n.t('ext.side.bgNoAnswer'))), 10000);
       port = chrome.runtime.connect({ name: 'mla-app' });
       port.onMessage.addListener((msg) => {
         if (msg?.type !== 'ready') return;
@@ -226,7 +226,7 @@
           return;
         }
         sendPanel(svc.id, { login: 'needs-login' });
-        sendPanel(svc.id, { error: '페이지와 연결되지 않았습니다 — "로그인 탭"에서 로그인한 뒤 ↻를 눌러 주세요' });
+        sendPanel(svc.id, { error: MLA.i18n.t('ext.host.notLinked') });
       }, HELLO_TIMEOUT_MS);
     });
     framesEl.append(iframe);
@@ -270,7 +270,7 @@
   // 패널 iframe 안의 content.js에 일을 시키고 답을 받습니다 (예: 질문 넣기, 지금 상태 읽기).
   async function callFrame(id, msg) {
     const p = panels.get(id);
-    if (!p || p.frameId === null) throw new Error('패널 페이지와 아직 연결되지 않았습니다');
+    if (!p || p.frameId === null) throw new Error(MLA.i18n.t('ext.side.notLinked'));
     return chrome.tabs.sendMessage(tabId, msg, { frameId: p.frameId });
   }
 
@@ -494,7 +494,7 @@
     hasPanel: hasPanelId,
     sendPrompt: async (id, text, files, { fallbackText } = {}) => {
       if (isLocal(id)) {
-        if (!localChat) return { ok: false, error: '패널이 닫혔습니다' };
+        if (!localChat) return { ok: false, error: MLA.i18n.t('ext.side.paneClosed') };
         const b64 = (d) => {
           const bytes = new Uint8Array(d);
           let s = '';
@@ -509,13 +509,13 @@
         // 확장 메시지는 JSON만 실을 수 있어서, 파일은 iframe에 postMessage로 그대로(구조적 복제) 넘긴다.
         // content.js는 이 번호(nonce)로 받은 파일을 찾아 첨부한다.
         const p = panels.get(id);
-        if (!p?.origin) throw new Error('패널 페이지와 아직 연결되지 않았습니다');
+        if (!p?.origin) throw new Error(MLA.i18n.t('ext.side.notLinked'));
         const nonce = crypto.randomUUID();
         p.iframe.contentWindow.postMessage({ mla: 'files', nonce, files }, p.origin);
         upload = { nonce, cfg: uploadOf(svc) };
       }
       const res = await callFrame(id, { type: 'mla:send', cfg: sendCfg(svc), text, upload, fallbackText });
-      return res || { ok: false, error: '패널 페이지가 응답하지 않았습니다' };
+      return res || { ok: false, error: MLA.i18n.t('ext.side.paneNoReply') };
     },
     snapshot: (id, opts) => (isLocal(id) ? (localChat ? localChat.snapshot() : null) : snapshot(id, opts)),
     watch: (id, before, isCurrent, onState) => {
@@ -623,7 +623,7 @@
   let remoteStatus = { source: 'builtin' };
   // 서명 확인 (remote-core.js에 공개 키가 있을 때만). 이 크롬이 Ed25519를 지원하지 않으면 실패로 보고 지금 값을 유지한다.
   const remoteVerifier = remoteCore.subtleVerifier(crypto.subtle);
-  const SIG_FAILED = '서명 확인 실패';
+  const sigFailed = () => MLA.i18n.t('ext.host.sigFailed');
 
   // 바이트 그대로 받는다 (서명은 JSON으로 읽기 전에 확인). 리다이렉트는 따라가지 않는다 (정해 둔 주소의 파일만 받는다)
   async function fetchRemoteBytes(url, signal) {
@@ -661,11 +661,11 @@
       const check = await remoteCore.verify(bytes, sig, remoteVerifier);
       if (!check.ok) {
         // 서명이 틀리면 적용하지 않고 저장해 둔 값도 그대로 둔다
-        console.warn('[remote]', SIG_FAILED, check.detail || '');
-        throw new Error(SIG_FAILED);
+        console.warn('[remote]', sigFailed(), check.detail || '');
+        throw new Error(sigFailed());
       }
       const clean = remoteCore.sanitize(remoteCore.parseBytes(bytes), SERVICES);
-      if (!clean) throw new Error('형식이 올바르지 않습니다');
+      if (!clean) throw new Error(MLA.i18n.t('ext.host.badFormat'));
       remoteCore.apply(SERVICES, remoteBase, clean.overrides);
       store('remoteSelectors', remoteCore.packCache(bytes, sig));
       // 새 셀렉터를 받았으면 자가진단 기록을 지우고 다시 확인한다
@@ -683,7 +683,7 @@
         checkedAt,
       };
     } catch (err) {
-      remoteStatus = { ...remoteStatus, checkedAt, error: err.name === 'AbortError' ? '시간 초과' : err.message };
+      remoteStatus = { ...remoteStatus, checkedAt, error: err.name === 'AbortError' ? MLA.i18n.t('ext.host.timeout') : err.message };
     } finally {
       clearTimeout(timer);
     }
@@ -712,11 +712,11 @@
       const res = await fetch(UPD.PACKAGE_URL, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const latest = UPD.versionFromPackage(await res.text());
-      if (!latest) throw new Error('버전을 읽지 못했습니다');
+      if (!latest) throw new Error(MLA.i18n.t('ext.host.noVersion'));
       const state = UPD.isNewer(latest, myVersion) ? 'available' : 'none';
       updateStatus = UPD.normalizeStatus({ state, version: latest, checkedAt: Date.now(), canInstall: false }, myVersion);
     } catch (err) {
-      updateStatus = UPD.normalizeStatus({ state: 'error', error: err.name === 'AbortError' ? '시간 초과' : err.message, checkedAt: Date.now(), canInstall: false }, myVersion);
+      updateStatus = UPD.normalizeStatus({ state: 'error', error: err.name === 'AbortError' ? MLA.i18n.t('ext.host.timeout') : err.message, checkedAt: Date.now(), canInstall: false }, myVersion);
     } finally {
       clearTimeout(timer);
     }
@@ -779,11 +779,11 @@
   window.host = {
     ui: {
       hints: {
-        pick: '모델을 고르세요 · 각 서비스에는 이 크롬에 로그인된 계정을 그대로 씁니다',
-        chat: '로그인이 필요한 패널은 "로그인 탭"에서 로그인한 뒤 ↻를 누르세요',
+        pick: MLA.i18n.t('ext.host.hintPick'),
+        chat: MLA.i18n.t('ext.host.hintChat'),
       },
-      pickNote: '선택한 모델만 패널로 엽니다. 처음 한 번은 각 서비스에 크롬 탭에서 로그인해 두세요.',
-      loginButton: { label: '로그인 탭', title: '새 탭에서 이 서비스에 로그인한 뒤, 돌아와서 ↻를 누르세요' },
+      pickNote: MLA.i18n.t('ext.host.pickNote'),
+      loginButton: { label: MLA.i18n.t('ext.side.loginTab'), title: MLA.i18n.t('ext.side.loginTabTitle') },
       devtools: false, // 패널 페이지는 F12 개발자 도구의 프레임 선택으로 본다
     },
     openModels: (ids) => Array.isArray(ids) && showChat(ids.filter((id) => typeof id === 'string')),
@@ -792,14 +792,14 @@
     // opts: { question(기록·종합용 질문), textById({ 서비스 id: 그 서비스에 보낼 글 }), fallbackText(첨부 실패 때 대신 보낼 글) }
     sendPrompt: async (text, targets, files = [], opts = {}) => {
       if (typeof text !== 'string' || !Array.isArray(targets)) return [];
-      if (!checkFiles(files)) return targets.map((id) => ({ id, ok: false, error: '첨부 파일이 한도를 넘었습니다' }));
+      if (!checkFiles(files)) return targets.map((id) => ({ id, ok: false, error: MLA.i18n.t('ext.host.filesOver') }));
       if (!text.trim() && !files.length) return [];
       return rounds.sendAll(text, targets, files, cleanSendOpts(opts));
     },
     // opts: { fallbackText(첨부 실패 때 대신 보낼 글) }
     sendFollowUp: async (id, text, files = [], opts = {}) => {
-      if (typeof text !== 'string' || !text.trim()) return { id, ok: false, error: '보낼 내용이 없습니다' };
-      if (!checkFiles(files)) return { id, ok: false, error: '첨부 파일이 한도를 넘었습니다' };
+      if (typeof text !== 'string' || !text.trim()) return { id, ok: false, error: MLA.i18n.t('ext.host.nothingToSend') };
+      if (!checkFiles(files)) return { id, ok: false, error: MLA.i18n.t('ext.host.filesOver') };
       return rounds.sendFollowUp(id, text, files, opts || {});
     },
     // AI끼리 이어 묻기 (v0.26.0, Windows 앱 main/ipc/chain.js와 같은 검사): 넘기기 · 다시 보내기 · 다른 AI로 보내기 · 토론
@@ -865,11 +865,11 @@
       setPrefs: async (next = {}) => {
         const cur = prefs.local;
         const baseUrl = next.baseUrl === undefined ? cur.baseUrl : LL.normalizeBaseUrl(next.baseUrl);
-        if (!baseUrl) return { ok: false, error: '주소는 이 PC(localhost · 127.0.0.1)의 http(s) 주소만 쓸 수 있습니다' };
+        if (!baseUrl) return { ok: false, error: MLA.i18n.t('ext.host.localOnly') };
         const enabled = typeof next.enabled === 'boolean' ? next.enabled : cur.enabled;
         if (enabled && !cur.enabled) {
           const granted = await chrome.permissions.request({ origins: LOCAL_ORIGINS }).catch(() => false);
-          if (!granted) return { ok: false, error: '이 PC 주소 접근을 허용하지 않아 켜지 못했습니다' };
+          if (!granted) return { ok: false, error: MLA.i18n.t('ext.host.localDenied') };
         }
         prefs.local = {
           enabled,
@@ -887,7 +887,7 @@
         return { ok: true, local: { ...prefs.local } };
       },
       // 패널 없이 한 번 묻기 (v0.29.0, 스킬 압축): 글만 받는다 (20만 자까지, Windows 앱 local:ask와 같은 검사)
-      ask: async (text) => (typeof text === 'string' && text.trim() && text.length <= 200000 ? askLocal(text) : { ok: false, error: '보낼 내용이 올바르지 않습니다' }),
+      ask: async (text) => (typeof text === 'string' && text.trim() && text.length <= 200000 ? askLocal(text) : { ok: false, error: MLA.i18n.t('ext.host.badText') }),
       models: async (baseUrl) => {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 5000);
@@ -896,7 +896,7 @@
         } catch (err) {
           return {
             ok: false,
-            error: err.name === 'AbortError' ? '5초 안에 답이 없습니다' : `${err.message} (Ollama는 OLLAMA_ORIGINS=chrome-extension://* 로 켜야 확장에서 쓸 수 있습니다)`,
+            error: err.name === 'AbortError' ? MLA.i18n.t('ext.host.noReply5s') : MLA.i18n.t('ext.host.ollamaOrigins', { error: err.message }),
           };
         } finally {
           clearTimeout(timer);
@@ -906,10 +906,10 @@
     // 내보내기 (v0.14.0): 다운로드 권한 없이, 이 탭에서 파일 링크를 눌러 크롬의 다운로드로 저장한다
     saveFile: async ({ name, text, kind } = {}) => {
       const types = { md: 'text/markdown', html: 'text/html', mla: 'application/json' }; // mla: 설정 옮기기 (v0.29.0, .mla.json)
-      if (!types[kind] || typeof text !== 'string') return { ok: false, error: '저장할 내용이 올바르지 않습니다' };
+      if (!types[kind] || typeof text !== 'string') return { ok: false, error: MLA.i18n.t('ext.host.badSave') };
       const url = URL.createObjectURL(new Blob([text], { type: `${types[kind]};charset=utf-8` }));
       const ext = kind === 'mla' ? 'mla.json' : kind;
-      const base = String(name || `답변.${ext}`).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 120);
+      const base = String(name || `${MLA.i18n.t('ext.host.answerFile')}.${ext}`).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 120);
       const a = Object.assign(document.createElement('a'), { href: url, download: base.endsWith(`.${ext}`) ? base : `${base}.${ext}` });
       document.body.append(a);
       a.click();
@@ -1032,7 +1032,7 @@
     tabId = me?.id ?? null;
     windowId = me?.windowId ?? null;
     if (tabId === null) {
-      alert('Multitude LLM은 크롬 탭에서 열어야 합니다. 툴바의 확장 프로그램 아이콘을 눌러 주세요.');
+      alert(MLA.i18n.t('ext.host.openInTab'));
       return;
     }
     await allowFraming();
@@ -1049,13 +1049,13 @@
   // 크롬이 페이지에 넘겨주지 않는 키는 바꿔 썼으므로 버튼 안내도 맞춘다 (shared/shortcuts.js의 browserKeys).
   function fixButtonTitles() {
     const newChat = document.getElementById('newChatAll');
-    if (newChat) newChat.title = '모두 새 대화 (Alt+Shift+N)';
+    if (newChat) newChat.title = MLA.i18n.t('ext.host.newChatAll');
     // 사이드탭 (v0.19.0): 크롬 확장에서만 있는 버튼. 누른 그 순간에 열어야 해서 기다리는 일 없이 바로 연다.
     const side = document.getElementById('sideBtn');
     if (side && chrome.sidePanel) {
       side.hidden = false;
       side.addEventListener('click', () => {
-        if (windowId !== null) chrome.sidePanel.open({ windowId }).catch((err) => alert(`사이드탭을 열지 못했습니다: ${err.message}`));
+        if (windowId !== null) chrome.sidePanel.open({ windowId }).catch((err) => alert(MLA.i18n.t('ext.host.sideFailed', { error: err.message })));
       });
     }
   }
@@ -1064,7 +1064,7 @@
   window.addEventListener('DOMContentLoaded', () =>
     init().catch((err) => {
       console.error(err);
-      alert(`시작하지 못했습니다: ${err.message}`);
+      alert(MLA.i18n.t('ext.side.startFailed', { error: err.message }));
     }),
   );
 })();

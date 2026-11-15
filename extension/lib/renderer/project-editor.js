@@ -25,7 +25,7 @@
   function edStatus(text) {
     const dirty = edDirty();
     $('#edStatus').dataset.dirty = dirty ? '1' : '';
-    $('#edStatus').textContent = text || (ed.path ? `${dirty ? '● 저장 안 됨' : '저장됨'} · ${ed.crlf ? 'CRLF' : 'LF'}` : '');
+    $('#edStatus').textContent = text || (ed.path ? `${dirty ? t('project.editor.unsaved') : t('project.editor.saved')} · ${ed.crlf ? 'CRLF' : 'LF'}` : '');
   }
 
   // 편집기 닫기 (내용 비우고 패널 화면으로)
@@ -40,15 +40,15 @@
   /** 파일을 편집기에서 엽니다. 다른 파일에 저장 안 한 수정이 있으면 먼저 묻습니다. */
   async function openEditor(path) {
     if (!has()) return;
-    if (path !== ed.path && edDirty() && !confirm(`${ed.path}에 저장하지 않은 수정 내용이 있습니다. 버리고 ${path}을(를) 열까요?`)) return;
+    if (path !== ed.path && edDirty() && !confirm(t('project.editor.discardOpen', { path: ed.path, next: path }))) return;
     if (path === ed.path && ed.base !== null) return host.setView('editor');
     let text;
     try {
       text = await currentText(path);
     } catch (err) {
-      return alert(`편집기에서 열 수 없습니다: ${err.message}`);
+      return alert(t('project.editor.openFailed', { error: err.message }));
     }
-    if (text === null) return alert('파일이 없습니다');
+    if (text === null) return alert(t('project.editor.noFile'));
     Object.assign(ed, { path, base: text, crlf: text.includes('\r\n'), indent: guessIndent(text) });
     $('#edText').value = lfOf(text);
     $('#edPath').textContent = path;
@@ -72,15 +72,15 @@
     try {
       now = await currentText(path);
     } catch (err) {
-      alert(`저장하지 못했습니다: ${err.message}`);
+      alert(t('project.editor.saveFailed', { error: err.message }));
       return false;
     }
     const value = $('#edText').value;
     if (now !== ed.base) {
-      const why = now === null ? '그사이 파일이 지워졌습니다' : '편집기에서 연 뒤 다른 곳에서 파일이 바뀌었습니다';
-      if (!confirm(`${path}: ${why}.\n\n편집기 내용으로 덮어쓸까요? (취소하면 저장하지 않습니다. "다시 읽기"로 지금 내용을 볼 수 있습니다)`)) return false;
+      const why = now === null ? t('project.editor.goneMeanwhile') : t('project.editor.changedMeanwhile');
+      if (!confirm(t('project.editor.overwrite', { path, why }))) return false;
     } else if (value === lfOf(now)) {
-      edStatus('바뀐 내용이 없습니다');
+      edStatus(t('project.editor.noChange'));
       setTimeout(() => edStatus(), 1500);
       return true;
     }
@@ -88,14 +88,14 @@
     try {
       await host.project.writeFile(path, after);
     } catch (err) {
-      alert(`저장하지 못했습니다: ${err.message}`);
+      alert(t('project.editor.saveFailed', { error: err.message }));
       return false;
     }
     ed.base = after;
     project.log.unshift({ id: `${Date.now().toString(36)}`, at: Date.now(), ai: '직접 편집', files: [{ path, before: now, after }], reverted: false });
     project.log.length = Math.min(project.log.length, MAX_LOG);
     saveState();
-    edStatus('저장했습니다');
+    edStatus(t('project.editor.savedNow'));
     setTimeout(() => edStatus(), 1500);
     await rescan(); // 바뀐 파일 검사(checkStale)도 여기서 한다
     return true;
@@ -110,15 +110,15 @@
       const known = [...project.sent.values()].some((m) => m.has(path));
       return alert(
         known
-          ? `${path}: AI들이 이미 지금 내용을 알고 있어 보낼 것이 없습니다.`
-          : `${path}을(를) 받은 적 있는 AI가 없습니다.\n사이드바에서 이 파일을 체크해 두면 다음 질문에 함께 보냅니다.`,
+          ? t('project.editor.syncKnown', { path })
+          : t('project.editor.syncNobody', { path }),
       );
     }
     await syncStale(path);
   });
   $('#edReload').addEventListener('click', async () => {
     if (!ed.path) return;
-    if (edDirty() && !confirm('저장하지 않은 수정 내용을 버리고 디스크에서 다시 읽을까요?')) return;
+    if (edDirty() && !confirm(t('project.editor.discardReload'))) return;
     const path = ed.path;
     ed.base = null;
     ed.path = null;
@@ -173,11 +173,16 @@
         note.hidden = false;
         return;
       }
-      $('#gitWhere').textContent = info.isRepo ? `${info.top} · ${info.branch || '(브랜치 없음)'}` : `${info.root} · git 저장소가 아닙니다 (git init으로 만들 수 있음)`;
+      $('#gitWhere').textContent = info.isRepo ? `${info.top} · ${info.branch || t('project.git.noBranch')}` : t('project.git.notRepo', { root: info.root });
       if (info.hooks?.length) {
         note.textContent =
-          `이 저장소에는 git 훅 ${info.hooks.length}개가 있습니다${info.hooksPath ? ` (core.hooksPath: ${info.hooksPath})` : ''}: ${info.hooks.slice(0, 8).join(', ')}${info.hooks.length > 8 ? ' …' : ''}\n` +
-          'commit · push · checkout 같은 명령을 실행하면 이 훅 프로그램도 함께 실행됩니다. 직접 넣지 않은 훅이면 내용을 먼저 확인하세요.';
+          t('project.git.hooks', {
+            n: info.hooks.length,
+            where: info.hooksPath ? ` (core.hooksPath: ${info.hooksPath})` : '',
+            list: `${info.hooks.slice(0, 8).join(', ')}${info.hooks.length > 8 ? ' …' : ''}`,
+          }) +
+          '\n' +
+          t('project.git.hooksWarn');
         note.hidden = false;
       }
     }
@@ -193,8 +198,8 @@
       try {
         const r = await host.git.run(line);
         if (!r.ok) print(`${r.error}\n`, r.cancelled ? 'info' : 'err');
-        else if (r.error) print(`실행하지 못했습니다: ${r.error}\n`, 'err');
-        else print(`(끝 · 코드 ${r.code})\n`, r.code === 0 ? 'info' : 'err');
+        else if (r.error) print(`${t('project.git.runFailed', { error: r.error })}\n`, 'err');
+        else print(`${t('project.git.exitCode', { code: r.code })}\n`, r.code === 0 ? 'info' : 'err');
       } catch (err) {
         print(`${err.message}\n`, 'err');
       } finally {
@@ -218,7 +223,7 @@
     $('#gitStop').addEventListener('click', () => host.git.stop());
     $('#gitTerm').addEventListener('click', async () => {
       const r = await host.git.openTerminal();
-      print(r.ok ? `\n${r.via}를 열었습니다\n` : `\n터미널을 열지 못했습니다: ${r.error}\n`, r.ok ? 'info' : 'err');
+      print(r.ok ? `\n${t('project.git.termOpened', { via: r.via })}\n` : `\n${t('project.git.termFailed', { error: r.error })}\n`, r.ok ? 'info' : 'err');
     });
     for (const b of document.querySelectorAll('[data-git]')) b.addEventListener('click', () => runGit(b.dataset.git));
     $('#gitForm').addEventListener('submit', (e) => {
