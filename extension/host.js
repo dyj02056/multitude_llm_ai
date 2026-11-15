@@ -153,7 +153,7 @@
   let mode = 'pick'; // 'pick' | 'chat'  (확장 프로그램은 크롬에 로그인된 계정을 그대로 써서 로그인 화면이 없다)
   let chatView = 'panels'; // 'panels' (웹 패널) | 'dialog' (패널 위에 띄운 창 — 패널을 화면 밖으로 치움) | 'compare' (답변 비교) | 'changes' (변경 제안) | 'editor' (프로젝트 파일 편집) | 'library' (라이브러리) | 'vars' (변수 입력) | 'compress' (스킬 AI 압축) | 'history' (기록) | 'help' (설정·단축키) — git 콘솔은 없음
   let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
-  const barIds = new Set(); // 변경 바를 띄운 패널 — iframe 아래쪽을 바 높이만큼 비운다
+  const barIds = new Map(); // 패널 id -> 아래 바 줄 수 (1~2, v0.28.0) — iframe 아래쪽을 바 높이 × 줄 수만큼 비운다
   let tabId = null;
   let windowId = null; // 사이드탭 열기 (v0.19.0) — 누른 그 순간에 열어야 해서 미리 알아 둔다
   const panels = new Map(); // id -> { iframe, frameId, origin, url, retried, helloTimer, loginTimer }
@@ -362,7 +362,7 @@
     const [big] = MLA.layout.placeCells('grid', 1, box, GAP);
     return ids.map((id, i) => {
       const frame = focusId === id ? big : cells[i];
-      const bar = barIds.has(id) ? BAR_H : 0;
+      const bar = (barIds.get(id) || 0) * BAR_H;
       return {
         id,
         frame,
@@ -945,9 +945,11 @@
       sidebarOpen = !!open;
       pushState();
     },
-    setPanelBar: (id, on) => {
+    // 변경 바 · 제안 바 줄 수 (v0.28.0: 둘 다 뜨면 2줄). 예전 true/false도 받는다
+    setPanelBar: (id, rows) => {
       if (typeof id !== 'string') return;
-      if (on && panels.has(id)) barIds.add(id);
+      const n = MLA.layout.barRows(rows);
+      if (n && panels.has(id)) barIds.set(id, n);
       else barIds.delete(id);
       pushState();
     },

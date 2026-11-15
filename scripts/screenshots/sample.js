@@ -196,4 +196,66 @@ function HISTORY(now, ids) {
   return out.sort((a, b) => b.at - a.at);
 }
 
-module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage };
+// v0.28.0 프로젝트 장면: 작은 예시 프로젝트와, 두 AI가 같은 파일(src/user.js)을 서로 다르게 고친 답
+const PROJECT_FILES = {
+  'package.json': JSON.stringify({ name: 'demo-app', version: '1.0.0', scripts: { test: 'node --test', lint: 'eslint src', typecheck: 'tsc --noEmit', build: 'node build.js' } }, null, 2) + '\n',
+  'README.md': '# demo-app\n\n사용자 정보를 불러오는 예시 프로젝트\n',
+  'src/user.js': "export async function getUser(id) {\n  const res = await fetch(`/api/users/${id}`);\n  return res.json();\n}\n",
+  'src/cache.js': 'const store = new Map();\nexport const get = (k) => store.get(k);\nexport const set = (k, v) => store.set(k, v);\n',
+  'test/user.test.js': "import test from 'node:test';\n",
+};
+const fence = '```';
+const PROJECT_ANSWERS = {
+  gemini: [
+    '`getUser`가 실패 응답을 그대로 돌려줍니다. 상태 코드를 확인하고 캐시를 붙였습니다.',
+    '',
+    '파일: src/user.js',
+    `${fence}js`,
+    "import { get, set } from './cache.js';",
+    '',
+    'export async function getUser(id) {',
+    '  if (get(id)) return get(id);',
+    '  const res = await fetch(`/api/users/${id}`);',
+    '  if (!res.ok) throw new Error(`사용자를 불러오지 못했습니다 (${res.status})`);',
+    '  const user = await res.json();',
+    '  set(id, user);',
+    '  return user;',
+    '}',
+    fence,
+    '',
+    '파일: src/cache.js',
+    `${fence}js`,
+    'const store = new Map();',
+    'export const get = (k) => store.get(k);',
+    'export const set = (k, v) => store.set(k, v);',
+    'export const clear = () => store.clear();',
+    fence,
+  ].join('\n'),
+  chatgpt: [
+    '실패 응답을 오류로 바꾸고 테스트를 더했습니다.',
+    '',
+    '파일: src/user.js',
+    `${fence}js`,
+    'export async function getUser(id) {',
+    '  const res = await fetch(`/api/users/${id}`);',
+    '  if (!res.ok) {',
+    '    throw new Error(`사용자를 불러오지 못했습니다 (${res.status})`);',
+    '  }',
+    '  return res.json();',
+    '}',
+    fence,
+    '',
+    '파일: test/user.test.js',
+    `${fence}js`,
+    "import test from 'node:test';",
+    "import assert from 'node:assert';",
+    "import { getUser } from '../src/user.js';",
+    '',
+    "test('없는 사용자면 오류', async () => {",
+    '  await assert.rejects(getUser(-1), /불러오지 못했습니다/);',
+    '});',
+    fence,
+  ].join('\n'),
+};
+
+module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage, PROJECT_FILES, PROJECT_ANSWERS };

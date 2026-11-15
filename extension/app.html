@@ -114,6 +114,7 @@
       <label class="check ps-split" title="답이 출력 한도로 끊긴 파일이 있으면 [↪ 이어서 받기]를 누르지 않아도 같은 AI에게 나머지를 부탁합니다 — 한 파일 최대 3번 (v0.22.0)"><input type="checkbox" id="psAutoCont" /> 잘리면 자동으로 이어 받기</label>
       <label class="check ps-split" title="첫 질문 뒤에는 그 AI에게 보낸 뒤로 내용이 바뀐 파일만 다시 올리고, 나머지는 &quot;앞서 보낸 그대로&quot; 목록으로만 알립니다 (v0.23.0)"><input type="checkbox" id="psIncremental" /> 바뀐 파일만 보내기</label>
       <label class="check ps-split ps-sub" title="이어지는 질문에 지난번에 보낸 파일 목록(경로 · 줄 수)을 붙이고, 그중 바뀐 파일은 다시 올립니다 — 고른 파일이 없어도 (v0.23.0)"><input type="checkbox" id="psFollowList" /> 이어지는 질문에 지난 파일 목록 붙이기</label>
+      <div id="psRestore" class="ps-restore" hidden></div>
       <button id="psGit" title="이 프로젝트 폴더에서 git 명령을 실행합니다 (Windows 앱 전용)" hidden>git 콘솔</button>
       <button id="psSync" class="primary" hidden></button>
       <span id="psSummary" class="muted-label"></span>
@@ -151,6 +152,7 @@
       <span class="muted-label">변경 제안</span>
       <span id="changesInfo" class="compare-question"></span>
       <button id="changesLog" title="적용한 수정안 목록과 되돌리기">적용 기록</button>
+      <button id="changesMix" data-i18n="mix.button" data-i18n-title="mix.buttonTitle" disabled></button>
       <button id="changesMerge" title="여러 AI의 수정안을 종합 담당 AI에게 하나로 합쳐 달라고 합니다">종합으로 합치기</button>
       <button id="changesRefresh" title="답변을 다시 읽어 옵니다">새로고침</button>
       <button id="changesClose">패널로 돌아가기</button>
@@ -314,7 +316,8 @@
       <div id="patchTestOut" class="test-out" hidden></div>
       <div class="modal-foot">
         <span id="patchStatus" class="muted-label"></span>
-        <button id="patchTest" hidden title="package.json의 test를 적용 전 · 체크한 수정안을 잠깐 쓴 후 두 번 실행하고 원래 파일로 되돌립니다 (Windows 앱)">테스트 실행</button>
+        <span id="patchChecks" class="patch-checks" hidden></span>
+        <button id="patchTest" hidden title="package.json의 test(있으면 옆에서 고른 lint · typecheck · build도)를 적용 전 · 체크한 수정안을 잠깐 쓴 후 두 번 실행하고 원래 파일로 되돌립니다 (Windows 앱)">테스트 실행</button>
         <button id="patchAll" title="실행 영향 파일과 삭제까지 모두 체크합니다">모두 선택</button>
         <button id="patchApply" class="primary" title="Ctrl+Enter">선택한 파일 적용</button>
         <button id="patchCancel">닫기</button>
@@ -466,6 +469,10 @@
         <label class="check-label"><input type="checkbox" id="autoRecommendToggle" /> <span data-i18n="settings.autoRecommend"></span></label>
       </div>
       <p class="muted small" data-i18n="settings.autoRecommendNote"></p>
+      <div class="setting-row only-git" id="commitOfferRow" hidden>
+        <label class="check-label"><input type="checkbox" id="commitOfferToggle" /> <span data-i18n="settings.commitOffer"></span></label>
+      </div>
+      <p class="muted small only-git" id="commitOfferNote" data-i18n="settings.commitOfferNote" hidden></p>
       <h2 data-i18n="settings.notifyTitle"></h2>
       <div class="setting-row notify-row">
         <label class="check-label"><input type="checkbox" data-notify="round" /> <span data-i18n="settings.notifyRound"></span></label>
@@ -566,7 +573,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle">보내기</button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → project.js → project-changes.js → project-editor.js → library.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → project.js → project-changes.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → library.js (뒤의 것이 앞의 것을 씀) -->
   <script src="lib/shared/i18n-ko.js"></script>
   <script src="lib/shared/i18n-en.js"></script>
   <script src="lib/shared/i18n.js"></script>
@@ -577,6 +584,9 @@
   <script src="lib/shared/project-context.js"></script>
   <script src="lib/shared/project-upload.js"></script>
   <script src="lib/shared/patch.js"></script>
+  <script src="lib/shared/mix-select.js"></script>
+  <script src="lib/shared/commit-msg.js"></script>
+  <script src="lib/shared/project-session.js"></script>
   <script src="lib/shared/analysis.js"></script>
   <script src="lib/shared/chain.js"></script>
   <script src="lib/shared/retry.js"></script>
@@ -613,6 +623,9 @@
   <script src="lib/renderer/debate-ui.js"></script>
   <script src="lib/renderer/project.js"></script>
   <script src="lib/renderer/project-changes.js"></script>
+  <script src="lib/renderer/project-mix.js"></script>
+  <script src="lib/renderer/project-commit.js"></script>
+  <script src="lib/renderer/project-restore.js"></script>
   <script src="lib/renderer/project-editor.js"></script>
   <script src="lib/renderer/library.js"></script>
 </body>

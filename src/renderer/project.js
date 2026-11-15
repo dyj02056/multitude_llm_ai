@@ -87,7 +87,8 @@
         autoContinue: project.autoContinue,
         incremental: project.incremental,
         followList: project.followList,
-        sent: sentToState(),
+        // 패널마다 AI가 받은 파일 · 파일별로 받기 진행 · 이어 받기 (v0.28.0 project-restore.js — 앱을 다시 켜도 이어 하기)
+        ctx: P.sessionState ? P.sessionState() : null,
         blocked: [...project.blocked],
         uploadOk: [...project.uploadOk],
         log: project.log.slice(0, MAX_LOG),
@@ -95,8 +96,8 @@
       .catch((err) => console.warn('[project] 상태를 저장하지 못했습니다:', err.message));
   }
 
-  // AI가 받은 내용 기록(sent)은 이번 실행 동안만 이어 쓴다: 앱을 다시 켜면 패널이 새 대화로 열리므로 버린다.
-  // 같은 실행 안에서 프로젝트를 닫았다 다시 열면 그대로 이어진다 (패널 세대가 같을 때만).
+  // AI가 받은 내용 기록(sent)은 같은 실행 안에서 프로젝트를 닫았다 다시 열면 그대로 이어진다 (패널 세대가 같을 때만).
+  // 앱을 다시 켠 뒤에는 패널이 새 대화로 열리므로 바로 쓰지 않고, 같은 대화 주소를 다시 열거나 [이어 쓰기]를 눌러야 되살린다 (v0.28.0 project-restore.js).
   const RUN_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   // 패널 세대: 새 대화를 열거나 패널을 닫으면(다시 열면 새 대화로 열린다) 오른다. 프로젝트가 닫혀 있을 때도 센다.
   const panelClears = new Map(); // 패널 id -> 세대
@@ -109,6 +110,7 @@
       for (const id of openPanels) {
         if (now.has(id)) continue;
         bumpPanel(id);
+        P.dropPending?.(id); // 닫은 패널은 다시 열면 새 대화 — 앱을 다시 켜기 전의 기록도 버린다 (v0.28.0)
         if (project.sent.has(id) || project.sentTree.has(id)) {
           forgetSent(id);
           saveState();
@@ -129,28 +131,6 @@
     project.sentTree.delete(id);
     project.sentEpoch.delete(id);
   }
-  function sentToState() {
-    const out = {};
-    for (const id of new Set([...project.sent.keys(), ...project.sentTree.keys()])) {
-      const files = [...(project.sent.get(id) || [])].map(([p, e]) => (e ? [p, e.hash, e.lines] : [p, null]));
-      out[id] = { epoch: project.sentEpoch.get(id) || '', tree: project.sentTree.get(id) ?? null, files };
-    }
-    return { run: RUN_ID, panels: out };
-  }
-  function sentFromState(s) {
-    project.sent.clear();
-    project.sentTree.clear();
-    project.sentEpoch.clear();
-    if (!s || s.run !== RUN_ID || !s.panels || typeof s.panels !== 'object') return;
-    for (const [id, v] of Object.entries(s.panels)) {
-      if (!v || !Array.isArray(v.files) || v.epoch !== panelEpoch(id)) continue;
-      const m = new Map();
-      for (const f of v.files) if (Array.isArray(f) && typeof f[0] === 'string') m.set(f[0], typeof f[1] === 'string' ? { hash: f[1], lines: Number(f[2]) || 0 } : null);
-      project.sent.set(id, m);
-      if (typeof v.tree === 'string') project.sentTree.set(id, v.tree);
-      project.sentEpoch.set(id, v.epoch);
-    }
-  }
 
   async function loadState() {
     const s = (await host.project.loadState().catch(() => null)) || {};
@@ -164,7 +144,10 @@
     project.autoContinue = s.autoContinue === true;
     project.incremental = s.incremental !== false;
     project.followList = s.followList === true;
-    sentFromState(s.sent);
+    project.sent.clear();
+    project.sentTree.clear();
+    project.sentEpoch.clear();
+    P.restoreSession(s.ctx); // v0.28.0: 받은 파일 · 파일별로 받기 · 이어 받기 (예전 sent 칸은 그 실행에서만 썼으므로 읽지 않는다)
     project.blocked = new Set(Array.isArray(s.blocked) ? s.blocked : []);
     project.uploadOk = new Set(Array.isArray(s.uploadOk) ? s.uploadOk : []);
     project.log = Array.isArray(s.log) ? s.log : [];
@@ -185,6 +168,9 @@
     project.expanded = new Set(['']);
     project.touched.clear();
     P.clearBars();
+    P.runs.clear(); // 다른 프로젝트의 파일별로 받기 · 이어 받기가 섞이지 않게 (같은 프로젝트면 저장한 상태에서 되살린다)
+    P.continuing.clear();
+    P.clearPending();
     P.closeEditor();
     if (!info) return render();
     if (info.needsPermission) {
@@ -195,6 +181,7 @@
     await rescan();
     // 지난번 "테스트 실행" 도중 앱이 꺼져 잠깐 써 둔 수정안이 남아 있었으면 메인이 원래대로 되돌렸다 (Windows 앱)
     if (info.recovered) notice(`지난번 테스트 중 앱이 꺼져 남아 있던 임시 수정 ${info.recovered}개 파일을 원래대로 되돌렸습니다`);
+    await P.afterRestore(); // 되살린 패널의 변경 바 · 파일별로 받기 바 (v0.28.0)
     // 처음 연 프로젝트면 package.json · README 같은 핵심 파일을 골라 둔다.
     if (fresh || !known) {
       for (const e of project.scan.entries) if (e.depth === 0 && e.kind === 'file' && !e.excluded && KEY_FILES.includes(e.name)) project.checked.add(e.path);
@@ -792,6 +779,8 @@
   window.onPanelCleared = (id) => {
     P.continuing.delete(id); // 새 대화에서는 이어 받을 앞부분이 없다
     P.runs.delete(id); // 파일별로 받던 것도 멈춘다 (새 대화의 AI는 계획을 모른다)
+    P.summaryWait.delete(id); // 커밋 메시지 요약 부탁도 (v0.28.0)
+    P.dropPending(id); // 앱을 다시 켜기 전의 기록도 버린다 (v0.28.0)
     bumpPanel(id); // 프로젝트를 닫아 둔 동안에도 센다 — 저장된 기록을 다시 열 때 버리게
     const had = project.sent.has(id) || project.sentTree.has(id);
     forgetSent(id);
@@ -891,6 +880,7 @@
 
   window.onPanelAnswerDone = async (id) => {
     const md = await answerMd(id).catch(() => '');
+    if (P.onSummaryAnswer(id, md)) return; // 커밋 메시지 요약 부탁의 답 (v0.28.0)
     if (P.continuing.has(id) && has()) return P.finishContinue(id, md); // "이어서 받기"로 보낸 부탁의 답 (v0.17.1)
     if (P.runs.get(id)?.status === 'running' && has()) return P.runAnswer(id, md); // 파일별로 받는 중 (v0.18.0)
     if (has() && P.offerRun(id, md)) return; // 계획(PLAN_FILES)만 온 답 → 파일별로 받기 제안
@@ -985,6 +975,7 @@
     notePanels(); // 닫은 패널은 다시 열면 새 대화이므로 그 AI가 받은 기록을 버린다
     P.modal.onViewChanged();
     render();
+    P.renderPending(); // 지난 실행의 작업: 패널이 열리고 닫힐 때 [이어 쓰기]를 켜고 끈다 (v0.28.0)
   };
 
   // 시작할 때 지난번 프로젝트를 다시 연다 (크롬 확장은 접근 허용을 다시 눌러야 할 수 있다).
@@ -998,5 +989,5 @@
     }
   });
 
-  Object.assign(P, { project, ed, has, MAX_LOG, allowedFor, answerMd, listLines, notice, remember, rescan, saveState, sendProjectFollowUp, renderTree, syncStale, notePanels, openProject, render });
+  Object.assign(P, { project, ed, has, MAX_LOG, RUN_ID, panelEpoch, allowedFor, answerMd, listLines, notice, remember, rescan, saveState, sendProjectFollowUp, renderTree, syncStale, notePanels, openProject, render });
 })();

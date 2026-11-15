@@ -52,6 +52,9 @@ const RENDERER_FILES = [
   'debate-ui.js',
   'project.js',
   'project-changes.js',
+  'project-mix.js',
+  'project-commit.js',
+  'project-restore.js',
   'project-editor.js',
   'library.js',
 ];

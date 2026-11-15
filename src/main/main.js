@@ -24,7 +24,7 @@
 const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard, dialog, net, Notification } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl, limitTextOf } = require('../shared/services');
-const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
+const { LAYOUTS, normalizeLayout, placeCells, barRows } = require('../shared/layout');
 const autologin = require('./autologin');
 const { sendPrompt, cleanupTemp } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
@@ -42,6 +42,7 @@ const project = require('./project');
 const guard = require('./ipc-guard'); // 화면이 넘긴 값 다시 검사 (첨부 파일 · 읽기 옵션 · 로컬 LLM 주소)
 const { setupGitConsole } = require('./gitconsole');
 const { setupDevTest } = require('./devtest');
+const { setupGitCommit } = require('./gitcommit');
 const { createUpdater } = require('./updater');
 const secure = require('./secure-store'); // 기록 · 설정 · 라이브러리 · 프로젝트 상태 암호화 (v0.22.1)
 const notifyCore = require('../shared/notify');
@@ -90,7 +91,7 @@ let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널
 let gitConsole = null; // git 콘솔 (gitconsole.js)
 let devTest = null; // 미리보기 창의 테스트 실행 (devtest.js)
 let focusId = null; // 크게 보는 패널 (⤢). 나머지 패널은 크기를 그대로 둔 채 화면 밖으로 옮긴다
-const barIds = new Set(); // 변경 바를 띄운 패널 — 웹페이지 아래쪽을 바 높이만큼 비운다
+const barIds = new Map(); // 패널 id -> 아래 바 줄 수 (1~2, v0.28.0) — 웹페이지 아래쪽을 바 높이 × 줄 수만큼 비운다
 let loginView = null;
 const panels = new Map(); // id -> { view, login }  (지금 열려 있는 서비스 패널)
 
@@ -115,6 +116,7 @@ let prefs = {
   notify: { ...notifyCore.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
   sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
   retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
+  commitOffer: true, // 적용 후 커밋 제안 (v0.28.0, 기본 켬): 적용이 끝나면 [커밋하기]를 보여 준다 (누를 때만 커밋)
   autoRecommend: false, // 추천 조합 제안 (v0.27.0, 기본 끔): 질문 종류의 추천 조합이 지금 대상과 다르면 [추천 조합으로 바꾸기]만 띄운다
 };
 
@@ -139,6 +141,7 @@ function loadPrefs() {
   prefs.sendPreview = prefs.sendPreview === true;
   prefs.retryOnce = prefs.retryOnce !== false;
   prefs.autoRecommend = prefs.autoRecommend === true;
+  prefs.commitOffer = prefs.commitOffer !== false;
 }
 
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
@@ -481,7 +484,7 @@ function computeRects() {
       // 크게 보기: 고른 패널은 영역 전체, 나머지는 원래 크기로 숨겨 둔다 (답변 감시는 계속)
       const frame = focusId === id ? big : cells[i];
       const hidden = !!focusId && focusId !== id;
-      const bar = barIds.has(id) ? BAR_H : 0;
+      const bar = (barIds.get(id) || 0) * BAR_H;
       return {
         id,
         frame,
@@ -536,6 +539,7 @@ function pushState() {
     sendPreview: prefs.sendPreview,
     retryOnce: prefs.retryOnce,
     autoRecommend: prefs.autoRecommend,
+    commitOffer: prefs.commitOffer,
     update: updater?.status() || null,
     storage: { encrypted: secure.store().available() }, // 로컬 데이터 암호화 (v0.22.1)
     rects: rects.panels,
@@ -634,10 +638,12 @@ ipcMain.on('layout:set', (_e, value) => {
   }
 });
 
-// 프로젝트 모드의 변경 바를 띄우거나 내릴 때: 그 패널의 웹페이지 높이를 바만큼 줄이거나 되돌린다
-ipcMain.on('layout:bar', (_e, { id, on } = {}) => {
+// 프로젝트 모드의 변경 바 · 제안 바를 띄우거나 내릴 때: 그 패널의 웹페이지 높이를 바 줄 수만큼 줄이거나 되돌린다.
+// 두 바가 함께 뜨면 2줄을 쌓는다 (v0.28.0 — 예전에는 제안 바가 변경 바를 덮었다). rows가 없으면 예전 on(true/false)을 1줄로 본다.
+ipcMain.on('layout:bar', (_e, { id, on, rows } = {}) => {
   if (typeof id !== 'string') return;
-  if (on && panels.has(id)) barIds.add(id);
+  const n = barRows(rows === undefined ? !!on : rows);
+  if (n && panels.has(id)) barIds.set(id, n);
   else barIds.delete(id);
   pushState();
 });
@@ -968,6 +974,8 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     gitConsole = setupGitConsole({ ipcMain, getWin: () => win, getRoot: () => project.info()?.id || null });
     devTest = setupDevTest({ ipcMain, getWin: () => win, project, userDataDir: app.getPath('userData') });
+    // 적용 후 커밋 (v0.28.0): 적용한 파일만 add · commit (push 없음), 테스트 실행 중에는 받지 않는다
+    setupGitCommit({ ipcMain, getRoot: () => project.info()?.id || null, isBusy: () => !!devTest?.isBusy() });
     updater = createUpdater({ app, isAuto: () => prefs.autoUpdate !== false, onChange: () => schedulePushState(), log });
     updater.start();
   });

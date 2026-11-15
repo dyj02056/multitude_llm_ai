@@ -426,6 +426,7 @@ $('#historyMaxSelect').addEventListener('change', async (e) => {
 $('#sendPreviewToggle').addEventListener('change', (e) => host.setSettings({ sendPreview: e.target.checked }));
 $('#retryOnceToggle').addEventListener('change', (e) => host.setSettings({ retryOnce: e.target.checked })); // v0.26.0
 $('#autoRecommendToggle').addEventListener('change', (e) => host.setSettings({ autoRecommend: e.target.checked })); // v0.27.0
+$('#commitOfferToggle').addEventListener('change', (e) => host.setSettings({ commitOffer: e.target.checked })); // v0.28.0 (Windows 앱)
 for (const box of document.querySelectorAll('[data-notify]')) {
   box.addEventListener('change', () => host.setSettings({ notify: { [box.dataset.notify]: box.checked } }));
 }
@@ -565,6 +566,9 @@ function renderSettings() {
   $('#sendPreviewToggle').checked = !!state.sendPreview;
   $('#retryOnceToggle').checked = state.retryOnce !== false;
   $('#autoRecommendToggle').checked = !!state.autoRecommend; // v0.27.0
+  // 적용 후 커밋 제안 (v0.28.0): git이 있는 Windows 앱에서만 보인다
+  for (const id of ['#commitOfferRow', '#commitOfferNote']) $(id).hidden = !host.git?.commit;
+  $('#commitOfferToggle').checked = state.commitOffer !== false;
   renderRecommendTable(); // 질문 종류별 추천 (v0.27.0, recommend-ui.js)
   for (const box of document.querySelectorAll('[data-notify]')) box.checked = state.notify?.[box.dataset.notify] !== false;
 }

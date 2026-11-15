@@ -47,6 +47,11 @@ const SCENES = [
   { name: '33-history-thread', page: 'app' },
   { name: '34-recommend-stats', page: 'app' },
   { name: '35-recommend-chip', page: 'app' },
+  { name: '36-check-scripts', page: 'app' },
+  { name: '37-mix-apply', page: 'app' },
+  { name: '38-commit', page: 'app' },
+  { name: '39-bars-stacked', page: 'app' },
+  { name: '40-project-restore', page: 'app' },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];
 

@@ -20,6 +20,11 @@ const localSvc = LL.localService({ baseUrl: 'http://localhost:11434' });
 const all = LOCAL ? [...SERVICES, localSvc] : SERVICES;
 const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
+// v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
+const PROJ = ['36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore'].includes(scene);
+const SIDEBAR_W = 300;
+let sidebar = false;
+const barRows = new Map();
 // 보내기 전 미리보기 장면은 문서를 받지 않는 Duck.ai를 넣어 "빼고 보냄" 경고가 보이게 한다
 const selected = LOCAL ? ['gemini', 'chatgpt', 'claude', LL.LOCAL_ID] : PREVIEW ? ['gemini', 'chatgpt', 'claude', 'duckai'] : ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
 
@@ -31,7 +36,7 @@ let layout = 'grid';
 const now = Date.now();
 
 const answers = {
-  question: S.QUESTION,
+  question: PROJ ? 'getUser가 실패 응답을 처리하도록 고쳐 줘' : S.QUESTION,
   answers: selected.filter((id) => S.ANSWERS[id]).map((id) => ({ id, name: svc(id).name, color: svc(id).color, text: S.ANSWERS[id], md: S.ANSWERS[id] })),
   analysis: { judge: 'Claude', at: now, text: S.ANALYSIS_MD, md: S.ANALYSIS_MD, mode: 'analysis', names: ['Gemini', 'ChatGPT', 'DeepSeek', 'Perplexity'] },
 };
@@ -39,6 +44,7 @@ const answers = {
 const NAMES4 = ['Gemini', 'ChatGPT', 'DeepSeek', 'Perplexity'];
 const analysis2 = { judge: 'Gemini', at: now - 10 * 60e3, text: S.ANALYSIS_MD2, md: S.ANALYSIS_MD2, mode: 'analysis', names: NAMES4 };
 if (scene === '30-analysis-compare') answers.analyses = [analysis2, answers.analysis];
+if (PROJ) for (const a of answers.answers) if (S.PROJECT_ANSWERS[a.id]) Object.assign(a, { text: S.PROJECT_ANSWERS[a.id], md: S.PROJECT_ANSWERS[a.id] });
 if (scene === '29-debate-result') {
   answers.chain = S.CHAIN(now);
   answers.debates = [{ judge: 'Gemini', at: now - 60e3, text: S.DEBATE_RESULT, md: S.DEBATE_RESULT, mode: 'debate', names: ['ChatGPT', 'DeepSeek', 'Perplexity'], rounds: 2 }];
@@ -70,9 +76,14 @@ const DIAG = {
 
 function rects() {
   if (mode !== 'chat') return [];
-  const box = { x: 0, y: TOOLBAR_H, width: innerWidth, height: innerHeight - TOOLBAR_H - COMPOSER_H };
+  const side = sidebar ? SIDEBAR_W : 0;
+  const box = { x: side, y: TOOLBAR_H, width: innerWidth - side, height: innerHeight - TOOLBAR_H - COMPOSER_H };
   const cells = placeCells(layout, selected.length, box, 4);
-  return selected.map((id, i) => ({ id, frame: cells[i], hidden: false, focused: false, bar: false, content: { x: cells[i].x, y: cells[i].y + HEADER_H, width: cells[i].width, height: cells[i].height - HEADER_H } }));
+  // 바 줄 수만큼 웹페이지를 줄인다 (본체 main.js와 같게, v0.28.0: 변경 바 + 제안 바 = 2줄)
+  return selected.map((id, i) => {
+    const bar = (barRows.get(id) || 0) * 34;
+    return { id, frame: cells[i], hidden: false, focused: false, bar: !!bar, content: { x: cells[i].x, y: cells[i].y + HEADER_H, width: cells[i].width, height: cells[i].height - HEADER_H - bar } };
+  });
 }
 
 // 패널 안 웹페이지 자리 = 테스트용 채팅 페이지 (실제 앱에서는 본체가 여기에 AI 사이트를 얹는다)
@@ -105,7 +116,7 @@ function push() {
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b' },
     autoUpdate: true,
-    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip',
+    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip', commitOffer: true,
     update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
     storage: { encrypted: true },
     rects: rs,
@@ -147,9 +158,12 @@ window.host = {
   runSynth: async () => ({ ok: true }),
   setSynth() {}, setSettings() {}, refreshRemote: async () => ({}),
   setLayout: (v) => ((layout = v), push()),
-  setFocus() {}, setSidebar() {}, setPanelBar() {},
+  setFocus() {},
+  setSidebar: (on) => ((sidebar = PROJ && !!on), push()),
+  setPanelBar: (id, rows) => (rows ? barRows.set(id, rows) : barRows.delete(id), push()),
   update: { check: async () => {}, download: async () => {}, install: async () => false, openReleases() {} },
-  project: Object.fromEntries(['pick', 'restore', 'reconnect', 'close', 'readDir', 'readFile', 'writeFile', 'deleteFile', 'globalExclude', 'loadState', 'saveState'].map((n) => [n, async () => null])),
+  project: PROJ ? fakeProject() : Object.fromEntries(['pick', 'restore', 'reconnect', 'close', 'readDir', 'readFile', 'writeFile', 'deleteFile', 'globalExclude', 'loadState', 'saveState'].map((n) => [n, async () => null])),
+  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit() } : {}),
   library: {
     load: async () =>
       normalizeLibrary({
@@ -161,6 +175,72 @@ window.host = {
   panelAction() {},
   on: (ch, fn) => listeners[ch]?.push(fn),
 };
+
+// ---------- v0.28.0 프로젝트 장면용 가짜 폴더 · 테스트 실행 · git ----------
+function fakeProject() {
+  const files = { ...S.PROJECT_FILES };
+  const info = { name: 'demo-app', id: 'C:\\work\\demo-app' };
+  const readDir = async (dir) => {
+    const pre = dir ? `${dir}/` : '';
+    const out = new Map();
+    for (const p of Object.keys(files)) {
+      if (!p.startsWith(pre)) continue;
+      const [name, ...rest] = p.slice(pre.length).split('/');
+      out.set(name, rest.length ? { name, kind: 'dir', size: 0 } : { name, kind: 'file', size: files[p].length });
+    }
+    return [...out.values()];
+  };
+  // 이어 하기 장면: 지난 실행(다른 run)의 기록 — ChatGPT는 파일별로 받기 3/5에서 멈춤, Gemini는 받은 파일만
+  const plan = ['src/user.js', 'src/cache.js', 'src/api.js', 'test/user.test.js', 'README.md'].map((path) => ({ path, note: '' }));
+  const ctx = {
+    v: 1,
+    panels: {
+      chatgpt: { run: 'old-run', epoch: '0', at: Date.now() - 3600e3, conv: null, sent: [['src/user.js', 'h1', 4], ['package.json', 'h2', 10], ['README.md', 'h3', 3]], tree: 't', plan: { files: plan, index: 2, status: 'running', got: ['src/user.js', 'src/cache.js'] }, cont: null },
+      gemini: { run: 'old-run', epoch: '0', at: Date.now() - 3600e3, conv: null, sent: [['src/user.js', 'h1', 4], ['src/cache.js', 'h4', 3]], tree: 't', plan: null, cont: { path: 'src/user.js', rounds: 1 } },
+    },
+  };
+  return {
+    pick: async () => info,
+    restore: async () => info,
+    reconnect: async () => info,
+    close: async () => true,
+    readDir,
+    readFile: async (p) => (p in files ? { text: files[p], size: files[p].length } : { missing: true }),
+    writeFile: async (p, text) => ((files[p] = text), true),
+    deleteFile: async (p) => (delete files[p], true),
+    globalExclude: async () => null,
+    loadState: async () => ({ checked: ['package.json', 'src/user.js'], include: true, ...(scene === '40-project-restore' ? { ctx } : {}) }),
+    saveState: async () => true,
+  };
+}
+
+function fakeDevtest() {
+  const run = (ok, out, ms, summary) => ({ ok, code: ok ? 0 : 1, timedOut: false, stopped: false, ms, output: out, summary });
+  return {
+    info: async () => ({ ok: true, script: 'node --test', pre: null, post: null, checks: [{ name: 'test', script: 'node --test' }, { name: 'lint', script: 'eslint src' }, { name: 'typecheck', script: 'tsc --noEmit' }, { name: 'build', script: 'node build.js' }] }),
+    trial: async (_c, scripts) => {
+      await new Promise((r) => setTimeout(r, 150));
+      const results = scripts.map((name) =>
+        name === 'test'
+          ? { name, script: 'node --test', before: run(false, '✖ 없는 사용자면 오류\nℹ tests 1\nℹ pass 0\nℹ fail 1', 2300, { pass: 0, fail: 1 }), after: run(true, '✔ 없는 사용자면 오류\nℹ tests 1\nℹ pass 1\nℹ fail 0', 2100, { pass: 1, fail: 0 }) }
+          : { name, script: 'eslint src', before: run(true, '(문제 없음)', 900), after: run(false, "src/user.js\n  8:9  error  'set' is not defined  no-undef\n\n✖ 1 problem (1 error, 0 warnings)", 950) },
+      );
+      return { ok: true, scripts, results, script: 'node --test', before: results[0].before, after: results[0].after };
+    },
+    stop: async () => true,
+  };
+}
+
+function fakeGit() {
+  return {
+    info: async () => ({ root: 'C:\\work\\demo-app', isRepo: true, branch: 'main', hooks: ['pre-commit'] }),
+    run: async () => ({ ok: true }),
+    stop: async () => true,
+    openTerminal: async () => ({ ok: true }),
+    commitInfo: async () => ({ ok: true, branch: 'main', otherStaged: ['README.md'] }),
+    commit: async () => ({ ok: true, hash: '3f9c2a1', output: '[main 3f9c2a1] Fix getUser error handling\n 3 files changed, 14 insertions(+), 2 deletions(-)' }),
+  };
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const $ = (s) => document.querySelector(s);
@@ -255,6 +335,47 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 머리줄의 ⚠ 화면이 바뀐 것 같음 → 자가진단 창
     const badge = [...document.querySelectorAll('.panel-head .diag-badge')].find((b) => !b.hidden && b.textContent.includes('화면이'));
     badge?.click();
+  }
+  // ---------- v0.28.0 프로젝트 장면 ----------
+  const btnIn = (root, text) => [...(root || document).querySelectorAll('button')].find((b) => b.textContent.includes(text) && !b.closest('[hidden]'));
+  if (PROJ && scene !== '40-project-restore') {
+    await sleep(300);
+    for (const id of ['gemini', 'chatgpt']) emit('panel:status', { id, answer: 'done', chars: 900 });
+    await sleep(600);
+  }
+  if (scene === '36-check-scripts') {
+    btnIn(document.querySelector('.change-bar:not([hidden])'), '변경 보기')?.click();
+    await sleep(500);
+    document.querySelector('#patchChecks input[data-check="lint"]')?.click();
+    click('#patchTest');
+    await sleep(600);
+  }
+  if (scene === '37-mix-apply' || scene === '38-commit') {
+    click('#changesBtn');
+    await sleep(700);
+    click('#changesMix');
+    await sleep(300);
+    // src/user.js는 Gemini 것으로 (cache.js는 Gemini, 테스트는 ChatGPT — 섞어서)
+    document.querySelectorAll('.mix-table tr')[[...document.querySelectorAll('.mix-table tr')].findIndex((tr) => tr.textContent.includes('src/user.js'))]?.querySelector('input[type="radio"]')?.click();
+    await sleep(200);
+    if (scene === '38-commit') {
+      click('#patchApply');
+      await sleep(800);
+      click('#patchApply'); // [커밋하기…]
+      await sleep(500);
+    }
+  }
+  if (scene === '39-bars-stacked') {
+    // Gemini: 변경 바 + 보내기 실패 [다시 보내기] 제안 바가 함께 — 두 줄로 쌓인다
+    emit('panel:status', { id: 'gemini', send: 'error', error: '입력창을 찾지 못했습니다' });
+    await sleep(200);
+    document.querySelectorAll('.panel .handoff-btn')[1]?.click(); // ChatGPT: 변경 바 + 넘기기 바
+    await sleep(300);
+  }
+  if (scene === '40-project-restore') {
+    await sleep(500);
+    btnIn($('#psRestore'), '이어 쓰기')?.click();
+    await sleep(500);
   }
   if (scene === '06-settings-shortcuts') click('#helpBtn');
   // 설정 화면의 표들: 그 칸이 맨 위에 오게 스크롤

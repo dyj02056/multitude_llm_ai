@@ -609,6 +609,37 @@ body.project-open[data-mode="chat"][data-view="dialog"] .project-side { display:
 .ps-upload .seg button { padding: 1px 8px; font-size: 11.5px; }
 .ps-foot #psSync { padding: 3px 8px; font-size: 11.5px; text-align: left; }
 .ps-foot #psSync[hidden] { display: none; }
+/* 지난 실행의 작업 (v0.28.0): 패널마다 이어 쓰기 · 버리기 */
+.ps-restore { display: flex; flex-direction: column; gap: 3px; padding: 6px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: var(--accent-soft); }
+.ps-restore[hidden] { display: none; }
+.ps-restore-title { font-weight: 700; color: var(--accent-text); }
+.ps-restore-hint { white-space: normal; }
+.ps-restore-row { display: flex; align-items: center; gap: 6px; }
+.ps-restore-row .name { font-weight: 700; flex: none; }
+.ps-restore-row .muted-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-restore-row button { flex: none; padding: 0 6px; font-size: 11px; }
+/* 섞어서 적용 (v0.28.0): 경로마다 한 줄, AI마다 고르기 칸 */
+.mix-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mix-table th, .mix-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.mix-table th { box-shadow: inset 0 2px 0 var(--svc, transparent); }
+.mix-table tr.mix-shared td { background: var(--warn-soft); }
+.mix-table .mix-path .path { font-family: var(--mono); margin-right: 6px; }
+.mix-table .mix-opt { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.mix-table .op, .commit-files .op { font-size: 11px; padding: 0 5px; border-radius: var(--r-sm); border: 1px solid var(--border); }
+.mix-table .op.bad { color: var(--err-text); border-color: rgba(248, 81, 73, .5); }
+.mix-table .add { color: var(--ok-text); }
+.mix-table .del { color: var(--err-text); }
+.mix-table .mix-all { padding: 1px 8px; font-size: 11.5px; }
+.mix-warn { display: block; margin-top: 8px; color: var(--warn-text); font-size: 12px; }
+.mix-warn:empty { display: none; }
+/* 커밋 창 (v0.28.0) */
+.commit-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.commit-tools button { margin-left: auto; }
+.commit-msg { width: 100%; box-sizing: border-box; font: 12.5px/1.5 var(--mono); background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 8px; resize: vertical; }
+.commit-info { display: block; margin: 6px 0 2px; }
+.commit-files { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
+.commit-files li { display: flex; gap: 6px; align-items: center; }
+.commit-files .path { font-family: var(--mono); }
 .project-chip { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); margin-left: auto; flex: none; cursor: pointer; }
 .project-chip[hidden] { display: none; }
 .project-chip:has(input:checked) { color: var(--accent-text); }
@@ -757,6 +788,15 @@ body.project-open[data-mode="chat"][data-view="editor"] .project-side { display:
 .test-badge.bad { color: var(--err-text); border-color: rgba(248, 81, 73, .5); background: var(--err-soft); }
 .test-badge.skip { color: var(--muted); }
 .test-err { color: var(--err-text); font-size: 12px; }
+/* 검사 스크립트 여러 개 (v0.28.0): 스크립트마다 머리줄 + 적용 전 | 적용 후, 창 아래 체크 칸 */
+.test-out { overflow: auto; }
+.test-out[hidden] { display: none; }
+.test-script { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.test-script-head { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+.test-script-head .test-name { font-weight: 700; font-family: var(--mono); }
+.patch-checks { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.patch-checks[hidden] { display: none; }
+.patch-checks .patch-check { gap: 3px; font-family: var(--mono); }
 .test-output { flex: 1; min-height: 60px; max-height: 220px; margin: 0; overflow: auto; font: 11.5px/1.45 var(--mono); white-space: pre-wrap; word-break: break-word; color: var(--text); user-select: text; }
 
 .pf.collect .pf-head .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -967,7 +1007,8 @@ body[data-view="compress"] #panels { display: none !important; }
    [쉽게 말하면] 패널 머리줄의 → 넘기기, 패널 아래 제안 바(넘기기 · 다시 보내기 · 다른 AI로), 토론 설정 창,
    비교 화면의 "이어 묻기 · 토론" 탭, 이견 표에서 고른 AI 답변의 관련 문단 강조, 두 분석 나란히 보기입니다. */
 .panel-head .handoff-btn { font-weight: 700; }
-.panel.has-offer .change-bar:not(.offer-bar) { display: none; }
+/* 변경 바와 제안 바가 함께 뜨면 두 줄로 쌓는다 (v0.28.0): 변경 바가 맨 아래, 제안 바가 그 위 (본체가 웹페이지를 2줄만큼 줄인다) */
+.panel.bars-2 .offer-bar { bottom: 34px; }
 .offer-bar { border-top-color: var(--accent); z-index: 2; }
 .offer-bar .cb-icon { color: var(--accent-text); }
 .offer-bar .cb-text { flex: none; cursor: default; }

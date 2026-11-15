@@ -162,7 +162,7 @@ test('테스트 실행: 적용 전 실패 → 수정안 쓴 후 통과, 끝나�
   const { root, project, call } = setupTrial(t);
   await project.open(root);
   const info = await call('devtest:info');
-  assert.deepEqual(info, { ok: true, script: 'node --test', pre: null, post: null });
+  assert.deepEqual(info, { ok: true, script: 'node --test', pre: null, post: null, checks: [{ name: 'test', script: 'node --test', pre: null, post: null }] });
 
   const r = await call('devtest:trial', [
     { path: 'sum.js', after: 'module.exports = (a, b) => a + b;\n' },

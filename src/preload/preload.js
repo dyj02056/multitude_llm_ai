@@ -70,7 +70,7 @@ contextBridge.exposeInMainWorld('host', {
   setLayout: (value) => ipcRenderer.send('layout:set', value),
   setFocus: (id) => ipcRenderer.send('layout:focus', id),
   setSidebar: (open) => ipcRenderer.send('layout:sidebar', open),
-  setPanelBar: (id, on) => ipcRenderer.send('layout:bar', { id, on: !!on }),
+  setPanelBar: (id, rows) => ipcRenderer.send('layout:bar', { id, on: !!rows, rows: Number(rows) || 0 }), // 바 줄 수 0~2 (v0.28.0)
   // 프로젝트 모드: 고른 폴더 안에서만 읽기·쓰기 (실패하면 Error를 던진다)
   project: Object.fromEntries(
     ['pick', 'restore', 'reconnect', 'close', 'readDir', 'readFile', 'writeFile', 'deleteFile', 'globalExclude', 'loadState', 'saveState'].map(
@@ -94,11 +94,14 @@ contextBridge.exposeInMainWorld('host', {
     run: (line) => ipcRenderer.invoke('git:run', line),
     stop: () => ipcRenderer.invoke('git:stop'),
     openTerminal: () => ipcRenderer.invoke('git:openTerminal'),
+    // 적용 후 커밋 (v0.28.0): 경로 목록 · 메시지만 넘기고, 검사 · 실행은 메인(gitcommit.js)이 한다. push는 하지 않는다
+    commitInfo: (paths) => ipcRenderer.invoke('git:commitInfo', paths),
+    commit: (req) => ipcRenderer.invoke('git:commit', req),
   },
   // 미리보기 창의 테스트 실행 (Windows 앱 전용): 고칠 파일 목록만 넘기고, 확인·실행·되돌리기는 메인(devtest.js)이 한다
   devtest: {
     info: () => ipcRenderer.invoke('devtest:info'),
-    trial: (changes) => ipcRenderer.invoke('devtest:trial', changes),
+    trial: (changes, scripts) => ipcRenderer.invoke('devtest:trial', changes, scripts), // scripts: 검사 이름 (test · lint · typecheck · build, v0.28.0)
     stop: () => ipcRenderer.invoke('devtest:stop'),
   },
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),

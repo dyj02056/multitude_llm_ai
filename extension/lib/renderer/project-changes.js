@@ -119,6 +119,7 @@
     const run = runs.get(id);
     if (!run) return;
     if (run.index >= run.files.length) return finishRun(id);
+    saveState(); // 어디까지 받았는지 적어 둔다 (v0.28.0 — 앱을 다시 켜도 이어서 계속)
     const res = await host.sendFollowUp(id, PC.stepPrompt(run.files[run.index], run.index, run.files.length));
     if (!res?.ok) {
       notice(`보내지 못해 파일별로 받기를 멈춥니다: ${res?.error || '알 수 없는 오류'}`);
@@ -140,12 +141,16 @@
     const run = runs.get(id);
     if (!run) return;
     runs.delete(id);
+    saveState();
     const svc = state.services.find((s) => s.id === id);
     const plans = await planChanges([...run.changes.values()]);
     const got = run.files.filter((f) => run.changes.has(f.path)).length;
     bars.set(id, { ai: { id, name: svc?.name || id, color: svc?.color, plans }, applied: null, split: { got, total: run.files.length } });
     renderBar(id);
     notice(`파일별로 받기 끝: ${got}/${run.files.length}개 받음 — 바에서 미리 보고 적용하세요`);
+    // 되살린 진행이면: 앱을 다시 켜기 전에 받은 파일은 이 묶음에 없다 (내용은 저장하지 않으므로)
+    const missed = (run.prevGot || []).filter((p) => !run.changes.has(p));
+    if (missed.length) setTimeout(() => notice(t('restore.prevGot', { files: missed.join(', ') })), 2500);
   }
 
   /** 제안 · 진행 중 바 */
@@ -157,7 +162,31 @@
     bar.className = 'change-bar run';
     const total = run.files.length;
     const list = run.files.map((f, i) => `${i + 1}. ${f.path}${f.note ? ` — ${f.note}` : ''}`).join('\n');
-    if (run.status === 'offer') {
+    if (run.status === 'paused') {
+      // 되살린 파일별로 받기 (v0.28.0): 앱을 다시 켜거나 프로젝트를 다시 열었다 — 누르면 멈춘 파일부터 이어서 보낸다
+      const at = Math.min(run.index + 1, total);
+      const text = span('cb-text', '');
+      text.append(span('cb-count', t('restore.runBar', { at, total })), span('cb-files', ` · ${run.files[Math.min(run.index, total - 1)].path}`));
+      text.title = `${list}${run.prevGot?.length ? `\n\n${t('restore.prevGot', { files: run.prevGot.join(', ') })}` : ''}`;
+      const go = button(t('restore.resume'), t('restore.resumeTitle', { at, total }), () => {
+        run.status = 'running';
+        sendStep(id);
+      });
+      go.className = 'cb-apply';
+      const again = button(t('restore.restart'), t('restore.restartTitle'), () => {
+        run.index = 0;
+        run.prevGot = [];
+        run.status = 'running';
+        sendStep(id);
+      });
+      const drop = button('✕', '계획을 버립니다 (파일별로 받지 않음)', () => {
+        runs.delete(id);
+        setChangeBar(id, false);
+        saveState();
+      });
+      drop.className = 'cb-close';
+      bar.replaceChildren(span('cb-icon', '»'), text, again, go, drop);
+    } else if (run.status === 'offer') {
       const text = span('cb-text', '');
       text.append(span('cb-count', `계획: 파일 ${total}개`), span('cb-files', ` · ${run.files.map((f) => f.path).join(', ')}`));
       text.title = `AI가 고칠 파일 목록(계획)을 보냈습니다:\n${list}\n\n"파일별로 받기 시작"을 누르면 한 파일씩 차례로 물어 모읍니다.`;
@@ -208,6 +237,7 @@
     const res = await host.sendFollowUp(id, PX.continuePrompt(cont));
     if (!res?.ok) return alert(`보내지 못했습니다: ${res?.error || '알 수 없는 오류'}`);
     continuing.set(id, { path, cont, changes: b.ai.plans.map((x) => x.change), rounds });
+    saveState(); // 이어 받는 중이라는 것만 적어 둔다 (v0.28.0)
     notice(`${b.ai.name}에게 ${path}의 나머지를 부탁했습니다 (${rounds}/${PX.MAX_CONTINUE}) — 답이 끝나면 이어 붙입니다`);
   }
 
@@ -228,8 +258,9 @@
   }
 
   /** 적용하거나 되돌린 뒤: 아직 적용하지 않은 다른 패널의 바를 지금 파일 기준으로 다시 계산한다 */
-  async function refreshOtherBars(skipId) {
-    for (const [id, b] of [...bars]) if (id !== skipId && !b.applied) await refreshBar(id).catch(() => {});
+  async function refreshOtherBars(skip) {
+    const skipped = (id) => (skip instanceof Set ? skip.has(id) : id === skip);
+    for (const [id, b] of [...bars]) if (!skipped(id) && !b.applied) await refreshBar(id).catch(() => {});
   }
 
   const sumLine = (plans) => plans.map(({ plan }) => `${OP_TEXT[plan.op]} ${plan.path} +${plan.add} −${plan.del}`).join('\n');
@@ -260,7 +291,15 @@
       const text = span('cb-text', `${files.length}개 파일 적용됨 · ${files.map((f) => f.path).join(', ')}`);
       text.title = files.map((f) => f.path).join('\n');
       bar.className = 'change-bar applied';
-      bar.replaceChildren(span('cb-icon', '✓'), text, undo, close);
+      // 적용 후 커밋 (v0.28.0, Windows 앱): 설정 "적용 후 커밋 제안"이 켜져 있으면 [커밋하기] — 누를 때만 커밋 창을 연다
+      const extra = [];
+      if (b.applied.committed) extra.push(span('cb-warn', t('commit.doneTag', { hash: b.applied.committed })));
+      else if (P.canOfferCommit?.()) {
+        const commit = button(t('commit.offerBtn'), t('commit.offerTitle'), () => P.openCommit(b.applied));
+        commit.className = 'cb-continue';
+        extra.push(commit);
+      }
+      bar.replaceChildren(span('cb-icon', '✓'), text, ...extra, undo, close);
       p.collectBtn.hidden = true;
       setChangeBar(id, true);
       return true;
@@ -350,6 +389,7 @@
   window.renderChanges = async () => {
     const cols = $('#changesCols');
     $('#changesLog').textContent = `적용 기록 (${project.log.filter((l) => !l.reverted).length})`;
+    $('#changesMix').disabled = true;
     if (!has()) {
       $('#changesInfo').textContent = '';
       cols.style.gridTemplateColumns = '1fr';
@@ -358,6 +398,7 @@
     $('#changesInfo').textContent = `${project.info.name} — AI 답변에서 찾은 코드 수정안`;
     cols.replaceChildren(span('change-empty', '답변을 읽는 중…'));
     plansByAi = await planAll();
+    $('#changesMix').disabled = !MLA.mixSelect.canMix(plansByAi); // 섞어서 적용 (v0.28.0): 수정안이 있는 AI가 둘 이상일 때
     cols.style.gridTemplateColumns = `repeat(${Math.max(plansByAi.length, 1)}, minmax(0, 1fr))`;
     cols.replaceChildren(...plansByAi.map(changeColumn));
   };
@@ -474,6 +515,7 @@
       $('#patchAll').onclick = null;
       $('#patchTest').onclick = null;
       $('#patchTest').hidden = true;
+      $('#patchChecks').hidden = true;
       $('#patchTestOut').hidden = true;
       $('#patchTestOut').replaceChildren();
       if (testRunning) host.devtest?.stop(); // 창을 닫으면 실행 중인 테스트도 멈춘다 (파일은 메인이 되돌린다)
@@ -639,107 +681,179 @@
       if (!chosen.length) return ($('#patchStatus').textContent = '적용할 파일을 고르세요');
       $('#patchApply').disabled = true;
       try {
-        const { text } = await applyPlans(ai, chosen);
-        $('#patchStatus').textContent = text;
-        setTimeout(() => {
-          modal.hide();
-          if (state?.chatView === 'changes') window.renderChanges();
-        }, 900);
+        const { entry, text } = await applyPlans(ai, chosen);
+        afterApplied(entry, text);
       } finally {
         $('#patchApply').disabled = false;
       }
     };
 
-    // 테스트 실행 (Windows 앱 전용: host.devtest)
-    if (host.devtest) {
-      const btn = $('#patchTest');
-      btn.hidden = false;
-      btn.textContent = '테스트 실행';
-      btn.onclick = async () => {
-        if (testRunning) {
-          btn.disabled = true;
-          await host.devtest.stop();
-          return;
-        }
-        const chosen = chosenPlans();
-        if (!chosen.length) return ($('#patchStatus').textContent = '테스트할 파일을 고르세요');
-        testRunning = true;
-        btn.textContent = '테스트 중지';
-        $('#patchApply').disabled = true;
-        const out = $('#patchTestOut');
-        out.hidden = false;
-        out.replaceChildren(span('muted-label', '테스트 실행 중… 적용 전 → 수정안을 잠깐 쓴 후 순서로 두 번 실행하고, 끝나면 원래 파일로 되돌립니다'));
-        try {
-          const r = await host.devtest.trial(chosen.map((p) => ({ path: p.path, after: p.op === 'delete' ? null : p.after })));
-          renderTestResult(out, r);
-        } catch (err) {
-          renderTestResult(out, { ok: false, error: err.message });
-        } finally {
-          testRunning = false;
-          btn.disabled = false;
-          btn.textContent = '테스트 다시 실행';
-          $('#patchApply').disabled = false;
-        }
-      };
+    // 테스트 실행 (Windows 앱 전용: host.devtest) — v0.28.0: lint · typecheck · build도 골라서
+    setupTestRun(chosenPlans);
+  }
+
+  // ---------- 검사 실행 (test · lint · typecheck · build, Windows 앱) ----------
+
+  let testChecks = null; // 지난번 고른 검사 이름 (창을 다시 열어도 유지, 처음은 test만)
+
+  /** 창 아래 검사 체크 칸: package.json에 있는 스크립트만 보인다. 고른 이름을 돌려주는 함수를 돌려준다 */
+  function renderCheckBoxes(info) {
+    const box = $('#patchChecks');
+    const checks = info?.ok && Array.isArray(info.checks) ? info.checks : [];
+    if (!testChecks) testChecks = new Set(checks.some((c) => c.name === 'test') ? ['test'] : checks.slice(0, 1).map((c) => c.name));
+    box.replaceChildren(
+      ...checks.map((c) => {
+        const l = document.createElement('label');
+        l.className = 'check-label patch-check';
+        l.title = [c.pre && `pre${c.name}: ${c.pre}`, `${c.name}: ${c.script}`, c.post && `post${c.name}: ${c.post}`].filter(Boolean).join('\n');
+        const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: testChecks.has(c.name) });
+        cb.dataset.check = c.name;
+        cb.addEventListener('change', () => (cb.checked ? testChecks.add(c.name) : testChecks.delete(c.name)));
+        l.append(cb, span('', c.name));
+        return l;
+      }),
+    );
+    box.hidden = checks.length < 2; // test 하나뿐이면 예전처럼 체크 칸 없이
+    return () => checks.map((c) => c.name).filter((n) => testChecks.has(n));
+  }
+
+  /** 창의 [테스트 실행]: 체크한 수정안을 잠깐 쓰고 고른 검사를 적용 전 · 후로 돌려 나란히 보여 준다. getChosen() → 적용할 plan 목록 */
+  function setupTestRun(getChosen) {
+    if (!host.devtest) return;
+    const btn = $('#patchTest');
+    btn.hidden = false;
+    btn.textContent = t('devtest.run');
+    let picked = () => ['test'];
+    host.devtest.info().then((info) => {
+      if ($('#patchModal').hidden || btn.hidden) return;
+      picked = renderCheckBoxes(info);
+    }).catch(() => {});
+    btn.onclick = async () => {
+      if (testRunning) {
+        btn.disabled = true;
+        await host.devtest.stop();
+        return;
+      }
+      const chosen = getChosen();
+      if (!chosen.length) return ($('#patchStatus').textContent = '테스트할 파일을 고르세요');
+      const scripts = picked();
+      if (!scripts.length) return ($('#patchStatus').textContent = t('devtest.pickScript'));
+      testRunning = true;
+      btn.textContent = '테스트 중지';
+      $('#patchApply').disabled = true;
+      const out = $('#patchTestOut');
+      out.hidden = false;
+      out.replaceChildren(span('muted-label', t('devtest.running', { names: scripts.join(' · ') })));
+      try {
+        const r = await host.devtest.trial(chosen.map((p) => ({ path: p.path, after: p.op === 'delete' ? null : p.after })), scripts);
+        renderTestResult(out, r);
+      } catch (err) {
+        renderTestResult(out, { ok: false, error: err.message });
+      } finally {
+        testRunning = false;
+        btn.disabled = false;
+        btn.textContent = '테스트 다시 실행';
+        $('#patchApply').disabled = false;
+      }
+    };
+  }
+
+  /**
+   * 창에서 적용한 뒤: 커밋 제안이 켜져 있으면(Windows 앱 · git) 창을 닫지 않고 [커밋하기…]를 보여 준다 (v0.28.0).
+   * 아니면 예전처럼 잠깐 뒤 닫는다. 커밋은 누를 때만 한다.
+   */
+  function afterApplied(entry, text) {
+    $('#patchStatus').textContent = text;
+    if (entry && P.canOfferCommit?.()) {
+      $('#patchStatus').textContent = `${text} — ${t('commit.offerNote')}`;
+      $('#patchAll').hidden = true;
+      $('#patchTest').hidden = true;
+      $('#patchChecks').hidden = true;
+      $('#patchApply').textContent = t('commit.offerBtn');
+      $('#patchApply').onclick = () => P.openCommit(entry);
+      return;
     }
+    setTimeout(() => {
+      modal.hide();
+      if (state?.chatView === 'changes') window.renderChanges();
+    }, 900);
   }
 
   const fmtMs = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}분 ${Math.round((ms % 60000) / 1000)}초` : `${(ms / 1000).toFixed(1)}초`);
 
-  /** 테스트 결과: 적용 전 | 적용 후를 나란히 (상태 · 통과/실패 수 · 걸린 시간 · 출력) */
+  /**
+   * 검사 결과: 스크립트마다 한 줄 머리(이름 · 판정)와 적용 전 | 적용 후를 나란히 (상태 · 통과/실패 수 · 걸린 시간 · 출력).
+   * v0.28.0: r.results에 고른 스크립트(test · lint · typecheck · build)가 차례로 온다. 예전 모양(r.before · r.after)도 받는다.
+   */
   function renderTestResult(box, r) {
     if (!r?.ok) {
       box.replaceChildren(span(r?.cancelled ? 'muted-label' : 'test-err', r?.error || '테스트를 실행하지 못했습니다'));
       return;
     }
-    const col = (title, t) => {
+    const col = (title, x) => {
       const c = document.createElement('div');
       c.className = 'test-col';
       const head = document.createElement('div');
       head.className = 'test-col-head';
       head.append(span('', title));
-      if (!t) {
+      if (!x) {
         head.append(span('test-badge skip', '실행 안 함'));
         c.append(head);
         return c;
       }
-      const [cls, label] = t.stopped
+      const [cls, label] = x.stopped
         ? ['skip', '중지함']
-        : t.timedOut
+        : x.timedOut
           ? ['bad', '시간 초과']
-          : t.error
+          : x.error
             ? ['bad', '실행 오류']
-            : t.ok
+            : x.ok
               ? ['good', '통과']
-              : ['bad', `실패 (종료 코드 ${t.code})`];
+              : ['bad', `실패 (종료 코드 ${x.code})`];
       head.append(span(`test-badge ${cls}`, label));
-      if (t.summary) head.append(span('muted-label', `통과 ${t.summary.pass} · 실패 ${t.summary.fail}`));
-      if (t.ms) head.append(span('muted-label', fmtMs(t.ms)));
+      if (x.summary) head.append(span('muted-label', `통과 ${x.summary.pass} · 실패 ${x.summary.fail}`));
+      if (x.ms) head.append(span('muted-label', fmtMs(x.ms)));
       c.append(head);
-      if (t.error) c.append(span('test-err', t.error));
-      if (t.restoreFailed?.length) c.append(span('test-err', `원래 파일로 되돌리지 못했습니다: ${t.restoreFailed.join(', ')}`));
+      if (x.error) c.append(span('test-err', x.error));
       const pre = document.createElement('pre');
       pre.className = 'test-output';
-      pre.textContent = t.output || '(출력 없음)';
+      pre.textContent = x.output || '(출력 없음)';
       c.append(pre);
       requestAnimationFrame(() => (pre.scrollTop = pre.scrollHeight)); // 요약이 있는 끝부분부터 보이게
       return c;
     };
+    const verdictOf = (x) =>
+      x.before?.ok && x.after && !x.after.ok
+        ? ['bad', t('devtest.verdictBreaks', { name: x.name })]
+        : !x.before?.ok && x.after?.ok
+          ? ['good', t('devtest.verdictFixes', { name: x.name })]
+          : x.after?.ok
+            ? ['good', t('devtest.verdictPasses', { name: x.name })]
+            : ['skip', t('devtest.verdictNeither', { name: x.name })];
+    const results = Array.isArray(r.results) && r.results.length ? r.results : [{ name: 'test', script: r.script, before: r.before, after: r.after }];
     const head = document.createElement('div');
     head.className = 'test-head';
-    const verdict =
-      r.before?.ok && r.after && !r.after.ok
-        ? ['bad', '⚠ 수정안을 쓰면 테스트가 깨집니다']
-        : !r.before?.ok && r.after?.ok
-          ? ['good', '✓ 수정안이 실패하던 테스트를 고칩니다']
-          : r.after?.ok
-            ? ['good', '✓ 수정안을 써도 테스트가 통과합니다']
-            : ['skip', '적용 전후 모두 통과하지 못했습니다'];
-    head.append(span('muted-label', `npm test (${r.script})`), span(`test-badge ${verdict[0]}`, verdict[1]), span('muted-label', '파일은 원래대로 되돌렸습니다'));
-    const cols = document.createElement('div');
-    cols.className = 'test-cols';
-    cols.append(col('적용 전', r.before), col('적용 후 (체크한 수정안)', r.after));
-    box.replaceChildren(head, cols);
+    const bad = results.filter((x) => verdictOf(x)[0] === 'bad').length;
+    head.append(
+      span('muted-label', results.map((x) => x.name).join(' · ')),
+      span(`test-badge ${bad ? 'bad' : results.every((x) => x.after?.ok) ? 'good' : 'skip'}`, bad ? t('devtest.sumBad', { n: bad }) : t('devtest.sumOk', { n: results.length })),
+      span('muted-label', '파일은 원래대로 되돌렸습니다'),
+    );
+    const restoreFailed = r.restoreFailed || r.after?.restoreFailed;
+    const blocks = results.map((x) => {
+      const b = document.createElement('div');
+      b.className = 'test-script';
+      const h = document.createElement('div');
+      h.className = 'test-script-head';
+      const v = verdictOf(x);
+      h.append(span('test-name', x.name === 'test' ? 'npm test' : `npm run ${x.name}`), span('muted-label', x.script ? `(${x.script})` : ''), span(`test-badge ${v[0]}`, v[1]));
+      const cols = document.createElement('div');
+      cols.className = 'test-cols';
+      cols.append(col('적용 전', x.before), col('적용 후 (체크한 수정안)', x.after));
+      b.append(h, cols);
+      return b;
+    });
+    box.replaceChildren(head, ...(restoreFailed?.length ? [span('test-err', `원래 파일로 되돌리지 못했습니다: ${restoreFailed.join(', ')}`)] : []), ...blocks);
   }
 
   /**
@@ -747,8 +861,11 @@
    * 여러 파일은 한 묶음(트랜잭션)으로 쓴다 (v0.23.0): 쓰기 · 지우기가 하나라도 실패하면 이 묶음에서 이미 쓴 파일을
    * 원래대로 되돌린다 (되돌리기와 같은 원본 — 고친 파일은 원래 내용, 지운 파일은 다시 만들고, 새로 만든 파일은 지움).
    * 그사이 파일이 바뀌어 다시 계산할 수 없는 파일은 예전처럼 그 파일만 빼고 쓴다.
+   * 섞어서 적용 (v0.28.0): ai는 { id: null, name: 'Claude + ChatGPT', mixed: true }, sources는 Map(plan → 그 수정안을 낸 AI).
+   * 한 묶음으로 쓰고(실패하면 모두 되돌림), 적용 기록은 하나, "이 AI가 안다"는 기록은 파일마다 낸 AI에게만 남긴다.
    */
-  async function applyPlans(ai, plans) {
+  async function applyPlans(ai, plans, { sources = null } = {}) {
+    const ownerOf = (plan) => sources?.get(plan.src || plan) || ai;
     const failed = [];
     const ready = [];
     for (const plan of plans) {
@@ -758,11 +875,11 @@
         if (now !== plan.before) {
           // 덩어리 일부만 고른 파일은 다시 계산하면 고른 것이 사라지므로 적용하지 않는다
           if (plan.partial) throw new Error('그사이 파일이 바뀌었습니다. 미리보기를 다시 열어 덩어리를 고르세요');
-          const change = ai.plans.find((x) => x.plan === (plan.src || plan)).change;
+          const change = ownerOf(plan).plans.find((x) => x.plan === (plan.src || plan)).change;
           p = PX.planChange(change, now);
           if (!p.ok) throw new Error(`그사이 파일이 바뀌어 적용할 수 없습니다 (${p.error})`);
         }
-        ready.push({ path: p.path, op: p.op === 'delete' ? 'delete' : 'write', before: p.before, after: p.after });
+        ready.push({ path: p.path, op: p.op === 'delete' ? 'delete' : 'write', before: p.before, after: p.after, owner: ownerOf(plan) });
       } catch (err) {
         failed.push(`${plan.path}: ${err.message}`);
       }
@@ -779,12 +896,22 @@
       alert(failed.length ? `${msg}\n\n적용하지 못한 파일:\n${failed.join('\n')}` : msg);
       return { entry: null, text: `${tx.failed.path} ${tx.failed.op === 'delete' ? '지우기' : '쓰기'} 실패 — 적용하지 않았습니다` };
     }
-    const done = tx.done;
+    const ownerByPath = new Map(ready.map((r) => [r.path, r.owner]));
+    const done = tx.done.map(({ owner, ...f }) => f); // 적용 기록에는 AI 객체를 넣지 않는다
     let entry = null;
     if (done.length) {
-      // 수정안을 낸 AI는 적용한 결과를 이미 안다. 다른 AI에게는 ⟳ 뒤 "바뀐 파일"로 보인다.
-      remember(ai.id, done.map((f) => ({ path: f.path, text: f.after })));
-      entry = { id: `${Date.now().toString(36)}`, at: Date.now(), ai: ai.name, files: done, reverted: false };
+      // 수정안을 낸 AI는 적용한 결과를 이미 안다 (섞었으면 파일마다 낸 AI만). 다른 AI에게는 ⟳ 뒤 "바뀐 파일"로 보인다.
+      const owners = [];
+      for (const f of done) {
+        const o = ownerByPath.get(f.path) || ai;
+        let s = owners.find((x) => x.ai === o);
+        if (!s) owners.push((s = { ai: o, paths: [] }));
+        s.paths.push(f.path);
+      }
+      for (const s of owners) if (s.ai.id) remember(s.ai.id, done.filter((f) => s.paths.includes(f.path)).map((f) => ({ path: f.path, text: f.after })));
+      // sources: 커밋 메시지 · 요약 부탁에 쓰는 출처 (v0.28.0) — 이름 · 패널 id · 경로만
+      const srcs = owners.map((s) => ({ id: s.ai.id || null, name: s.ai.name, paths: s.paths }));
+      entry = { id: `${Date.now().toString(36)}`, at: Date.now(), ai: ai.name, files: done, reverted: false, sources: srcs };
       project.log.unshift(entry);
       project.log.length = Math.min(project.log.length, MAX_LOG);
       for (const f of done) {
@@ -792,13 +919,14 @@
         else if (!project.touched.has(f.path)) project.touched.set(f.path, f.before === null ? 'A' : 'M');
       }
       saveState();
-      // 그 AI의 패널 바는 "적용됨 · 되돌리기"로 (변경 제안 화면에서 적용했어도 패널로 돌아가면 보인다)
-      if (panels.has(ai.id)) {
-        bars.set(ai.id, { ai, applied: entry });
-        renderBar(ai.id);
+      // 그 AI의 패널 바는 "적용됨 · 되돌리기"로 (변경 제안 화면에서 적용했어도 패널로 돌아가면 보인다). 섞었으면 낸 AI마다
+      for (const s of owners) {
+        if (!s.ai.id || !panels.has(s.ai.id)) continue;
+        bars.set(s.ai.id, { ai: s.ai, applied: entry });
+        renderBar(s.ai.id);
       }
       await rescan();
-      await refreshOtherBars(ai.id);
+      await refreshOtherBars(new Set(owners.map((s) => s.ai.id)));
     }
     if (failed.length) alert(`적용하지 못한 파일:\n${failed.join('\n')}`);
     return { entry, text: `${done.length}개 파일을 적용했습니다${failed.length ? ` · ${failed.length}개 실패` : ''}` };
@@ -990,5 +1118,9 @@
     if (failed.length) alert(`되돌리지 못한 파일:\n${failed.join('\n')}`);
   }
 
-  Object.assign(P, { clearBars, continuing, currentText, finishContinue, offerRun, refreshBar, runAnswer, runs, showCollectBtn, writeBlocked, revert, modal });
+  Object.assign(P, {
+    clearBars, continuing, currentText, finishContinue, offerRun, refreshBar, runAnswer, runs, showCollectBtn, writeBlocked, revert, modal,
+    // v0.28.0: 섞어서 적용(project-mix.js) · 커밋(project-commit.js) · 이어 하기(project-restore.js)가 쓴다
+    applyPlans, afterApplied, isQuick, bars, renderBar, setupTestRun, diffPre, OP_TEXT, plansByAi: () => plansByAi,
+  });
 })();

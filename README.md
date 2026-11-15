@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.27.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.28.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -60,10 +60,10 @@ flowchart LR
 | | 기록 · 내보내기 | 질문 · 답 자동 저장(최근 500개) · 검색과 필터(기간 · AI · 평가 · 태그 · ★), 대화 줄기로 묶어 보기, MD · HTML(→PDF) 저장 · 여러 기록을 한 문서로 (v0.27.0) | [기록](docs/guide.md#6-기록) · [내보내기](docs/guide.md#내보내기) |
 | | 응답 통계 · 자가진단 | AI별 완료율 · 응답 시간 · 사용 한도 감지, 질문 종류별 추천 조합(v0.27.0), 사이트 화면이 바뀌면 알림 → 자가진단 창(셀렉터 지금 확인 · 진단 정보 복사) | [응답 통계](docs/guide.md#응답-통계) · [추천](docs/guide.md#질문-종류별-추천-조합-v0270) · [자가진단](docs/guide.md#셀렉터-자가진단) |
 | **코드 작업** | 프로젝트 모드 | 폴더 구조 · 고른 파일 업로드(3단계 제외 규칙 · 비밀 정보 검사), `NEED_FILES` 요청 처리 | [프로젝트 모드](docs/project-mode.md#프로젝트-모드) |
-| | 수정안 적용 | 패널 아래 변경 바로 바로 적용, AI별 비교 · 덩어리 단위 적용 · 되돌리기 | [단계](docs/project-mode.md#프로젝트-모드) |
+| | 수정안 적용 | 패널 아래 변경 바로 바로 적용, AI별 비교 · 덩어리 단위 적용 · 되돌리기, 여러 AI 것을 파일마다 골라 섞어서 적용(v0.28.0), 앱을 다시 켜도 작업 이어 하기(v0.28.0) | [단계](docs/project-mode.md#프로젝트-모드) · [섞어서 적용](docs/project-mode.md#섞어서-적용-v0280) · [이어 하기](docs/project-mode.md#작업-이어-하기-v0280) |
 | | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기(자동 가능), 계획 먼저 · 파일별로 받기(바로 시작 가능), 보낼 양 토큰 어림 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
 | | 파일 모아보기 | 답변의 파일 코드를 새 파일 · 수정 · 삭제로 모아 복사 (프로젝트 없이도) | [파일 모아보기](docs/project-mode.md#파일-모아보기) |
-| | 테스트 실행 · git 콘솔 | 적용 전/후 `npm test` 비교, 그 폴더의 git 명령만 실행 (Windows 앱) | [테스트 실행](docs/project-mode.md#테스트-실행-windows-앱) · [git 콘솔](docs/project-mode.md#git-콘솔-windows-앱) |
+| | 테스트 실행 · git 콘솔 · 커밋 | 적용 전/후 `npm test` · lint · typecheck · build 비교(v0.28.0), 적용한 파일만 커밋(v0.28.0, push 없음), 그 폴더의 git 명령만 실행 (Windows 앱) | [테스트 실행](docs/project-mode.md#테스트-실행-windows-앱) · [커밋](docs/project-mode.md#적용-후-커밋-windows-앱-v0280) · [git 콘솔](docs/project-mode.md#git-콘솔-windows-앱) |
 | **확장 · 기타** | 사이드탭 | 크롬 사이드 패널에 AI 2개, 보고 있는 페이지 본문을 자동으로 함께 보냄 | [사이드탭](docs/chrome-extension.md#사이드탭-크롬-확장) |
 | | 웹페이지로 질문 | 오른쪽 클릭 › 선택한 글 · 이 페이지 본문을 앱에 넣기 | [웹페이지로 질문](docs/chrome-extension.md#보고-있는-웹페이지로-질문-크롬-확장) |
 | | 로컬 LLM | Ollama · LM Studio 등 이 PC의 OpenAI 호환 서버를 패널로 (밖으로 안 나감) | [로컬 LLM](docs/guide.md#로컬-llm-패널) |
@@ -170,11 +170,11 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.28.0** | 미리보기 테스트 실행에 **lint · typecheck · build** · 여러 AI 수정안을 파일마다 골라 **섞어서 적용** · 적용한 파일만 **커밋**(Windows 앱, push 없음) · 앱을 다시 켜도 **작업 이어 하기** · 변경 바와 제안 바 **두 줄로** |
 | **v0.27.0** | 기록 **필터**(기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석 · 태그) · **태그 · ★ 즐겨찾기** · 여러 기록을 **한 문서로** 저장 · **대화 줄기**로 묶어 보기 · 질문 종류별 **추천 조합**(사실 숫자만, 대상은 눌러야 바뀜) |
 | **v0.26.0** | AI끼리 **넘기기**(검토 · 반박 · 이어서) · **토론**(2~3개 AI · 1~3라운드 · 판정) · 실패하면 한 번 다시 보내기 · 한도면 다른 AI 제안 · 이견 → 관련 문단 강조 · 다시 분석 나란히 비교 |
 | **v0.25.0** | 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝 **OS 알림** · **보내기 전 미리보기**(Shift+클릭) · 셀렉터 한국어/영어 짝 · `npm run selectors:probe` |
 | **v0.24.0** | 기록을 기록별로 저장 · **기록 최대 개수** 설정 · 화면 코드 나누기 · 다국어 틀 · 커밋 전 확장 폴더 검사 |
-| **v0.23.1** | 원격 셀렉터 **서명 검사 켬** — 서명이 맞는 `selectors.json`만 적용 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

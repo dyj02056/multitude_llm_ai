@@ -70,5 +70,16 @@
     }));
   }
 
-  return { LAYOUTS, DEFAULT_LAYOUT, normalizeLayout, layoutCells, placeCells };
+  /**
+   * 패널 아래 바 줄 수 (v0.28.0): 변경 바와 제안 바가 함께 뜨면 2줄을 쌓는다.
+   * 예전 값(true/false)도 받는다: true → 1, 그 밖의 이상한 값 → 0. 0~2만 돌려준다.
+   */
+  function barRows(v) {
+    if (v === true) return 1;
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 ? Math.min(n, MAX_BAR_ROWS) : 0;
+  }
+  const MAX_BAR_ROWS = 2;
+
+  return { LAYOUTS, DEFAULT_LAYOUT, normalizeLayout, layoutCells, placeCells, barRows, MAX_BAR_ROWS };
 });

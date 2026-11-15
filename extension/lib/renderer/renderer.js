@@ -577,18 +577,20 @@ function setChangeBar(id, on) {
 }
 
 /**
- * 패널 아래 자리(BAR_H)를 변경 바 또는 제안 바(v0.26.0 panel-offers.js: 넘기기 · 다시 보내기 · 다른 AI로)가 쓰는 동안만 비워 달라고 본체에 알린다.
- * 둘 다 떠 있으면 제안 바가 위에 그려진다 (.panel.has-offer).
+ * 패널 아래 자리(BAR_H)를 변경 바 · 제안 바(v0.26.0 panel-offers.js: 넘기기 · 다시 보내기 · 다른 AI로)가 쓰는 동안만 비워 달라고 본체에 알린다.
+ * 둘 다 떠 있으면 두 줄을 쌓는다 (v0.28.0): 변경 바가 맨 아래, 제안 바가 그 위 (.panel.bars-2). 본체는 웹페이지를 2줄만큼 줄인다.
  */
 function syncPanelBar(id) {
   const p = panels.get(id);
   if (!p) return;
   const offer = !!p.offerBar && !p.offerBar.hidden;
-  const on = offer || !p.changeBar.hidden;
+  const change = !p.changeBar.hidden;
+  const rows = (offer ? 1 : 0) + (change ? 1 : 0);
   p.el.classList.toggle('has-offer', offer);
-  if (p.barOn === on) return;
-  p.barOn = on;
-  host.setPanelBar(id, on);
+  p.el.classList.toggle('bars-2', rows === 2);
+  if (p.barRows === rows) return;
+  p.barRows = rows;
+  host.setPanelBar(id, rows);
 }
 
 const FINISHED_STATES = new Set(['done', 'timeout', 'no-answer']);
@@ -682,6 +684,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
   if (loading !== undefined) p.dot.classList.toggle('loading', loading);
   if (url) {
     p.url.textContent = url;
+    window.onPanelUrl?.(id, url); // 프로젝트 모드: 지난번 대화를 다시 열면 그 작업을 되살린다 (v0.28.0)
     if (!error) p.dot.classList.remove('error'); // 다시 열려서 연결되면 오류 표시를 지운다
   }
   if (send) {
