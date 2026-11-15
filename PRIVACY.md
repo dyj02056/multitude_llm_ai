@@ -17,6 +17,7 @@ Multitude LLM has **no server of its own** and **collects nothing**. It does not
 | Settings, library (templates/skills), project state (including originals kept for undo) | Nowhere | Your browser's extension storage (Chrome) or the app data folder (Windows, encrypted with Windows DPAPI) |
 | Cookies of the supported AI sites | Never leave your browser. The extension attaches them to those sites' own WebSocket connections inside the app tab, and for Qwen / Z.ai copies the sign-in token into that site's own frame inside the app tab, so you stay signed in there | In memory / Chrome's session rules only |
 | Optional local LLM requests | Only to `localhost` / `127.0.0.1` on your own PC | Answers in local history |
+| Settings export file (`.mla.json`, only when you press Export in Settings › 설정 옮기기) | Saved where you choose (Windows save dialog / Chrome download). Never sent anywhere | Contains selected settings and your library (templates, skills with previous versions, presets). It does **not** contain history, project data or cookies. Optional password encryption (PBKDF2-SHA256 250k + AES-GCM) |
 | Desktop notifications (answers finished, usage limit, send failure, synthesis finished) | Shown by Windows / Chrome on your own screen only. They contain counts and AI service names, never your question or the answers | Not stored |
 
 The extension also downloads two public files from this project's GitHub repository: `remote/selectors.json` (page selectors used to find input boxes and answers, signed and verified with Ed25519; it contains no code) and `package.json` (to tell you when a new version exists). These requests send no personal data.
@@ -61,6 +62,7 @@ Multitude LLM은 **자체 서버가 없고 아무것도 수집하지 않습니�
 | 설정 · 라이브러리(템플릿 · 스킬) · 프로젝트 상태(되돌리기용 원본 포함) | 어디로도 보내지 않음 | 브라우저의 확장 저장소(크롬) 또는 앱 데이터 폴더(Windows, DPAPI 암호화) |
 | 지원하는 AI 사이트의 쿠키 | 브라우저 밖으로 나가지 않음. 앱 탭 안 그 사이트의 WebSocket 연결에 붙이고, Qwen · Z.ai는 로그인 토큰을 앱 탭 안 그 사이트 프레임에만 넣어 로그인을 유지 | 메모리 · 크롬 세션 규칙에만 |
 | 선택 기능 로컬 LLM 요청 | 이 PC의 `localhost` · `127.0.0.1`에만 | 답변은 로컬 기록에 |
+| 설정 옮기기 파일(`.mla.json`, 설정 › 설정 옮기기에서 내보내기를 누를 때만) | 사용자가 고른 곳에 저장(Windows 저장 창 / 크롬 다운로드). 어디로도 보내지 않음 | 설정 일부와 라이브러리(템플릿 · 스킬과 이전 버전 · 프리셋). 기록 · 프로젝트 · 쿠키는 **넣지 않음**. 비밀번호 암호화 선택(PBKDF2-SHA256 25만 번 + AES-GCM) |
 | 화면 알림 (답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝) | 이 PC 화면에 Windows · 크롬이 띄우기만 함. 개수와 AI 서비스 이름만 넣고 질문 · 답변은 넣지 않음 | 저장하지 않음 |
 
 이 밖에 이 프로젝트의 GitHub 저장소에서 공개 파일 두 개를 받습니다: `remote/selectors.json`(입력창 · 답변을 찾는 셀렉터, Ed25519 서명 검사, 코드 아님)과 `package.json`(새 버전 알림). 이 요청에는 개인 정보가 들어가지 않습니다.

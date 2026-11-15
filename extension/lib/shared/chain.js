@@ -116,9 +116,10 @@
    * 화면이 보낸 토론 설정 검사. cfg: { participants: [id], rounds, judge }, openIds: 지금 열린 패널, defaultJudge: 종합 담당
    * → { ok: true, participants, rounds, judge } | { ok: false, error }
    */
-  function normalizeDebate(cfg, openIds, defaultJudge) {
+  function normalizeDebate(cfg, openIds, defaultJudge, judgeIds) {
     const c = cfg && typeof cfg === 'object' ? cfg : {};
     const open = Array.isArray(openIds) ? openIds : [];
+    const judges = Array.isArray(judgeIds) ? judgeIds : open; // 판정만 고를 수 있는 id (v0.29.0: 패널 없는 로컬 LLM)
     const raw = Array.isArray(c.participants) ? c.participants : [];
     const participants = [...new Set(raw.filter((id) => typeof id === 'string' && open.includes(id)))];
     if (participants.length < MIN_PARTICIPANTS) return { ok: false, error: t('debate.errFew', { n: MIN_PARTICIPANTS }) };
@@ -126,7 +127,7 @@
     const n = Number(c.rounds);
     const rounds = Number.isInteger(n) && n >= 1 && n <= MAX_ROUNDS ? n : DEFAULT_ROUNDS;
     const judge =
-      typeof c.judge === 'string' && open.includes(c.judge) ? c.judge : open.includes(defaultJudge) ? defaultJudge : participants[0];
+      typeof c.judge === 'string' && judges.includes(c.judge) ? c.judge : judges.includes(defaultJudge) ? defaultJudge : participants[0];
     return { ok: true, participants, rounds, judge };
   }
 

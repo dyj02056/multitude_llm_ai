@@ -14,7 +14,16 @@ const page = {
   url: 'https://news.example.com/2026/11/ai-chip-export',
   text: '이번 분기 AI 반도체 수출이 지난해 같은 기간보다 30% 늘었다. '.repeat(40),
 };
+const scene = new URLSearchParams(location.search).get('scene') || '24-side-panel';
 const store = { sidePrefs: { selected: ['gemini', 'claude'], ratio: 0.55, ctxOn: true } };
+// v0.29.0: 이 페이지에서 전에 물어본 것 (주소 뒤 utm_* · #은 달라도 같은 페이지)
+if (scene === '41-side-recall') {
+  const at = Date.now();
+  store['history:side'] = [
+    { id: 'h2', at: at - 3600e3, question: '이 기사 핵심만 뽑아 줘', targets: ['gemini'], source: 'side', page: { title: page.title, url: page.url + '?utm_source=news' }, answers: { gemini: { state: 'done', md: '- AI 반도체 수출 30% 증가\n- HBM이 증가분의 절반' } } },
+    { id: 'h1', at: at - 86400e3, question: '이 기사 세 줄로 요약해줘', targets: ['gemini', 'claude'], source: 'side', page: { title: page.title, url: page.url + '#comments' }, answers: { gemini: { state: 'done', md: '1. 수출 30% 증가 …' }, claude: { state: 'done', md: '이번 분기 수출이 크게 늘었습니다 …' } } },
+  ];
+}
 
 window.chrome = {
   runtime: {
@@ -42,7 +51,7 @@ window.chrome = {
 };
 
 const hosts = { gemini: 'https://gemini.google.com/app', claude: 'https://claude.ai/new' };
-new MutationObserver(() => {
+const frameWatch = new MutationObserver(() => {
   for (const f of document.querySelectorAll('iframe.sp-frame:not([data-shot])')) {
     f.dataset.shot = '1';
     f.addEventListener('load', () => {
@@ -56,7 +65,12 @@ new MutationObserver(() => {
       setTimeout(() => port.onMessage.fire({ event: { type: 'mla:hello', url: hosts[id] } }), 10);
     });
   }
-}).observe(document.documentElement, { childList: true, subtree: true });
+});
+// preload는 문서가 생기기 전에 돈다 — documentElement가 생기면 지켜보기 시작 (v0.29.0: 예전에는 여기서 오류)
+(function observeWhenReady() {
+  if (document.documentElement) frameWatch.observe(document.documentElement, { childList: true, subtree: true });
+  else setTimeout(observeWhenReady, 5);
+})();
 
 window.addEventListener('DOMContentLoaded', () =>
   setTimeout(() => {
@@ -66,6 +80,11 @@ window.addEventListener('DOMContentLoaded', () =>
     const hint = document.querySelector('#spHint');
     hint.textContent = '보냄 → Gemini · Claude · 페이지 본문 1,480자 포함';
     hint.dataset.kind = 'ok';
-    ipcRenderer.send('shot:ready');
+    if (scene === '41-side-recall') {
+      document.querySelector('#spRecallBtn')?.click();
+      const first = document.querySelector('.sp-recall-item');
+      if (first) first.open = true;
+    }
+    setTimeout(() => ipcRenderer.send('shot:ready'), 100);
   }, 2600),
 );

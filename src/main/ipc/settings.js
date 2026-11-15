@@ -10,12 +10,13 @@ const { RELEASES_URL } = require('../../shared/update-core');
 const { normalizeLibrary } = require('../../shared/prompt-lib');
 const notifyCore = require('../../shared/notify');
 
+const ASK_MAX = 200000; // local:ask 글자 수 한도 (v0.29.0)
 const LOCAL_ONLY = '주소는 이 PC(localhost · 127.0.0.1 · [::1])의 http(s) 주소만 쓸 수 있습니다';
 
 /**
  * ctx: { ipcMain, history, remote, guard, net, shell, TIMEOUT_CHOICES, MAX_CHOICES, prefs(), savePrefs, pushState,
  *        allServices(), refreshRemote(), localChat(), closeLocalPanel(), focusId(), setFocusId(id), updater(),
- *        shortcutList(), librarySaver, readLibrary() }
+ *        shortcutList(), librarySaver, readLibrary(), askLocal(text) }
  */
 function register(ctx) {
   const { ipcMain, history, remote, guard, net, shell } = ctx;
@@ -65,6 +66,7 @@ function register(ctx) {
       enabled: typeof next.enabled === 'boolean' ? next.enabled : cur.enabled,
       baseUrl,
       model: next.model === undefined ? cur.model : L.cleanModel(next.model),
+      contextTokens: next.contextTokens === undefined ? L.normalizeContext(cur.contextTokens) : L.normalizeContext(next.contextTokens), // v0.29.0
     };
     if (!prefs.local.enabled) {
       prefs.selected = prefs.selected.filter((x) => !isLocal(x));
@@ -92,6 +94,12 @@ function register(ctx) {
     } finally {
       clearTimeout(timer);
     }
+  });
+
+  // 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 스킬 압축): 글만 받는다 (20만 자까지). 주소는 설정의 localhost 주소뿐
+  ipcMain.handle('local:ask', (_e, text) => {
+    if (typeof text !== 'string' || !text.trim() || text.length > ASK_MAX) return { ok: false, error: '보낼 내용이 올바르지 않습니다' };
+    return ctx.askLocal(text);
   });
 
   // 사이트 셀렉터 원격 갱신 (설정 화면의 [지금 확인])

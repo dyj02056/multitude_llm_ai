@@ -9,42 +9,58 @@
 // ---------- 교차검토(종합) ----------
 
 // 종합 담당 AI 고르기 목록과 "완료 후 자동" 체크 상자를 지금 상태에 맞춥니다.
+/** 판정 · 종합을 맡길 수 있는 AI: 열린 패널 + (설정에서 켰고 패널이 없으면) 패널 없이 묻는 로컬 LLM (v0.29.0) */
+function judgeChoices() {
+  const open = state.rects.map((r) => r.id);
+  const local = state.local?.enabled && !open.includes('local') ? [{ id: 'local', name: t('local.judgeHeadless') }] : [];
+  return [...open.map((id) => ({ id, name: state.services.find((s) => s.id === id)?.name || id })), ...local];
+}
+
 function renderSynth() {
   const select = $('#synthTarget');
   const open = state.rects.map((r) => r.id);
-  select.replaceChildren(
-    ...open.map((id) => {
-      const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = state.services.find((s) => s.id === id).name;
-      return opt;
-    }),
-  );
-  // 저장된 종합 담당이 열려 있지 않으면 첫 패널로 바꿔 저장한다.
-  if (open.length && !open.includes(state.synthTarget)) host.setSynth({ target: open[0] });
+  const choices = judgeChoices();
+  select.replaceChildren(...choices.map((c) => Object.assign(document.createElement('option'), { value: c.id, textContent: c.name })));
+  // 저장된 종합 담당이 고를 수 없으면 첫 패널로 바꿔 저장한다.
+  if (open.length && !choices.some((c) => c.id === state.synthTarget)) host.setSynth({ target: open[0] });
   else select.value = state.synthTarget;
   $('#autoSynth').checked = !!state.autoSynth;
-  $('#synthBtn').disabled = open.length < 2;
+  // 로컬 LLM을 패널 없이 판정으로 쓰면 답한 패널이 하나여도 종합할 수 있다
+  $('#synthBtn').disabled = open.length < (state.synthTarget === 'local' && !open.includes('local') ? 1 : 2);
   $('#debateBtn').disabled = open.length < 2; // 토론은 패널이 2개 이상일 때 (v0.26.0)
 }
 
 $('#synthTarget').addEventListener('change', (e) => host.setSynth({ target: e.target.value }));
 $('#autoSynth').addEventListener('change', (e) => host.setSynth({ auto: e.target.checked }));
-$('#synthBtn').addEventListener('click', () => host.runSynth($('#synthTarget').value));
+$('#synthBtn').addEventListener('click', () => {
+  $('#synthResult').hidden = true;
+  host.runSynth($('#synthTarget').value);
+});
+// [결과 보기]: 기록 화면에서 그 질문을 연다 (패널 없는 로컬 LLM 종합, v0.29.0)
+$('#synthResult').addEventListener('click', async () => {
+  const id = $('#synthResult').dataset.historyId;
+  host.setView('history');
+  await new Promise((r) => setTimeout(r, 150));
+  if (id) renderHistoryDetail(id);
+});
 
 // 종합 요청 진행 상황(보내는 중·보냄·실패)을 입력창 아래 안내 글로 보여 줍니다.
-host.on('synth:status', ({ state: st, judge, count, error, cause, mode }) => {
+host.on('synth:status', ({ state: st, judge, count, error, cause, mode, trimmed, headless, historyId }) => {
   if (mode === 'debate') return; // 토론 진행은 debate-ui.js가 보여 준다 (v0.26.0)
   const prefix = cause === 'auto' ? '자동 종합: ' : '';
   const what = mode === 'analysis' ? '일치 · 이견 분석' : '종합';
   $('#sendHint').textContent =
-    st === 'error'
+    (st === 'error'
       ? `${prefix}${error}`
       : st === 'sending'
         ? `${prefix}${judge}에게 답변 ${count}개 ${what}을 요청하는 중…`
         : st === 'done'
-          ? `${judge}의 ${what}이 끝났습니다${mode === 'analysis' ? ' — 답변 비교 › 분석 탭에서 봅니다' : ''}`
-          : `${prefix}${judge}에게 답변 ${count}개 ${what}을 요청했습니다`;
+          ? `${judge}의 ${what}이 끝났습니다${mode === 'analysis' ? ' — 답변 비교 › 분석 탭에서 봅니다' : headless ? t('local.synthDoneHistory') : ''}`
+          : `${prefix}${judge}에게 답변 ${count}개 ${what}을 요청했습니다`) +
+    (trimmed?.length && st !== 'error' ? t('local.trimmedHint', { names: trimmed.join(', ') }) : '');
+  // 패널 없는 로컬 LLM의 종합 결과 (v0.29.0): 패널에 답이 보이지 않으므로 [결과 보기]로 기록을 연다
+  $('#synthResult').hidden = !(st === 'done' && headless && mode !== 'analysis' && historyId);
+  $('#synthResult').dataset.historyId = historyId || '';
   // 분석 진행 표시: 보내는 중·기다리는 중이면 분석 탭에 안내, 끝나거나 실패하면 지움
   if (mode === 'analysis' && (st === 'sending' || st === 'sent')) {
     compareView.pending = judge;

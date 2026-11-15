@@ -16,8 +16,9 @@ const TOOLBAR_H = 44;
 const COMPOSER_H = 132;
 const HEADER_H = 28;
 const LOCAL = ['19-local-llm', '20-local-llm-settings'].includes(scene);
+const LOCAL_JUDGE = scene === '44-local-judge'; // v0.29.0: 로컬 LLM을 켜 두었지만 패널은 없음 → 패널 없이 판정
 const localSvc = LL.localService({ baseUrl: 'http://localhost:11434' });
-const all = LOCAL ? [...SERVICES, localSvc] : SERVICES;
+const all = LOCAL || LOCAL_JUDGE ? [...SERVICES, localSvc] : SERVICES;
 const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
@@ -111,10 +112,10 @@ function push() {
   emit('state', {
     mode, chatView, layout, selected, maxSelected: 6,
     attachLimits: { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 },
-    synthTarget: 'gemini', autoSynth: false, answerTimeoutMin: 20, timeoutChoices: [5, 10, 20, 30, 60], historyMax: 500, historyMaxChoices: [100, 500, 1000, 2000],
+    synthTarget: LOCAL_JUDGE ? 'local' : 'gemini', autoSynth: false, answerTimeoutMin: 20, timeoutChoices: [5, 10, 20, 30, 60], historyMax: 500, historyMaxChoices: [100, 500, 1000, 2000],
     remoteSelectors: true, remote: { source: 'remote', version: 12, updated: '2026-11-08', checkedAt: now - 3600e3 }, diag: ['15-screen-status', '25-diag'].includes(scene) ? DIAG : {},
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
-    local: { enabled: LOCAL, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b' },
+    local: { enabled: LOCAL || LOCAL_JUDGE, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b', contextTokens: 8192 },
     autoUpdate: true,
     notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip', commitOffer: true,
     update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
@@ -153,7 +154,7 @@ window.host = {
   },
   copyText: async () => true,
   saveFile: async () => ({ ok: true }),
-  local: { setPrefs: async () => ({ ok: true }), models: async () => ({ ok: true, models: ['qwen2.5:7b', 'llama3.1:8b'] }) },
+  local: { setPrefs: async () => ({ ok: true }), models: async () => ({ ok: true, models: ['qwen2.5:7b', 'llama3.1:8b'] }), ask: async () => ({ ok: true, text: '- 버그 먼저' }) },
   shortcuts: async () => shortcutList({}),
   runSynth: async () => ({ ok: true }),
   setSynth() {}, setSettings() {}, refreshRemote: async () => ({}),
@@ -167,8 +168,26 @@ window.host = {
   library: {
     load: async () =>
       normalizeLibrary({
-        templates: [{ id: 't1', name: '코드 리뷰 (보안 관점)', text: '{{언어}} 코드를 {{관점|보안}} 관점에서 리뷰해 줘.\n\n{q}', fav: true }],
-        skills: [{ id: 's1', name: '코드 리뷰어', description: '버그 · 보안 · 가독성 순서로 본다', body: '# 코드 리뷰어\n\n- 버그를 먼저 찾는다\n- 보안 문제는 근거와 함께\n- 고칠 코드는 전체 파일로' }],
+        templates: [{ id: 'u-t1', name: '코드 리뷰 (보안 관점)', text: '{{언어}} 코드를 {{관점|보안}} 관점에서 리뷰해 줘.\n\n{q}', fav: true }],
+        skills: [
+          {
+            id: 's-1',
+            name: '코드 리뷰어',
+            description: '버그 · 보안 · 가독성 순서로 본다',
+            body: '# 코드 리뷰어\n\n- 버그를 먼저 찾는다\n- 보안 문제는 근거와 함께\n- 고칠 코드는 전체 파일로',
+            // v0.29.0 이전 버전 예시
+            versions: [
+              { at: now - 2 * 3600e3, name: '코드 리뷰어', body: '# 코드 리뷰어\n\n- 버그를 먼저 찾는다\n- 보안 문제는 짧게\n- 고칠 코드는 바뀐 부분만' },
+              { at: now - 26 * 3600e3, name: '코드 리뷰어', body: '# 코드 리뷰어\n\n- 버그를 찾는다' },
+            ],
+          },
+          { id: 's-2', name: '한국어로 짧게', description: '', body: '- 한국어로 답한다\n- 다섯 줄 이내' },
+        ],
+        // v0.29.0 작업 프리셋 예시
+        presets: [
+          { id: 'p-review', name: '코드 리뷰 (3사 비교)', at: now - 3600e3, template: { id: 'u-t1', vars: { 언어: 'TypeScript', 관점: '보안' } }, skills: ['s-1', 's-2'], selected: ['gemini', 'chatgpt', 'claude'], targets: ['gemini', 'chatgpt', 'claude'], layout: 'row', synth: { target: 'claude', auto: true }, debate: { participants: ['gemini', 'chatgpt'], rounds: 2, judge: 'claude' } },
+          { id: 'p-news', name: '뉴스 요약', at: now - 86400e3, template: { id: 'summary', vars: {} }, skills: [], selected: ['gemini', 'perplexity'], targets: [], layout: 'grid', synth: { target: 'gemini', auto: false }, debate: null },
+        ],
       }),
     save: async () => true,
   },
@@ -397,6 +416,45 @@ window.addEventListener('DOMContentLoaded', async () => {
     click('[data-libtab="skills"]');
     await sleep(300);
     [...document.querySelectorAll('.lib-row')].find((r) => r.textContent.includes('코드 리뷰어'))?.click();
+  }
+  // ---------- v0.29.0 장면 ----------
+  if (scene === '42-presets') {
+    click('#libraryBtn');
+    await sleep(400);
+    click('[data-libtab="presets"]');
+    await sleep(300);
+    [...document.querySelectorAll('.lib-row')].find((r) => r.textContent.includes('코드 리뷰'))?.click();
+  }
+  if (scene === '43-skill-versions') {
+    click('#libraryBtn');
+    await sleep(400);
+    click('[data-libtab="skills"]');
+    await sleep(300);
+    [...document.querySelectorAll('.lib-row')].find((r) => r.textContent.includes('코드 리뷰어'))?.click();
+    await sleep(200);
+    $('#libVersions').open = true;
+    document.querySelector('.lib-version')?.click();
+  }
+  if (scene === '44-local-judge') {
+    // 로컬 LLM 패널 없이 종합: 줄여 보낸 뒤 끝남 → [결과 보기]
+    $('#prompt').value = S.QUESTION;
+    click('#sendBtn');
+    await sleep(150);
+    for (const id of selected) emit('panel:status', { id, answer: 'done', chars: (S.ANSWERS[id] || '').length });
+    await sleep(100);
+    emit('synth:status', { state: 'done', judge: '로컬 LLM', count: 4, cause: 'manual', mode: 'text', trimmed: ['Gemini', 'ChatGPT'], headless: true, historyId: 'r1' });
+  }
+  if (scene === '45-settings-transfer') {
+    click('#helpBtn');
+    await sleep(400);
+    const file = { kind: 'multitude-llm-settings', version: 1, exportedAt: '2026-11-15T09:12:00.000Z', app: 'extension', appVersion: '0.29.0',
+      settings: { selected: ['gemini', 'claude', 'perplexity'], layout: 'row', synthTarget: 'claude', autoSynth: true, answerTimeoutMin: 20, historyMax: 1000, sendPreview: true },
+      library: { templates: [{ id: 'u-t1', name: '코드 리뷰 (보안 관점)', text: '{q}' }, { id: 'u-new', name: '회의록 정리', text: '{q}' }], skills: [{ id: 's-1', name: '코드 리뷰어', body: '- 버그' }], presets: [{ id: 'p-x', name: '논문 읽기' }] } };
+    const dt = new DataTransfer();
+    dt.items.add(new File([JSON.stringify(file)], 'multitude-llm-settings-2026-11-15.mla.json', { type: 'application/json' }));
+    $('#transferFile').files = dt.files;
+    $('#transferFile').dispatchEvent(new Event('change'));
+    await sleep(400);
   }
   if (scene === '26-send-preview') {
     // 보내기 버튼을 Shift+클릭 → 보내기 전 미리보기 창 (첨부 2개, Duck.ai는 문서를 빼고 보냄)

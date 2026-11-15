@@ -15,6 +15,64 @@
   const LONG_TEXT = 100000;
   const FILE_LIMITS = { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024 }; // services.js ATTACH_LIMITS와 같게 (화면은 state.attachLimits를 넘긴다)
 
+  // ---------- 로컬 모델 컨텍스트 한도 (v0.29.0) ----------
+  // 토큰 수는 어림만 한다: 영문 · 숫자(ASCII)는 4글자에 1토큰, 한글 · 한자 등은 1글자에 1토큰으로 넉넉히 센다.
+  // (project-context.js의 "UTF-8 바이트 ÷ 4"보다 한글을 크게 센다 — 한도를 넘기는 쪽보다 덜 보내는 쪽이 안전)
+  const REPLY_SHARE = 0.25; // 한도의 이만큼은 답을 쓸 자리로 남긴다
+  const MIN_ANSWER_TOKENS = 64; // 줄여도 답변마다 이만큼은 남긴다
+
+  function estimateTokens(text) {
+    const s = String(text || '');
+    let ascii = 0;
+    for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) < 128) ascii++;
+    return Math.ceil(ascii / 4) + (s.length - ascii);
+  }
+
+  /** 보낼 글이 한도에 들어가는지 → { tokens, limit, budget, over } (limit이 없으면 over false) */
+  function contextCheck(text, limit) {
+    const tokens = estimateTokens(text);
+    const budget = limit > 0 ? Math.floor(limit * (1 - REPLY_SHARE)) : Infinity;
+    return { tokens, limit: limit || 0, budget, over: tokens > budget };
+  }
+
+  /**
+   * 종합 입력 줄이기: 답변들 [{ name, text }]이 한도(limit 토큰)에 들어가도록 답변마다 같은 비율로 앞부분만 남긴다.
+   * fixedText: 답변 말고 함께 보낼 글 (질문 · 지시문 — 줄이지 않음), note: 줄인 답 끝에 붙일 안내 ("(… 일부만 보냄)")
+   * → { answers, trimmed: 줄인 답변 이름 목록 }
+   */
+  function fitAnswers(answers, { limit, fixedText = '', note = '(…)' } = {}) {
+    const list = Array.isArray(answers) ? answers : [];
+    if (!(limit > 0) || !list.length) return { answers: list, trimmed: [] };
+    const room = Math.floor(limit * (1 - REPLY_SHARE)) - estimateTokens(fixedText) - estimateTokens(note) * list.length;
+    const sizes = list.map((a) => estimateTokens(a.text));
+    const total = sizes.reduce((n, x) => n + x, 0);
+    if (total <= room) return { answers: list, trimmed: [] };
+    const ratio = Math.max(0, room) / total;
+    const trimmed = [];
+    const out = list.map((a, i) => {
+      const keep = Math.max(MIN_ANSWER_TOKENS, Math.floor(sizes[i] * ratio));
+      if (keep >= sizes[i]) return a;
+      trimmed.push(a.name);
+      return { ...a, text: `${cutToTokens(a.text, keep).trimEnd()}\n\n${note}` };
+    });
+    return { answers: out, trimmed };
+  }
+
+  /** 글 앞부분을 토큰 어림 n개까지 */
+  function cutToTokens(text, n) {
+    const s = String(text || '');
+    let used = 0;
+    let ascii = 0;
+    for (let i = 0; i < s.length; i++) {
+      if (s.charCodeAt(i) < 128) {
+        ascii++;
+        if (ascii % 4 === 1) used++;
+      } else used++;
+      if (used > n) return s.slice(0, i);
+    }
+    return s;
+  }
+
   const str = (v) => (typeof v === 'string' ? v : undefined);
   const fileKind = (type) => (/^image\//.test(type || '') ? 'image' : 'document');
   const sizeOf = (f) => (Number.isFinite(f.size) ? f.size : f.data && Number.isFinite(f.data.byteLength) ? f.data.byteLength : 0);
@@ -60,6 +118,11 @@
     const warnings = [];
     const chars = item.text.length;
     if (chars > LONG_TEXT) warnings.push({ code: 'long', vars: { n: chars, max: LONG_TEXT } });
+    // 로컬 LLM: 컨텍스트 한도(설정)를 넘을 것 같으면 (v0.29.0 — 이번 글만 센다, 앞선 대화는 더 들어간다)
+    if (svc.contextTokens > 0) {
+      const c = contextCheck(item.text, svc.contextTokens);
+      if (c.over) warnings.push({ code: 'localCtx', vars: { n: c.tokens, max: c.limit } });
+    }
     const skipped = files.filter((f) => !f.sent).map((f) => f.name);
     if (skipped.length) warnings.push({ code: 'skipped', vars: { names: skipped.join(', ') } });
     const big = files.filter((f) => f.sent && f.size > maxBytes).map((f) => f.name);
@@ -84,5 +147,5 @@
     return planSend(text, ids, files, opts).map((item) => previewRow(item, byId.get(item.id), limits || FILE_LIMITS));
   }
 
-  return { LONG_TEXT, planSend, previewRow, preview };
+  return { LONG_TEXT, planSend, previewRow, preview, estimateTokens, contextCheck, fitAnswers, cutToTokens };
 });

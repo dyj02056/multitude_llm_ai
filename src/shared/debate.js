@@ -19,6 +19,7 @@
    * d:
    *   sendAndWait(id, text) → Promise<{ state, text, md }>  (패널 하나에 보내고 답이 끝날 때까지)
    *   readAnswer(id) → Promise<{ text, md }>, nameOf(id), openIds() → [id], defaultJudge() → id
+   *   judgeIds() → [id] (없어도 됨, v0.29.0: 판정으로 고를 수 있는 id — 패널 없는 로컬 LLM 포함), fitPositions(judgeId, positions) (없어도 됨)
    *   getRound() → { question, historyId } | null  (지금 라운드 — 공통 입력창으로 마지막에 보낸 질문)
    *   history: { addChain(historyId, entry), addSynth(historyId, entry) }
    *   status(patch): 진행 상태를 화면에 { state: 'running' | 'judging' | 'done' | 'stopped' | 'error', round, rounds, waiting, judge, error }
@@ -37,7 +38,7 @@
       if (run) return fail(t('debate.errRunning'));
       const r = d.getRound();
       if (!r) return fail(t('debate.errNoRound'));
-      const c = normalizeDebate(cfg, d.openIds(), d.defaultJudge());
+      const c = normalizeDebate(cfg, d.openIds(), d.defaultJudge(), d.judgeIds?.());
       if (!c.ok) return fail(c.error);
       // 처음 입장: 참가 AI마다 지금 질문의 최신 답변
       const pos = new Map();
@@ -88,7 +89,9 @@
       }
       const judgeName = d.nameOf(c.judge);
       d.status({ state: 'judging', judge: judgeName, rounds: c.rounds });
-      const positions = c.participants.map((id) => ({ name: d.nameOf(id), text: pos.get(id) }));
+      // 판정이 로컬 LLM이면 컨텍스트 한도에 맞춰 입장 글을 줄인다 (v0.29.0, rounds.js fitPositions)
+      const all = c.participants.map((id) => ({ name: d.nameOf(id), text: pos.get(id) }));
+      const positions = d.fitPositions ? d.fitPositions(c.judge, all) : all;
       const res = await ask(cur, c.judge, buildDebateJudgePrompt({ question: r.question, positions, rounds: c.rounds }));
       if (cur.stopped) return stopped();
       if (res.state !== 'done' || !res.md) return finishError(t('debate.errJudge', { judge: judgeName }), judgeName);

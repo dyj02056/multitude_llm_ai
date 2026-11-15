@@ -13,6 +13,10 @@
   const CH = MLA.chain;
   let open = null; // { dialog, pending }
   let running = false;
+  // 토론 설정 기본값 (v0.29.0): 작업 프리셋이 정한 것 → 없으면 마지막으로 시작한 설정. { participants, rounds, judge }
+  let defaults = null;
+  window.debateDefaults = () => defaults;
+  window.setDebateDefaults = (cfg) => (defaults = cfg && typeof cfg === 'object' ? { ...cfg } : null);
 
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -34,11 +38,13 @@
 
   function fill(question) {
     const ids = openIds();
+    const want = (defaults?.participants || []).filter((id) => ids.includes(id));
+    const pick = want.length >= CH.MIN_PARTICIPANTS ? want : ids.slice(0, CH.MAX_PARTICIPANTS);
     $('#debateParts').replaceChildren(
-      ...ids.map((id, i) => {
+      ...ids.map((id) => {
         const label = el('label', 'check-label debate-part');
         label.style.setProperty('--svc', state.services.find((s) => s.id === id)?.color || 'var(--border)');
-        const box = Object.assign(document.createElement('input'), { type: 'checkbox', value: id, checked: i < CH.MAX_PARTICIPANTS });
+        const box = Object.assign(document.createElement('input'), { type: 'checkbox', value: id, checked: pick.includes(id) });
         box.addEventListener('change', limitChecks);
         label.append(box, ' ', el('span', '', nameOf(id)));
         return label;
@@ -48,10 +54,13 @@
     rounds.replaceChildren(
       ...Array.from({ length: CH.MAX_ROUNDS }, (_, i) => Object.assign(document.createElement('option'), { value: String(i + 1), textContent: t('debate.roundsOption', { n: i + 1 }) })),
     );
-    rounds.value = String(CH.DEFAULT_ROUNDS);
+    rounds.value = String(defaults?.rounds >= 1 && defaults.rounds <= CH.MAX_ROUNDS ? defaults.rounds : CH.DEFAULT_ROUNDS);
     const judge = $('#debateJudge');
-    judge.replaceChildren(...ids.map((id) => Object.assign(document.createElement('option'), { value: id, textContent: nameOf(id) })));
-    judge.value = ids.includes(state.synthTarget) ? state.synthTarget : ids[0] || '';
+    // 판정: 열린 패널 + (켜 두었으면) 패널 없는 로컬 LLM (v0.29.0, renderer-compose.js judgeChoices)
+    const judges = judgeChoices();
+    judge.replaceChildren(...judges.map((c) => Object.assign(document.createElement('option'), { value: c.id, textContent: c.name })));
+    const has = (id) => judges.some((c) => c.id === id);
+    judge.value = has(defaults?.judge) ? defaults.judge : has(state.synthTarget) ? state.synthTarget : ids[0] || '';
     $('#debateQuestion').textContent = question ? t('debate.questionLine', { q: question.split('\n')[0].slice(0, 200) }) : t('debate.noQuestion');
     $('#debateStatus').textContent = '';
     limitChecks();
@@ -89,6 +98,7 @@
       limitChecks();
       return;
     }
+    defaults = cfg; // 다음에 열 때 · "지금 설정을 프리셋으로"에 쓴다
     close();
   }
 

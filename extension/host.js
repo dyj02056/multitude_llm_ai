@@ -69,7 +69,7 @@
     autoSynth: false,
     answerTimeoutMin: 20,
     remoteSelectors: true, // 사이트 셀렉터 원격 갱신
-    local: { enabled: false, baseUrl: MLA.localLLM.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
+    local: { enabled: false, baseUrl: MLA.localLLM.DEFAULT_BASE, model: '', contextTokens: MLA.localLLM.DEFAULT_CONTEXT }, // 로컬 LLM 패널 (선택 기능, v0.16.0 · 컨텍스트 한도 v0.29.0)
     autoUpdate: true, // 새 버전 알림 (v0.20.0)
     historyMax: 500, // 기록 최대 개수 (v0.24.0)
     notify: { ...MLA.notify.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
@@ -85,8 +85,11 @@
   const LOCAL_ORIGINS = ['http://localhost/*', 'http://127.0.0.1/*'];
   const normalizeLocalPrefs = (v) => {
     const o = v && typeof v === 'object' ? v : {};
-    return { enabled: o.enabled === true, baseUrl: LL.normalizeBaseUrl(o.baseUrl) || LL.DEFAULT_BASE, model: LL.cleanModel(o.model) };
+    return { enabled: o.enabled === true, baseUrl: LL.normalizeBaseUrl(o.baseUrl) || LL.DEFAULT_BASE, model: LL.cleanModel(o.model), contextTokens: LL.normalizeContext(o.contextTokens) };
   };
+  /** 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 판정 · 압축 — Windows 앱 main.js askLocal과 같음): 패널 대화와 따로인 임시 대화 */
+  const askLocal = (text) =>
+    prefs.local?.enabled ? LL.askOnce({ fetchFn: (url, opts) => fetch(url, opts), getConfig: () => prefs.local, text }) : Promise.resolve({ ok: false, error: '로컬 LLM이 꺼져 있습니다 (설정 › 로컬 LLM)' });
   const allServices = () => (prefs.local?.enabled ? [...SERVICES, LL.localService(prefs.local)] : SERVICES);
   const isLocal = (id) => id === LL.LOCAL_ID;
   let localChat = null;
@@ -528,6 +531,8 @@
     history: roundHistory,
     prefs: () => prefs,
     diag,
+    // 로컬 LLM 판정 (v0.29.0): 패널이 없으면 임시 대화로, 있으면 패널로. 종합 입력은 컨텍스트 한도에 맞춰 줄인다
+    localJudge: { id: LL.LOCAL_ID, available: () => !!prefs.local?.enabled, limit: () => prefs.local.contextTokens, ask: askLocal },
     notify: (event) => notifier.notify(event),
     checkLimit: async (id, { scope, answer } = {}) => {
       if (isLocal(id) || !panels.has(id)) return null;
@@ -866,7 +871,12 @@
           const granted = await chrome.permissions.request({ origins: LOCAL_ORIGINS }).catch(() => false);
           if (!granted) return { ok: false, error: '이 PC 주소 접근을 허용하지 않아 켜지 못했습니다' };
         }
-        prefs.local = { enabled, baseUrl, model: next.model === undefined ? cur.model : LL.cleanModel(next.model) };
+        prefs.local = {
+          enabled,
+          baseUrl,
+          model: next.model === undefined ? cur.model : LL.cleanModel(next.model),
+          contextTokens: LL.normalizeContext(next.contextTokens === undefined ? cur.contextTokens : next.contextTokens), // v0.29.0
+        };
         if (!enabled) {
           prefs.selected = prefs.selected.filter((x) => !isLocal(x));
           if (isLocal(prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
@@ -876,6 +886,8 @@
         pushState();
         return { ok: true, local: { ...prefs.local } };
       },
+      // 패널 없이 한 번 묻기 (v0.29.0, 스킬 압축): 글만 받는다 (20만 자까지, Windows 앱 local:ask와 같은 검사)
+      ask: async (text) => (typeof text === 'string' && text.trim() && text.length <= 200000 ? askLocal(text) : { ok: false, error: '보낼 내용이 올바르지 않습니다' }),
       models: async (baseUrl) => {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 5000);
@@ -893,10 +905,12 @@
     },
     // 내보내기 (v0.14.0): 다운로드 권한 없이, 이 탭에서 파일 링크를 눌러 크롬의 다운로드로 저장한다
     saveFile: async ({ name, text, kind } = {}) => {
-      const types = { md: 'text/markdown', html: 'text/html' };
+      const types = { md: 'text/markdown', html: 'text/html', mla: 'application/json' }; // mla: 설정 옮기기 (v0.29.0, .mla.json)
       if (!types[kind] || typeof text !== 'string') return { ok: false, error: '저장할 내용이 올바르지 않습니다' };
       const url = URL.createObjectURL(new Blob([text], { type: `${types[kind]};charset=utf-8` }));
-      const a = Object.assign(document.createElement('a'), { href: url, download: String(name || `답변.${kind}`) });
+      const ext = kind === 'mla' ? 'mla.json' : kind;
+      const base = String(name || `답변.${ext}`).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 120);
+      const a = Object.assign(document.createElement('a'), { href: url, download: base.endsWith(`.${ext}`) ? base : `${base}.${ext}` });
       document.body.append(a);
       a.click();
       a.remove();

@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.28.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.29.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -53,7 +53,7 @@ flowchart LR
 |---|---|---|---|
 | **묻기** | 동시 질문 | 켠 패널 모두에 한 번에 보내고 `답변 중… → 완료 · N자` 표시 | [사용 안내](docs/guide.md#2-한-번에-질문하기) |
 | | 파일 첨부 | 끌어다 놓기 · Ctrl+V · `[+] 파일`, 서비스마다 받는 형식에 맞춰 첨부 | [파일 첨부](docs/guide.md#파일-첨부) |
-| | 템플릿 · 스킬 | `{{변수}}` 템플릿, SKILL.md 스킬 최대 3개, AI 압축 · 압축 권장 표시 | [라이브러리](docs/guide.md#라이브러리-내-템플릿--스킬) |
+| | 템플릿 · 스킬 · 프리셋 | `{{변수}}` 템플릿, SKILL.md 스킬 최대 3개(이전 버전 · 되돌리기, v0.29.0), AI 압축 · 압축 권장 표시, 작업 프리셋으로 템플릿 · 스킬 · 패널 · 배치 · 종합을 한 번에(v0.29.0) | [라이브러리](docs/guide.md#라이브러리-내-템플릿--스킬) |
 | **답 다루기** | 종합 | 다른 AI 답을 모아 한 AI에게 오류 · 빠진 점 · 최종 답 정리 요청 | [종합](docs/guide.md#4-교차검토종합) |
 | | 답변 비교 · 분석 | 칸별 비교, 기준과 다른 문장 강조, 공통 의견 · 이견 표 · 근거 부족 · 최종 답 | [답변 비교](docs/guide.md#5-답변-비교) |
 | | 넘기기 · 토론 | 한 AI의 답을 다른 AI에게 검토 · 반박 · 이어서 부탁, AI 2~3개 토론 뒤 판정 AI가 결론 (v0.26.0) | [넘기기 · 토론](docs/guide.md#ai끼리-넘기기--토론-v0260) |
@@ -64,9 +64,10 @@ flowchart LR
 | | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기(자동 가능), 계획 먼저 · 파일별로 받기(바로 시작 가능), 보낼 양 토큰 어림 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
 | | 파일 모아보기 | 답변의 파일 코드를 새 파일 · 수정 · 삭제로 모아 복사 (프로젝트 없이도) | [파일 모아보기](docs/project-mode.md#파일-모아보기) |
 | | 테스트 실행 · git 콘솔 · 커밋 | 적용 전/후 `npm test` · lint · typecheck · build 비교(v0.28.0), 적용한 파일만 커밋(v0.28.0, push 없음), 그 폴더의 git 명령만 실행 (Windows 앱) | [테스트 실행](docs/project-mode.md#테스트-실행-windows-앱) · [커밋](docs/project-mode.md#적용-후-커밋-windows-앱-v0280) · [git 콘솔](docs/project-mode.md#git-콘솔-windows-앱) |
-| **확장 · 기타** | 사이드탭 | 크롬 사이드 패널에 AI 2개, 보고 있는 페이지 본문을 자동으로 함께 보냄 | [사이드탭](docs/chrome-extension.md#사이드탭-크롬-확장) |
+| **확장 · 기타** | 사이드탭 | 크롬 사이드 패널에 AI 2개, 보고 있는 페이지 본문을 자동으로 함께 보냄, 요약 · 번역 · 핵심만 · 쉽게 설명 단추와 이 페이지에서 전에 물어본 것(v0.29.0) | [사이드탭](docs/chrome-extension.md#사이드탭-크롬-확장) |
 | | 웹페이지로 질문 | 오른쪽 클릭 › 선택한 글 · 이 페이지 본문을 앱에 넣기 | [웹페이지로 질문](docs/chrome-extension.md#보고-있는-웹페이지로-질문-크롬-확장) |
-| | 로컬 LLM | Ollama · LM Studio 등 이 PC의 OpenAI 호환 서버를 패널로 (밖으로 안 나감) | [로컬 LLM](docs/guide.md#로컬-llm-패널) |
+| | 로컬 LLM | Ollama · LM Studio 등 이 PC의 OpenAI 호환 서버를 패널로 (밖으로 안 나감), 패널 없이 종합 · 토론 판정 · 스킬 압축, 컨텍스트 한도(v0.29.0) | [로컬 LLM](docs/guide.md#로컬-llm-패널) |
+| | 설정 옮기기 | 설정 · 템플릿 · 스킬 · 프리셋을 `.mla.json` 하나로 내보내고 가져오기, 비밀번호 암호화 선택 (기록 · 프로젝트 · 쿠키는 넣지 않음, v0.29.0) | [설정 옮기기](docs/guide.md#설정-옮기기-v0290) |
 | | 셀렉터 원격 갱신 | 사이트 화면이 바뀌면 `remote/selectors.json`만 고쳐 바로잡음 | [remote/README.md](remote/README.md) |
 
 ## 화면
@@ -170,11 +171,11 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.29.0** | **작업 프리셋**(템플릿 · 스킬 · 패널 · 배치 · 종합 · 토론을 한 번에) · 스킬 **이전 버전**과 차이 보기 · 되돌리기 · **로컬 LLM을 패널 없이 판정 · 압축**에 · 로컬 모델 **컨텍스트 한도** · 사이드탭 **요약 · 번역 · 핵심만 · 쉽게 설명** 단추와 **이 페이지에서 전에 물어본 것** · **설정 옮기기**(.mla.json, 비밀번호 암호화) |
 | **v0.28.0** | 미리보기 테스트 실행에 **lint · typecheck · build** · 여러 AI 수정안을 파일마다 골라 **섞어서 적용** · 적용한 파일만 **커밋**(Windows 앱, push 없음) · 앱을 다시 켜도 **작업 이어 하기** · 변경 바와 제안 바 **두 줄로** |
 | **v0.27.0** | 기록 **필터**(기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석 · 태그) · **태그 · ★ 즐겨찾기** · 여러 기록을 **한 문서로** 저장 · **대화 줄기**로 묶어 보기 · 질문 종류별 **추천 조합**(사실 숫자만, 대상은 눌러야 바뀜) |
 | **v0.26.0** | AI끼리 **넘기기**(검토 · 반박 · 이어서) · **토론**(2~3개 AI · 1~3라운드 · 판정) · 실패하면 한 번 다시 보내기 · 한도면 다른 AI 제안 · 이견 → 관련 문단 강조 · 다시 분석 나란히 비교 |
 | **v0.25.0** | 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝 **OS 알림** · **보내기 전 미리보기**(Shift+클릭) · 셀렉터 한국어/영어 짝 · `npm run selectors:probe` |
-| **v0.24.0** | 기록을 기록별로 저장 · **기록 최대 개수** 설정 · 화면 코드 나누기 · 다국어 틀 · 커밋 전 확장 폴더 검사 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

@@ -18,6 +18,8 @@
   const { watchAnswer } = MLA.watch;
   const remoteCore = MLA.remoteCore;
   const PL = MLA.promptLib;
+  const { t } = MLA.i18n; // 새 문구 (v0.29.0)
+  MLA.i18n.apply(document);
 
   const NONCE = crypto.randomUUID(); // 이 사이드 패널 화면의 번호 — 다른 창의 사이드 패널과 연결선이 섞이지 않게
   const HELLO_TIMEOUT_MS = 8000;
@@ -377,6 +379,7 @@
   const CTX_KEY = () => `mla:side-ctx:${windowId}`;
 
   function renderCtx() {
+    renderRecall();
     const box = $('#spCtx');
     const text = $('#spCtxText');
     const state = ctxError && !ctx ? 'error' : SP.contextState(ctx, { on: prefs.ctxOn, activeTabId });
@@ -483,6 +486,7 @@
         page: useCtx ? { title: ctx.title, url: ctx.url } : undefined,
       });
       const results = await Promise.all(ids.map((id) => sendOne(id, asked, useCtx ? ctx : null, hid)));
+      renderRecall();
       const bad = results.filter((r) => !r.ok);
       if (!bad.length) {
         $('#spPrompt').value = '';
@@ -558,6 +562,64 @@
       p.status.dataset.state = `answer-${state}`;
       p.status.textContent = text || '';
     }, { maxMs: ANSWER_MAX_MS });
+  }
+
+  // ---------- 한 번 누르기 질문 · 이 페이지에서 전에 물어본 것 (v0.29.0) ----------
+
+  /** 요약 · 번역 · 핵심만 · 쉽게 설명: 가져온 페이지와 함께 바로 보낸다 (페이지가 없으면 먼저 읽어 본다) */
+  async function quick(kind) {
+    if (sending) return;
+    if (!ctx) await grabCtx(true);
+    if (!ctx) return hint(t('side.quick.noPage'), 'error');
+    prefs.ctxOn = true;
+    savePrefs();
+    renderCtx();
+    $('#spPrompt').value = SP.quickPrompt(kind, ctx, t);
+    send();
+  }
+  for (const b of document.querySelectorAll('#spQuick [data-quick]')) b.addEventListener('click', () => quick(b.dataset.quick));
+
+  /** 지금 페이지(가져온 페이지, 없으면 보고 있는 탭 주소)에서 전에 물어본 것 */
+  let recallOpen = false;
+  let tabUrl = '';
+  function renderRecall() {
+    const items = SP.recallFor(sideHistory.all(), ctx?.url || tabUrl);
+    $('#spRecall').hidden = !items.length;
+    if (!items.length) return;
+    $('#spRecallBtn').textContent = `${recallOpen ? '▾' : '▸'} ${t('side.recall.count', { n: items.length })}`;
+    $('#spRecallBtn').setAttribute('aria-expanded', String(recallOpen));
+    $('#spRecallList').hidden = !recallOpen;
+    if (!recallOpen) return;
+    $('#spRecallList').replaceChildren(
+      ...items.map((it) => {
+        const row = document.createElement('details');
+        row.className = 'sp-recall-item';
+        const sum = document.createElement('summary');
+        sum.append(span('muted-label', new Date(it.at).toLocaleString()), document.createTextNode(` ${it.question.split('\n')[0].slice(0, 120)}`));
+        const again = button(t('side.recall.ask'), t('side.recall.askTitle'), () => {
+          $('#spPrompt').value = it.question;
+          $('#spPrompt').focus();
+        });
+        row.append(sum, again);
+        for (const a of it.answers) {
+          const ans = document.createElement('div');
+          ans.className = 'sp-recall-answer';
+          ans.append(span('url', svcOf(a.id)?.name || a.id), document.createTextNode(` ${a.text.slice(0, 600)}${a.text.length > 600 ? '…' : ''}`));
+          row.append(ans);
+        }
+        if (!it.answers.length) row.append(span('muted-label', t('side.recall.noAnswer')));
+        return row;
+      }),
+    );
+  }
+  $('#spRecallBtn').addEventListener('click', () => {
+    recallOpen = !recallOpen;
+    renderRecall();
+  });
+  async function refreshTabUrl() {
+    const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
+    tabUrl = tab?.url || '';
+    renderRecall();
   }
 
   // ---------- 앱 탭 열기 ----------
@@ -655,7 +717,10 @@
     autoTimer = setTimeout(() => grabCtx(true), 400);
   };
   chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
-    if (tab?.windowId === windowId && tab.active && info.status === 'complete') autoGrab();
+    if (tab?.windowId === windowId && tab.active && info.status === 'complete') {
+      autoGrab();
+      refreshTabUrl();
+    }
   });
   $('#spCtxToggle').addEventListener('click', () => {
     prefs.ctxOn = !prefs.ctxOn;
@@ -681,6 +746,7 @@
   chrome.tabs.onActivated.addListener((info) => {
     if (info.windowId !== windowId) return;
     activeTabId = info.tabId;
+    refreshTabUrl();
     renderCtx();
     autoGrab();
   });
@@ -708,6 +774,7 @@
     }
     const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
     activeTabId = tab?.id ?? null;
+    tabUrl = tab?.url || '';
     autoRead = await chrome.permissions.contains({ origins: AUTO_ORIGINS }).catch(() => false);
     const cmds = await chrome.commands?.getAll?.().catch(() => null);
     if (cmds) shortcut = cmds.find((c) => c.name === 'open-side-panel')?.shortcut || '';

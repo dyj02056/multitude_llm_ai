@@ -11,7 +11,8 @@ const { cleanFilters } = require('../../shared/history-search');
 const { okRecordId } = require('../../shared/history-core');
 
 // 내보내기 (v0.14.0): 저장 창에서 고른 곳에 Markdown · HTML 글을 씁니다. 이름은 화면이 정한 기본값, 종류는 md · html만.
-const SAVE_KINDS = { md: { name: 'Markdown', ext: 'md' }, html: { name: 'HTML 문서', ext: 'html' } };
+// mla: 설정 옮기기 파일 (v0.29.0, .mla.json — 설정 · 라이브러리, 비밀번호를 걸면 암호화된 글)
+const SAVE_KINDS = { md: { name: 'Markdown', ext: 'md' }, html: { name: 'HTML 문서', ext: 'html' }, mla: { name: 'Multitude LLM 설정', ext: 'mla.json', filter: 'json' } };
 
 /**
  * ctx: { ipcMain, history, rounds(), roundHistoryId(), clipboard, dialog, app, win() }
@@ -58,7 +59,7 @@ function register(ctx) {
     const { canceled, filePath } = await dialog.showSaveDialog(ctx.win(), {
       title: '내보내기',
       defaultPath: path.join(app.getPath('downloads'), base.endsWith(`.${k.ext}`) ? base : `${base}.${k.ext}`),
-      filters: [{ name: k.name, extensions: [k.ext] }],
+      filters: [{ name: k.name, extensions: [k.filter || k.ext] }],
     });
     if (canceled || !filePath) return { ok: false, cancelled: true };
     await fs.promises.writeFile(filePath, text, 'utf8');

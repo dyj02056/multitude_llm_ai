@@ -15,6 +15,8 @@
 //   - 템플릿 변수: {{이름}} 같은 빈칸을 찾아 사용자가 넣은 값으로 채움
 //   - 스킬: AI에게 줄 역할·규칙 지침. 질문 앞에 붙일 글을 만들고, 너무 길면 줄이기(정리·AI 압축)를 도움
 //   - 내보내기·가져오기: 라이브러리를 .json 파일로 저장하고 다시 읽음 (모양이 이상한 값은 걸러 냄)
+//   - 작업 프리셋 (v0.29.0): 템플릿 · 스킬 · 패널 · 배치 · 종합 · 토론 설정을 한 묶음으로 저장했다가 한 번에 적용
+//   - 스킬 이전 버전 (v0.29.0): 스킬을 저장할 때마다 바로 전 본문을 versions에 남김 (최대 10개, 되돌리기 = 새로 저장)
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -33,7 +35,15 @@
     prefixTotal: 30000, // 한 번에 붙이는 지침 글 합계
     varValue: 5000,
     skillFileBytes: 100 * 1024,
+    presets: 30, // 작업 프리셋 수 (v0.29.0)
+    presetVars: 30, // 프리셋에 담는 템플릿 변수 값 수
+    versions: 10, // 스킬마다 남기는 이전 버전 수 (v0.29.0)
+    versionChars: 60000, // 스킬 하나의 이전 버전 글자 합계 (넘으면 오래된 것부터 버림)
   };
+  const MAX_PANELS = 6; // 프리셋에 담는 패널 수 (앱의 최대 패널 수와 같음)
+  const MAX_DEBATE = 3; // 토론 참가 AI · 라운드 최대 (shared/chain.js와 같음)
+  const SVC_ID = /^[a-z0-9-]{1,40}$/; // 서비스 id 모양 (gemini · chatgpt · local …)
+  const TPL_ID = /^[\w-]{1,60}$/; // 템플릿 id 모양 (기본 템플릿 summary · 내 템플릿 u-…)
   const BUILTIN_VARS = ['오늘', '프로젝트', '선택 파일'];
   const SKILL_MODES = ['first', 'every']; // 새 대화 첫 질문에만 / 매 질문마다
 
@@ -270,6 +280,145 @@
     return { text: skillChangeNote(added, removed), ids };
   }
 
+  // ---------- 스킬 이전 버전 (v0.29.0) ----------
+
+  /** 저장된 이전 버전 목록 정리: [{ at, body, name }] 최신이 앞, 최대 10개, 글자 합계 한도 */
+  function normalizeVersions(list) {
+    const out = [];
+    let total = 0;
+    for (const v of Array.isArray(list) ? list : []) {
+      if (!v || typeof v.body !== 'string' || !v.body.trim()) continue;
+      const body = clip(v.body, LIMITS.skillBody);
+      if (total + body.length > LIMITS.versionChars) break;
+      total += body.length;
+      out.push({ at: Number.isFinite(v.at) ? v.at : 0, body, name: clip(v.name, LIMITS.name) });
+      if (out.length >= LIMITS.versions) break;
+    }
+    return out;
+  }
+
+  /** 스킬을 nextBody로 저장할 때의 versions: 본문이 바뀌었으면 지금 본문을 맨 앞에 남긴다 */
+  function withVersion(skill, nextBody, now = Date.now()) {
+    const prev = normalizeVersions(skill?.versions);
+    const cur = typeof skill?.body === 'string' ? skill.body : '';
+    if (!cur.trim() || cur === nextBody) return prev;
+    if (prev[0]?.body === cur) return prev; // 같은 본문을 두 번 남기지 않는다
+    return normalizeVersions([{ at: now, body: cur, name: skill.name }, ...prev]);
+  }
+
+  /** 되돌리기 = 그 버전의 본문으로 새로 저장 (지금 본문은 이전 버전으로 남김) → { body, versions } | null */
+  function restoreVersion(skill, index, now = Date.now()) {
+    const v = normalizeVersions(skill?.versions)[index];
+    if (!v) return null;
+    return { body: v.body, versions: withVersion(skill, v.body, now) };
+  }
+
+  /** 두 본문의 줄 단위 차이 (Diff = jsdiff) → [{ type: 'add' | 'del' | 'same', text }] */
+  function versionDiff(oldBody, newBody, Diff) {
+    const out = [];
+    const withEnd = (s) => (String(s || '').endsWith('\n') ? String(s || '') : `${s || ''}\n`); // 마지막 줄도 같은 줄로 비교되게
+    for (const part of Diff.diffLines(withEnd(oldBody), withEnd(newBody))) {
+      const type = part.added ? 'add' : part.removed ? 'del' : 'same';
+      for (const line of part.value.replace(/\n$/, '').split('\n')) out.push({ type, text: line });
+    }
+    return out;
+  }
+
+  // ---------- 작업 프리셋 (v0.29.0) ----------
+  // 프리셋 = { id, name, at, template: { id, vars }, skills: [id], selected: [서비스 id], targets: [서비스 id],
+  //           layout, synth: { target, auto }, debate: { participants, rounds, judge } | null }
+
+  const uniq = (list, re) => [...new Set((Array.isArray(list) ? list : []).filter((id) => typeof id === 'string' && re.test(id)))];
+  const svcIds = (list, max) => uniq(list, SVC_ID).slice(0, max);
+  const cleanVars = (vals) =>
+    vals && typeof vals === 'object' && !Array.isArray(vals)
+      ? Object.fromEntries(Object.entries(vals).slice(0, LIMITS.presetVars).filter(([, v]) => typeof v === 'string').map(([k, v]) => [clip(k, 60), clip(v, LIMITS.varValue)]))
+      : {};
+
+  /** 프리셋 하나 검사 (skillIds: 있는 스킬 id 모음 — 없는 스킬은 뺀다) → 프리셋 | null */
+  function normalizePreset(p, skillIds) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const tpl = p.template && typeof p.template === 'object' ? p.template : {};
+    const selected = svcIds(p.selected, MAX_PANELS);
+    const synth = p.synth && typeof p.synth === 'object' ? p.synth : {};
+    const db = p.debate && typeof p.debate === 'object' ? p.debate : null;
+    const rounds = Number(db?.rounds);
+    const okSvc = (v) => (typeof v === 'string' && SVC_ID.test(v) ? v : '');
+    return {
+      id: typeof p.id === 'string' && /^p-[\w-]{1,40}$/.test(p.id) ? p.id : newId('p'),
+      name: clip(p.name, LIMITS.name).trim() || '이름 없는 프리셋',
+      at: Number.isFinite(p.at) ? p.at : 0,
+      template: { id: typeof tpl.id === 'string' && TPL_ID.test(tpl.id) && tpl.id !== 'none' ? tpl.id : '', vars: cleanVars(tpl.vars) },
+      skills: uniq(p.skills, /^s-[\w-]{1,40}$/).filter((id) => !skillIds || skillIds.has(id)).slice(0, LIMITS.activeSkills),
+      selected,
+      targets: svcIds(p.targets, MAX_PANELS).filter((id) => !selected.length || selected.includes(id)),
+      layout: typeof p.layout === 'string' && /^[a-z]{1,20}$/.test(p.layout) ? p.layout : '',
+      synth: { target: okSvc(synth.target), auto: synth.auto === true },
+      debate: db
+        ? { participants: svcIds(db.participants, MAX_DEBATE), rounds: Number.isInteger(rounds) && rounds >= 1 && rounds <= MAX_DEBATE ? rounds : 0, judge: okSvc(db.judge) }
+        : null,
+    };
+  }
+
+  function normalizePresets(list, skillIds) {
+    return (Array.isArray(list) ? list : []).map((p) => normalizePreset(p, skillIds)).filter(Boolean).slice(0, LIMITS.presets);
+  }
+
+  /**
+   * 지금 설정으로 프리셋 만들기.
+   * cur: { name, templateId, vars, activeSkills, selected, targets, layout, synthTarget, autoSynth, debate }
+   */
+  function presetFromState(cur, now = Date.now()) {
+    const c = cur || {};
+    return normalizePreset({
+      id: newId('p'),
+      name: c.name,
+      at: now,
+      template: { id: c.templateId, vars: c.vars },
+      skills: c.activeSkills,
+      selected: c.selected,
+      targets: c.targets,
+      layout: c.layout,
+      synth: { target: c.synthTarget, auto: c.autoSynth },
+      debate: c.debate || null,
+    });
+  }
+
+  /**
+   * 프리셋을 적용할 계획 (화면이 확인 창 · 순서를 정한다).
+   * env: { openIds: 지금 열린 패널, available: 쓸 수 있는 서비스 id, hasTemplate(id), hasSkill(id), layouts }
+   * → { panels: 열 패널(쓸 수 있는 것만) | null(바꿀 필요 없음), missing: { services, skills, template }, skills, template, layout }
+   */
+  function presetPlan(preset, env = {}) {
+    const avail = new Set(env.available || []);
+    const open = env.openIds || [];
+    const want = preset.selected.filter((id) => avail.has(id));
+    const same = want.length === open.length && want.every((id) => open.includes(id));
+    const skills = preset.skills.filter((id) => !env.hasSkill || env.hasSkill(id));
+    const tplOk = !preset.template.id || !env.hasTemplate || env.hasTemplate(preset.template.id);
+    return {
+      panels: want.length && !same ? want : null,
+      missing: {
+        services: preset.selected.filter((id) => !avail.has(id)),
+        skills: preset.skills.filter((id) => !skills.includes(id)),
+        template: tplOk ? '' : preset.template.id,
+      },
+      skills,
+      template: tplOk ? preset.template.id : '',
+      layout: !env.layouts || env.layouts.includes(preset.layout) ? preset.layout : '',
+    };
+  }
+
+  /** 가져온 프리셋의 템플릿 · 스킬 id를 새 id로 바꾼다 (가져오기는 항목마다 새 id를 준다) */
+  function remapPreset(p, tplMap, skillMap) {
+    return {
+      ...p,
+      id: newId('p'),
+      template: { ...p.template, id: tplMap.get(p.template.id) || p.template.id },
+      skills: p.skills.map((id) => skillMap.get(id)).filter(Boolean),
+    };
+  }
+
   /** 저장된 라이브러리를 검사·정리한다 (모양이 틀린 항목은 버리고 길이를 자른다) */
   function normalizeLibrary(data) {
     const d = data && typeof data === 'object' ? data : {};
@@ -297,6 +446,7 @@
         useCompact: s.useCompact !== false,
         dropExamples: !!s.dropExamples,
         noWarn: !!s.noWarn,
+        versions: normalizeVersions(s.versions),
       }));
     // 템플릿마다 마지막에 넣은 변수 값 (다음에 미리 채워 둠)
     const lastVars = {};
@@ -320,6 +470,7 @@
       skills,
       lastVars,
       activeSkills,
+      presets: normalizePresets(d.presets, ids),
       skillMode: SKILL_MODES.includes(d.skillMode) ? d.skillMode : 'first',
       compressWarn: { one: num(w.one, DEFAULT_WARN.one, 1000, 20000), total: num(w.total, DEFAULT_WARN.total, 2000, 30000) },
     };
@@ -343,15 +494,20 @@
       throw new Error('Multitude LLM 라이브러리 파일이 아닙니다');
     }
     const lib = normalizeLibrary({ templates: data.templates, skills: data.skills });
+    const tplMap = new Map(lib.templates.map((t) => [t.id, newId('u')]));
+    const skillMap = new Map(lib.skills.map((s) => [s.id, newId('s')]));
+    // 프리셋 (v0.29.0): 파일 안의 스킬 id로 검사한 뒤 새 id로 바꾼다 (파일에 없는 스킬은 빠짐)
+    const presets = normalizePresets(data.presets, new Set(skillMap.keys())).map((p) => remapPreset(p, tplMap, skillMap));
     return {
-      templates: lib.templates.map((t) => ({ ...t, id: newId('u') })),
-      skills: lib.skills.map((s) => ({ ...s, id: newId('s') })),
+      templates: lib.templates.map((t) => ({ ...t, id: tplMap.get(t.id) })),
+      skills: lib.skills.map((s) => ({ ...s, id: skillMap.get(s.id) })),
+      presets,
     };
   }
 
-  /** 내보내기 파일 내용 (변수 값·고른 스킬은 넣지 않음) */
+  /** 내보내기 파일 내용 (변수 값·고른 스킬은 넣지 않음, 프리셋 · 스킬 이전 버전은 넣음 — v0.29.0) */
   function exportLibrary(lib) {
-    return JSON.stringify({ kind: 'multitude-llm-library', version: 1, templates: lib.templates, skills: lib.skills }, null, 2);
+    return JSON.stringify({ kind: 'multitude-llm-library', version: 1, templates: lib.templates, skills: lib.skills, presets: lib.presets || [] }, null, 2);
   }
 
   return {
@@ -360,5 +516,7 @@
     cleanSkill, textHash, compactStale, sendBody, warnLimits, compressLevel, compressRequest, extractCompressed,
     skillPrefix, skillChangeNote, prefixFor, prefixSize,
     normalizeLibrary, importLibrary, exportLibrary, newId,
+    normalizeVersions, withVersion, restoreVersion, versionDiff,
+    normalizePreset, normalizePresets, presetFromState, presetPlan,
   };
 });

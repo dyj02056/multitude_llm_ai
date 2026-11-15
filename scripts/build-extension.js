@@ -57,6 +57,8 @@ const RENDERER_FILES = [
   'project-restore.js',
   'project-editor.js',
   'library.js',
+  'library-presets.js',
+  'settings-transfer-ui.js',
 ];
 const PAGE_SCRIPTS = RENDERER_FILES.filter((n) => n !== 'templates.js');
 

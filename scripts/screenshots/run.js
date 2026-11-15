@@ -52,6 +52,11 @@ const SCENES = [
   { name: '38-commit', page: 'app' },
   { name: '39-bars-stacked', page: 'app' },
   { name: '40-project-restore', page: 'app' },
+  { name: '42-presets', page: 'app' },
+  { name: '43-skill-versions', page: 'app' },
+  { name: '44-local-judge', page: 'app' },
+  { name: '45-settings-transfer', page: 'app' },
+  { name: '41-side-recall', page: 'side', width: 420 },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];
 

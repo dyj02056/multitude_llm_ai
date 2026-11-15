@@ -17,6 +17,10 @@
   const DEFAULT_BASE = 'http://localhost:11434'; // Ollama 기본 주소 (LM Studio는 http://localhost:1234)
   const MAX_TURNS = 40; // 대화에 남기는 최대 메시지 수 (오래된 것부터 뺀다)
   const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+  // 로컬 모델 컨텍스트 한도 (v0.29.0, 토큰). 넘을 것 같으면 종합 입력은 줄여 보내고, 그 밖에는 경고만 한다.
+  const CONTEXT_CHOICES = [2048, 4096, 8192, 16384, 32768, 131072];
+  const DEFAULT_CONTEXT = 8192;
+  const ASK_TIMEOUT_MS = 10 * 60 * 1000; // 패널 없이 한 번 묻기(판정 · 압축)의 최대 대기
 
   /** 서비스 목록에 붙일 로컬 LLM 항목 (웹 서비스 목록 SERVICES와는 따로 둔다) */
   function localService(cfg = {}) {
@@ -216,11 +220,50 @@
     return { send, stop, reset, snapshot, view };
   }
 
+  /** 컨텍스트 한도 설정 값 검사 (고를 수 있는 값만, 아니면 기본 8k) */
+  const normalizeContext = (v) => (CONTEXT_CHOICES.includes(Number(v)) ? Number(v) : DEFAULT_CONTEXT);
+
+  /**
+   * 패널 없이 한 번 묻기 (v0.29.0): 종합 · 분석 · 토론 판정 · 스킬 압축을 로컬 LLM에 맡길 때.
+   * 패널의 대화(createLocalChat)와 따로, 이 질문 하나만 담은 임시 대화로 보낸다 → 보이는 패널의 대화가 섞이지 않는다.
+   * 스트리밍 없이 한 번에 받는다. → { ok: true, text } | { ok: false, error }
+   */
+  async function askOnce({ fetchFn, getConfig, text, timeoutMs = ASK_TIMEOUT_MS, signal } = {}) {
+    const cfg = (getConfig && getConfig()) || {};
+    const base = normalizeBaseUrl(cfg.baseUrl);
+    const model = cleanModel(cfg.model);
+    if (!base) return { ok: false, error: '로컬 LLM 주소가 올바르지 않습니다 (설정 › 로컬 LLM)' };
+    if (!model) return { ok: false, error: '로컬 LLM 모델을 고르세요 (설정 › 로컬 LLM › 연결 확인)' };
+    if (typeof text !== 'string' || !text.trim()) return { ok: false, error: '보낼 내용이 없습니다' };
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    signal?.addEventListener?.('abort', () => ctrl.abort());
+    try {
+      const res = await fetchFn(`${base}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: text }], stream: false }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) return { ok: false, error: `로컬 LLM이 질문을 받지 않았습니다 (HTTP ${res.status})` };
+      const j = await res.json();
+      const answer = String(j?.choices?.[0]?.message?.content ?? j?.message?.content ?? '');
+      return answer.trim() ? { ok: true, text: answer } : { ok: false, error: '로컬 LLM의 답이 비어 있습니다' };
+    } catch (err) {
+      return { ok: false, error: err.name === 'AbortError' ? '로컬 LLM이 시간 안에 답하지 않았습니다' : `로컬 LLM에 연결하지 못했습니다: ${err.message}` };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** 첨부 파일(이미지) → data URL. file: { type, data(ArrayBuffer · Uint8Array) } */
   function imageDataUrl(file, toBase64) {
     if (!file || !/^image\//.test(file.type || '')) return null;
     return `data:${file.type};base64,${toBase64(file.data)}`;
   }
 
-  return { LOCAL_ID, DEFAULT_BASE, LOCAL_HOSTS, localService, normalizeBaseUrl, cleanModel, listModels, toContent, parseSSE, createLocalChat, imageDataUrl };
+  return {
+    LOCAL_ID, DEFAULT_BASE, LOCAL_HOSTS, CONTEXT_CHOICES, DEFAULT_CONTEXT,
+    localService, normalizeBaseUrl, cleanModel, normalizeContext, listModels, toContent, parseSSE, createLocalChat, askOnce, imageDataUrl,
+  };
 });

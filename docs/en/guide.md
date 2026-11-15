@@ -137,6 +137,12 @@ History stays on this PC. Questions sent from the extension's side panel appear 
 - **Templates** can contain variables like `{{language}}` or `{{tone|friendly}}` (with a default). `{q}` marks where your question goes. Before sending, the app asks for the variable values.
 - **Skills** are SKILL.md-style instruction sets (up to 3 at once). They are added in front of the first question of each chat. Long skills can be shortened with **AI로 압축** (compress with AI).
 - Import / export the library as JSON.
+- **Work presets** (v0.29.0): `preset:` left of the input, or the **프리셋** tab. A preset stores the template (with variable values), active skills in order, panels, targets, layout, synthesis judge + auto synthesis and debate settings, and applies them in one click. If the panels differ, you confirm before the panels are reopened.
+- **Skill versions** (v0.29.0): every save keeps the previous body (up to 10). Under the editor, **이전 버전** shows a diff against the current body and **이 버전으로 되돌리기** restores it as a new save.
+
+### Move settings (v0.29.0)
+
+**?** › `설정 옮기기` exports settings (models, layout, synthesis, timeout, notifications, preview, retry, recommendations, history size, local LLM) and the library (templates, skills with versions, presets) as one `.mla.json` file. History, projects and cookies are never included. With a password (8+ chars) the file is encrypted with PBKDF2-SHA256 (250,000 iterations) + AES-GCM. Importing shows which settings change and lets you choose **overwrite** or **keep both** for items with the same id before anything is applied.
 
 ## 9. Project mode (code work)
 
@@ -161,10 +167,14 @@ Cut-off protection: if an answer was cut off or abbreviated (`... existing code 
 - **Side panel** (`Alt+Shift+S`, or right-click › `사이드탭에서 이 페이지로 묻기`): up to 2 AIs in Chrome's side panel. The page you are reading is sent with your first question. Turn on **자동 읽기** (auto-read) once to read the current tab automatically; this asks for an optional site-access permission that you can revoke anytime in `chrome://extensions`.
 - **Ask about a page**: right-click › `Multitude LLM에 묻기 — 선택한 글` (selected text) or `— 이 페이지 본문` (page text). Text is checked for secrets first.
 - **app ↗** in the side panel moves your question and page to the full app tab.
+- **One-click prompts** (v0.29.0): **요약 · 번역 · 핵심만 · 쉽게 설명** (summary, translate Korean↔English by page language, key points, explain simply) send right away with the captured page.
+- **Earlier questions on this page** (v0.29.0): when the side-panel history has questions for the same URL (ignoring `#…` and tracking parameters such as `utm_*`), a line shows how many; open it to see them, their saved answers and **다시 묻기**.
 
 ## 11. Local LLM (optional)
 
 Run an OpenAI-compatible server on your PC (Ollama `http://localhost:11434`, LM Studio `http://localhost:1234`, llama.cpp…). In **?** › `로컬 LLM`, turn it on, press `연결 확인` (test connection) and choose a model. Then pick **로컬 LLM** in the model list. Only `localhost` / `127.0.0.1` addresses are accepted, so nothing leaves your PC.
+
+Since v0.29.0 the local LLM can also be the synthesis / analysis / debate judge and the skill compressor **without an open panel** (`로컬 LLM (패널 없이)`): it is asked in a separate temporary conversation so the visible panel chat is not touched; open the synthesis result with **결과 보기**. Set **로컬 모델 컨텍스트 한도** (2k–128k tokens, default 8k): answers fed to a local judge are trimmed proportionally with a note, other questions only show a warning in the panel and the pre-send preview.
 
 In the Chrome extension, Ollama must allow extension requests: set the environment variable `OLLAMA_ORIGINS=chrome-extension://*` and restart Ollama.
 

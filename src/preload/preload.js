@@ -48,12 +48,14 @@ contextBridge.exposeInMainWorld('host', {
     clear: () => ipcRenderer.invoke('history:clear'),
   },
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
-  // 내보내기: { name, text, kind: 'md' | 'html' } → 저장 창 → { ok, path } | { ok: false, cancelled }
+  // 내보내기: { name, text, kind: 'md' | 'html' | 'mla'(설정 옮기기, v0.29.0) } → 저장 창 → { ok, path } | { ok: false, cancelled }
   saveFile: (file) => ipcRenderer.invoke('file:save', file),
   // 로컬 LLM (v0.16.0): 설정 { enabled, baseUrl, model } 바꾸기 · 모델 목록 (연결 확인)
   local: {
     setPrefs: (next) => ipcRenderer.invoke('local:setPrefs', next),
     models: (baseUrl) => ipcRenderer.invoke('local:models', baseUrl),
+    // 패널 없이 한 번 묻기 (v0.29.0, 스킬 압축) → { ok, text } | { ok: false, error }
+    ask: (text) => ipcRenderer.invoke('local:ask', text),
   },
   shortcuts: () => ipcRenderer.invoke('shortcuts:list'),
   runSynth: (judgeId, kind) => ipcRenderer.invoke('synth:run', judgeId, kind),

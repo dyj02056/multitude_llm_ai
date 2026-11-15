@@ -16,7 +16,7 @@
 
   const { buildSynthPrompt, analysisNames } = synth || require('./synth');
   const { uploadOf, fileKind } = services || require('./services');
-  const { planSend } = sendPlan || require('./send-plan');
+  const { planSend, fitAnswers } = sendPlan || require('./send-plan');
   const { buildHandoffPrompt, INTENTS } = chainLib || require('./chain');
   const { retryDecision } = retryLib || require('./retry');
   const { createDebate } = debateLib || require('./debate');
@@ -43,6 +43,9 @@
    *   diag: 셀렉터 자가진단 (shared/diag.js createDiag, 없어도 됨) — 보내기 · 답변 결과를 기록
    *   checkLimit(id, { scope, answer }): 사용 한도 안내를 찾는다 → 찾은 문구 | null (없어도 됨, page.js pageLimitCheck)
    *   notify(event): OS 알림 (없어도 됨, shared/notify.js createNotifier) — 라운드 답변이 모두 끝남 · 사용 한도 · 보내기 실패 · 종합 끝
+   *   localJudge (v0.29.0, 없어도 됨): 로컬 LLM을 판정 · 종합에 쓸 때
+   *     { id: 'local', available(): 설정에서 켰는지, limit(): 컨텍스트 한도(토큰), ask(text) → Promise<{ ok, text, error }> }
+   *     패널이 열려 있지 않으면 ask(패널과 따로인 임시 대화)로 묻고, 열려 있으면 패널로 보낸다. 어느 쪽이든 종합 입력은 한도에 맞춰 줄인다.
    *   log(tag, ...args)
    */
   function createRounds(a) {
@@ -55,6 +58,13 @@
 
     const nameOf = (id) => a.services.find((s) => s.id === id)?.name || id;
     const openIds = () => a.services.map((s) => s.id).filter((id) => a.hasPanel(id));
+    // 로컬 LLM 판정 (v0.29.0): 패널이 없어도 설정에서 켰으면 임시 대화로 묻는다
+    const isLocalJudge = (id) => !!a.localJudge && id === a.localJudge.id;
+    const headlessLocal = (id) => isLocalJudge(id) && !a.hasPanel(id) && a.localJudge.available();
+    const canJudge = (id) => a.hasPanel(id) || headlessLocal(id);
+    /** 판정 AI가 로컬 LLM이면 답변들을 컨텍스트 한도에 맞춰 줄인다 → { answers, trimmed } */
+    const fitFor = (id, answers, fixedText) =>
+      isLocalJudge(id) ? fitAnswers(answers, { limit: a.localJudge.limit(), fixedText, note: t('local.trimNote') }) : { answers, trimmed: [] };
 
     /** 진행 중인 답변 감시를 멈춘다 (새 대화를 열 때 등). */
     function cancelWatch(id) {
@@ -280,9 +290,9 @@
     async function runSynth(judgeId, cause = 'manual', mode = 'text') {
       const judge = judgeId || a.prefs().synthTarget;
       if (!round) return fail('먼저 공통 입력창으로 질문을 보내 주세요');
-      if (!a.hasPanel(judge)) return fail('종합을 맡을 AI 패널이 열려 있지 않습니다');
+      if (!canJudge(judge)) return fail('종합을 맡을 AI 패널이 열려 있지 않습니다');
 
-      const answers = [];
+      let answers = [];
       for (const svc of a.services) {
         if (svc.id === judge || !round.targets.includes(svc.id) || !a.hasPanel(svc.id)) continue;
         // 페이지가 다시 그려지는 순간이면 글이 비어 보일 수 있어 한 번 더 읽는다.
@@ -295,11 +305,17 @@
 
       const judgeName = nameOf(judge);
       const judgeAnswered = round.targets.includes(judge);
-      const text = buildSynthPrompt({ question: round.question, answers, judgeAnswered, mode, judgeName });
+      const promptOf = (list) => buildSynthPrompt({ question: round.question, answers: list, judgeAnswered, mode, judgeName });
+      // 로컬 LLM이 판정이면 컨텍스트 한도에 맞춰 답변마다 같은 비율로 줄인다 (줄인 답 끝에 "(… 일부만 보냄)")
+      const fit = fitFor(judge, answers, promptOf(answers.map((x) => ({ ...x, text: '' }))));
+      answers = fit.answers;
+      const text = promptOf(answers);
       const names = mode === 'analysis' ? analysisNames({ answers, judgeAnswered, judgeName }) : undefined;
-      a.sendSynthStatus({ state: 'sending', judge: judgeName, count: answers.length, cause, mode });
+      const trimmed = fit.trimmed.length ? fit.trimmed : undefined;
+      a.sendSynthStatus({ state: 'sending', judge: judgeName, count: answers.length, cause, mode, trimmed });
       const historyId = round.historyId;
       const r = round;
+      if (headlessLocal(judge)) return localSynth();
       const res = await sendToPanel(judge, text, async (state) => {
         if (state !== 'done') {
           // 분석은 화면이 "분석하는 중"을 기다리므로, 답이 오지 않고 끝나도(시간 초과 · 답변 없음) 알려 준다
@@ -319,8 +335,24 @@
         }
       });
       if (!res.ok) return fail(`${judgeName}에 보내지 못했습니다: ${res.error}`);
-      a.sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause, mode });
+      a.sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause, mode, trimmed });
       return { ok: true, judge: judgeName, count: answers.length };
+
+      /** 패널 없이 로컬 LLM에 묻기 (v0.29.0): 답이 오면 기록에 남기고 'done' (headless · historyId를 함께 알려 화면이 결과를 열 수 있게) */
+      async function localSynth() {
+        a.sendSynthStatus({ state: 'sent', judge: judgeName, count: answers.length, cause, mode, trimmed, headless: true });
+        const got = await a.localJudge.ask(text);
+        if (!got?.ok) return fail(`${judgeName}: ${got?.error || '답하지 못했습니다'}`);
+        const entry = { judge: judgeName, at: Date.now(), text: got.text, md: got.text, ...(mode === 'analysis' ? { mode, names } : {}) };
+        a.history.addSynth(historyId, entry);
+        a.notify?.({ kind: 'synth', ok: true, judge: judgeName, mode });
+        if (mode === 'analysis') {
+          r.analysis = entry;
+          r.analyses = [...(r.analyses || []), entry];
+        }
+        a.sendSynthStatus({ state: 'done', judge: judgeName, count: answers.length, cause, mode, trimmed, headless: true, historyId });
+        return { ok: true, judge: judgeName, count: answers.length, headless: true };
+      }
 
       function fail(error) {
         a.sendSynthStatus({ state: 'error', error, cause, mode });
@@ -376,6 +408,8 @@
 
     /** 패널 하나에 보내고 답이 끝날 때까지 기다린다 → { state, text, md } (시간 초과면 그때까지 쓴 글) */
     function sendAndWait(id, text) {
+      // 토론 판정을 패널 없는 로컬 LLM에 맡겼을 때 (v0.29.0)
+      if (headlessLocal(id)) return a.localJudge.ask(text).then((got) => (got?.ok ? { state: 'done', text: got.text, md: got.text } : { state: 'error', text: '', md: '', error: got?.error }));
       return new Promise((resolve) => {
         let done = false;
         sendToPanel(id, text, async (state) => {
@@ -451,6 +485,9 @@
       readAnswer,
       nameOf,
       openIds,
+      // 판정은 열린 패널 + (켜 두었으면) 패널 없는 로컬 LLM (v0.29.0)
+      judgeIds: () => [...openIds(), ...(a.localJudge && headlessLocal(a.localJudge.id) ? [a.localJudge.id] : [])],
+      fitPositions: (judgeId, positions) => fitFor(judgeId, positions, '').answers,
       defaultJudge: () => a.prefs().synthTarget,
       getRound: () => round,
       history: { addChain: (hid, e) => a.history.addChain?.(hid, e), addSynth: (hid, e) => a.history.addSynth(hid, e) },

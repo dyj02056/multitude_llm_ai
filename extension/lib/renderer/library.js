@@ -335,6 +335,17 @@
   // 라이브러리 화면 왼쪽 목록(템플릿·스킬)과 오른쪽 편집기를 그립니다.
   function renderLibrary() {
     for (const b of document.querySelectorAll('[data-libtab]')) b.classList.toggle('active', b.dataset.libtab === ui.tab);
+    // 프리셋 탭 (v0.29.0): 목록 · 편집은 library-presets.js가 그린다
+    const presetTab = ui.tab === 'presets';
+    $('#libPresetEditor').hidden = true;
+    if (presetTab) {
+      $('#libMode').hidden = true;
+      $('#libWarn').hidden = true;
+      $('#libEditor').hidden = true;
+      shown = null;
+      window.libPresets?.render(ui);
+      return;
+    }
     $('#libMode').hidden = ui.tab !== 'skills';
     $('#libWarn').hidden = ui.tab !== 'skills';
     $('#libSkillMode').value = lib.skillMode;
@@ -480,6 +491,7 @@
       $('#libCompactDel').hidden = !sk.compact;
       $('#libCompress').textContent = sk.compact ? 'AI로 다시 압축' : 'AI로 압축';
     }
+    window.libPresets?.renderVersions(sk); // 스킬 이전 버전 (v0.29.0)
     updateEditorInfo();
   }
 
@@ -531,7 +543,7 @@
       const s = { id: PL.newId('s'), name, description: hint, body: text };
       lib.skills.push(s);
       ui.sel = s.id;
-    } else Object.assign(c.item, { name, description: hint, body: text });
+    } else Object.assign(c.item, { name, description: hint, versions: PL.withVersion(c.item, text), body: text }); // 바로 전 본문은 이전 버전으로 (v0.29.0)
     draft = null;
     shown = null;
     await save();
@@ -629,6 +641,7 @@
 
   // skillId: 압축 중인 스킬, panelId: 요청을 보낸 패널, waiting: { id, sent } 답변을 기다리는 중, out: 압축본 칸의 글(화면을 떠나도 유지)
   const cmp = { skillId: null, panelId: null, waiting: null, out: null };
+  const LOCAL_ASK = '__local'; // 맡길 AI: 패널 없는 로컬 LLM (v0.29.0)
 
   const cmpSkill = () => skillById(cmp.skillId);
   const nameOfSvc = (id) => state.services.find((x) => x.id === id)?.name || id;
@@ -644,7 +657,7 @@
     $('#cmpOutCount').textContent = out ? `${out.length.toLocaleString()}자 · 원문의 ${pct > 0 && pct < 1 ? '1% 미만' : `${Math.round(pct)}%`}` : '';
     $('#cmpSave').disabled = !out || !!cmp.waiting;
     $('#cmpRun').disabled = !!cmp.waiting || !$('#cmpTarget').value;
-    $('#cmpRead').disabled = !!cmp.waiting || !(cmp.panelId || $('#cmpTarget').value);
+    $('#cmpRead').disabled = !!cmp.waiting || !(cmp.panelId || ($('#cmpTarget').value && $('#cmpTarget').value !== LOCAL_ASK));
   }
 
   $('#libCompress').addEventListener('click', () => {
@@ -665,7 +678,9 @@
     const resume = cmp.skillId === skillId && cmp.out !== null; // 같은 스킬로 돌아왔으면 칸의 글·상태를 그대로
     cmp.skillId = skillId;
     const open = state.services.filter((x) => panels.has(x.id));
-    $('#cmpTarget').replaceChildren(...open.map((x) => option(x.id, x.name)));
+    // 로컬 LLM을 켜 두었는데 패널이 없으면 패널 없이 묻는 선택지 (v0.29.0 — 보이는 패널의 대화와 섞이지 않음)
+    const localHeadless = state.local?.enabled && !panels.has('local');
+    $('#cmpTarget').replaceChildren(...open.map((x) => option(x.id, x.name)), ...(localHeadless ? [option(LOCAL_ASK, t('local.judgeHeadless'))] : []));
     const pick = [cmp.panelId, state.synthTarget].find((id) => id && open.some((x) => x.id === id));
     if (pick) $('#cmpTarget').value = pick;
     const base = PL.cleanSkill(s.body);
@@ -677,7 +692,7 @@
       cmp.out = null;
       $('#cmpLen').value = Math.max(500, Math.min(8000, Math.round((base.length * 0.3) / 100) * 100));
       $('#cmpOut').value = s.compact || '';
-      setCmpStatus(open.length ? '압축을 맡길 AI와 목표 길이를 고르고 "압축 요청"을 누르세요' : '열린 패널이 없습니다 — 압축본을 직접 붙여 넣을 수도 있습니다');
+      setCmpStatus(open.length || localHeadless ? '압축을 맡길 AI와 목표 길이를 고르고 "압축 요청"을 누르세요' : '열린 패널이 없습니다 — 압축본을 직접 붙여 넣을 수도 있습니다');
     } else $('#cmpOut').value = cmp.out;
     cmpCount();
     host.setView('compress');
@@ -720,6 +735,7 @@
     const target = Math.max(200, Math.min(PL.LIMITS.skillBody, Number($('#cmpLen').value) || 2000));
     const hits = scanSecrets(s.body);
     if (hits.length && !confirm(`지침에 비밀 정보로 보이는 문자열이 있습니다: ${describeSecrets(hits)}\n그래도 ${nameOfSvc(id)}에 보낼까요?`)) return;
+    if (id === LOCAL_ASK) return compressLocal(s, target);
     cmp.waiting = { id, sent: false };
     cmp.panelId = id;
     cmp.out = $('#cmpOut').value;
@@ -742,6 +758,28 @@
     }
     cmpCount();
   });
+
+  /**
+   * 패널 없이 로컬 LLM에 압축 부탁 (v0.29.0): 임시 대화로 묻고 답에서 압축본을 꺼낸다.
+   * 요청 글이 로컬 모델 컨텍스트 한도를 넘을 것 같으면 먼저 묻는다 (설정 › 로컬 LLM › 컨텍스트 한도).
+   */
+  async function compressLocal(s, target) {
+    const req = PL.compressRequest(s, target);
+    const c = MLA.sendPlan.contextCheck(req, state.local?.contextTokens);
+    if (c.over && !confirm(t('local.ctxConfirm', { n: c.tokens.toLocaleString(), max: c.limit.toLocaleString() }))) return;
+    cmp.waiting = { id: LOCAL_ASK, sent: true };
+    cmp.panelId = null;
+    cmp.out = $('#cmpOut').value;
+    cmpCount();
+    setCmpStatus(t('local.compressing'));
+    const r = await host.local.ask(req).catch((err) => ({ ok: false, error: err.message }));
+    cmp.waiting = null;
+    if (!r?.ok) {
+      setCmpStatus(`압축을 요청하지 못했습니다: ${r?.error || ''}`, 'error');
+      return cmpCount();
+    }
+    putCompressed(PL.extractCompressed(r.text), '압축본을 읽어 왔습니다 — 빠진 규칙이 없는지 확인하고 저장하세요', 'ok');
+  }
 
   // renderer.js가 패널 상태가 바뀔 때마다 알려 준다 (압축 화면을 보고 있지 않아도)
   window.onLibPanelStatus = async (id, { answer }) => {
@@ -815,7 +853,7 @@
   });
 
   $('#libExport').addEventListener('click', () => {
-    if (!lib.templates.length && !lib.skills.length) return alert('내보낼 내 템플릿·스킬이 없습니다');
+    if (!lib.templates.length && !lib.skills.length && !lib.presets.length) return alert('내보낼 내 템플릿·스킬이 없습니다');
     download(`multitude-llm-library-${new Date().toISOString().slice(0, 10)}.json`, PL.exportLibrary(lib), 'application/json');
   });
 
@@ -835,9 +873,11 @@
       const room = { t: PL.LIMITS.templates - lib.templates.length, s: PL.LIMITS.skills - lib.skills.length };
       const t = got.templates.slice(0, Math.max(0, room.t));
       const s = got.skills.slice(0, Math.max(0, room.s));
-      if (!confirm(`가져올까요?\n- 템플릿 ${t.length}개\n- 스킬 ${s.length}개${t.length < got.templates.length || s.length < got.skills.length ? '\n(저장 한도를 넘는 것은 뺍니다)' : ''}\n\n가져온 지침은 질문과 함께 AI 서비스로 보내지므로, 믿을 수 있는 파일인지 확인하세요.`)) return;
+      const pr = got.presets.slice(0, Math.max(0, PL.LIMITS.presets - lib.presets.length)); // 프리셋 (v0.29.0)
+      if (!confirm(`가져올까요?\n- 템플릿 ${t.length}개\n- 스킬 ${s.length}개${pr.length ? `\n- ${MLA.i18n.t('preset.importCount', { n: pr.length })}` : ''}${t.length < got.templates.length || s.length < got.skills.length ? '\n(저장 한도를 넘는 것은 뺍니다)' : ''}\n\n가져온 지침은 질문과 함께 AI 서비스로 보내지므로, 믿을 수 있는 파일인지 확인하세요.`)) return;
       lib.templates.push(...t);
       lib.skills.push(...s);
+      lib.presets.push(...pr);
       await save();
       refreshAll();
     } catch (err) {
@@ -879,8 +919,30 @@
     renderTplSelect();
     setTemplate(template.id);
     renderSkillBar();
+    window.libPresets?.refresh(); // 입력창 옆 프리셋 고르기 (v0.29.0)
     if (state?.chatView === 'library') renderLibrary();
   }
+
+  // 프리셋 · 스킬 이전 버전 · 설정 옮기기 (v0.29.0, library-presets.js · settings-transfer-ui.js)가 쓰는 창구
+  window.libApi = {
+    get: () => lib,
+    set: (next) => (lib = PL.normalizeLibrary(next)),
+    save,
+    refreshAll,
+    openLibrary,
+    renderLibrary,
+    templateId: () => template.id,
+    setTemplate,
+    hasTemplate: (id) => !!findTpl(id),
+    templateName: (id) => findTpl(id)?.name || '',
+    skillById,
+    editorDirty,
+    select,
+    clearDraft: () => {
+      draft = null;
+      shown = null;
+    },
+  };
 
   host.on('state', () => {
     // 변수 입력 화면을 떠나면(Esc · 다른 화면) 보내기를 취소한다

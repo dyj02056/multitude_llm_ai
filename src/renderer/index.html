@@ -164,6 +164,7 @@
       <div class="seg">
         <button data-libtab="templates">템플릿</button>
         <button data-libtab="skills">스킬</button>
+        <button data-libtab="presets" data-i18n="preset.tab"></button>
       </div>
       <label id="libWarn" class="check" title="보내는 글이 이 길이 이상이면 압축 권장 표시를 띄웁니다 (강력 권장은 2배, 합계 확인 창은 약 1.9배, &quot;매 질문마다&quot;면 기준의 0.6배)">압축 권장: 스킬 하나
         <input id="libWarnOne" type="number" min="1000" max="20000" step="500" />자 · 합계
@@ -186,6 +187,19 @@
       <div id="libList" class="lib-list"></div>
       <div class="lib-main">
         <div id="libEmpty" class="lib-empty"></div>
+        <!-- 작업 프리셋 편집 (v0.29.0, library-presets.js) -->
+        <div id="libPresetEditor" class="lib-editor lib-preset-editor" hidden>
+          <label class="lib-field"><span class="muted-label" data-i18n="preset.name"></span><input id="presetName" maxlength="60" spellcheck="false" /></label>
+          <div id="presetSummary" class="preset-summary"></div>
+          <div class="lib-actions">
+            <span id="presetInfo" class="muted-label"></span>
+            <span class="spacer"></span>
+            <button id="presetApply" class="accent" data-i18n="preset.apply"></button>
+            <button id="presetUpdate" data-i18n="preset.update" data-i18n-title="preset.updateTitle"></button>
+            <button id="presetDelete" class="danger" data-i18n="preset.delete"></button>
+            <button id="presetSave" class="primary" data-i18n="preset.saveName"></button>
+          </div>
+        </div>
         <div id="libEditor" class="lib-editor" hidden>
           <label class="lib-field"><span class="muted-label">이름</span><input id="libName" maxlength="60" spellcheck="false" /></label>
           <label class="lib-field"><span id="libHintLabel" class="muted-label"></span><input id="libHint" maxlength="200" spellcheck="false" /></label>
@@ -203,6 +217,17 @@
             <button id="libCompactDel" class="danger" title="압축본만 지웁니다 (원문은 그대로)">압축본 지우기</button>
             <button id="libCompress" class="accent" title="열린 패널의 AI에게 압축을 부탁해 압축본을 만듭니다"></button>
           </div>
+          <!-- 스킬 이전 버전 (v0.29.0, library-presets.js): 저장할 때마다 바로 전 본문을 남김 · 차이 보기 · 되돌리기 -->
+          <details id="libVersions" class="lib-versions" hidden>
+            <summary id="libVersionsHead"></summary>
+            <div class="lib-versions-body">
+              <div id="libVersionList" class="lib-version-list"></div>
+              <div class="lib-version-view">
+                <div class="lib-version-bar"><span id="libVersionInfo" class="muted-label"></span><span class="spacer"></span><button id="libVersionRestore" class="accent" data-i18n="version.restore" data-i18n-title="version.restoreTitle" disabled></button></div>
+                <pre id="libVersionDiff" class="lib-version-diff"></pre>
+              </div>
+            </div>
+          </details>
           <div class="lib-actions">
             <span id="libInfo" class="muted-label"></span>
             <span class="spacer"></span>
@@ -374,6 +399,31 @@
     </div>
   </div>
 
+  <!-- 설정 가져오기 (v0.29.0, settings-transfer-ui.js): 비밀번호(암호화된 파일) → 바뀌는 것 → 겹치는 항목 처리 → 가져오기 -->
+  <div id="transferModal" class="modal" hidden>
+    <div class="modal-box transfer-box" role="dialog" aria-modal="true" aria-labelledby="transferTitle">
+      <div class="modal-head"><b id="transferTitle" data-i18n="transfer.importTitle"></b><span id="transferSub" class="muted-label"></span></div>
+      <div class="modal-body">
+        <div id="transferPassRow" class="setting-row" hidden>
+          <label for="transferOpenPass" data-i18n="transfer.openPass"></label>
+          <input id="transferOpenPass" type="password" autocomplete="off" />
+          <button id="transferUnlock" class="accent" data-i18n="transfer.unlock"></button>
+        </div>
+        <div id="transferPlan" class="transfer-plan"></div>
+        <div id="transferConflict" class="setting-row" hidden>
+          <span class="muted-label" data-i18n="transfer.conflict"></span>
+          <label class="check-label"><input type="radio" name="transferMode" value="overwrite" checked /> <span data-i18n="transfer.overwrite"></span></label>
+          <label class="check-label"><input type="radio" name="transferMode" value="keepBoth" /> <span data-i18n="transfer.keepBoth"></span></label>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span id="transferModalStatus" class="muted-label"></span>
+        <button id="transferCancel" data-i18n="transfer.cancel"></button>
+        <button id="transferApply" class="primary" data-i18n="transfer.apply" disabled></button>
+      </div>
+    </div>
+  </div>
+
   <!-- 질문·답변 기록 화면 -->
   <section id="history" class="only-history">
     <aside class="history-side">
@@ -508,8 +558,24 @@
           <select id="localModel"></select>
           <button id="localCheck">연결 확인</button>
         </div>
+        <div class="setting-row">
+          <label for="localCtx" data-i18n="local.ctxLabel"></label>
+          <select id="localCtx"></select>
+        </div>
+        <p class="muted small" data-i18n="local.ctxNote"></p>
         <p class="muted small" id="localStatus">Ollama는 http://localhost:11434, LM Studio는 http://localhost:1234 (서버 켜기 필요). 크롬 확장은 Ollama를 <code>OLLAMA_ORIGINS=chrome-extension://*</code>로 켜야 합니다.</p>
       </div>
+      <!-- 설정 옮기기 (v0.29.0, settings-transfer-ui.js): .mla.json 파일로 내보내기 · 가져오기 (기록 · 프로젝트 · 로그인 정보는 넣지 않음) -->
+      <h2 data-i18n="transfer.title"></h2>
+      <p class="muted small" data-i18n="transfer.note"></p>
+      <div class="setting-row transfer-row">
+        <input id="transferPass" type="password" autocomplete="new-password" data-i18n-placeholder="transfer.passPlaceholder" data-i18n-aria="transfer.passPlaceholder" />
+        <input id="transferPass2" type="password" autocomplete="new-password" data-i18n-placeholder="transfer.pass2Placeholder" data-i18n-aria="transfer.pass2Placeholder" />
+        <button id="transferExport" class="accent" data-i18n="transfer.export"></button>
+        <button id="transferImport" data-i18n="transfer.import"></button>
+        <input type="file" id="transferFile" accept=".json,application/json" hidden />
+      </div>
+      <p class="muted small" id="transferStatus"></p>
       <h2>서비스 화면 상태</h2>
       <p class="muted small">패널마다 앱이 입력창 · 보내기 버튼 · 답변 영역을 찾았는지입니다. 페이지가 열린 뒤와 질문을 보내고 답을 받을 때마다 갱신됩니다. ✕가 있으면 그 패널 머리줄에 <b>⚠ 화면이 바뀐 것 같음</b>이 뜹니다.</p>
       <table id="diagTable" class="diag-table"></table>
@@ -539,6 +605,7 @@
         <span class="muted-label">종합</span>
         <select id="synthTarget" aria-label="종합을 맡을 AI"></select>
         <button id="synthBtn" title="Ctrl+Shift+S">종합 요청</button>
+        <button id="synthResult" class="accent" hidden data-i18n="local.synthResult" data-i18n-title="local.synthResultTitle"></button>
         <button id="debateBtn" data-i18n="debate.open" data-i18n-title="debate.openTitle"></button>
         <button id="debateStop" class="danger" hidden data-i18n="debate.stop" data-i18n-title="debate.stopTitle"></button>
         <label class="check"><input type="checkbox" id="autoSynth" /> 완료 후 자동</label>
@@ -563,6 +630,8 @@
     </div>
     <div class="compose-row">
       <div class="tpl">
+        <!-- 작업 프리셋 (v0.29.0, library-presets.js): 고르면 템플릿 · 스킬 · 패널 · 배치 · 종합 · 토론 설정을 한 번에 -->
+        <select id="presetSelect" data-i18n-aria="preset.selectAria" data-i18n-title="preset.selectTitle"></select>
         <select id="tplSelect" aria-label="질문 템플릿" title="질문 앞뒤에 붙일 템플릿"></select>
         <span id="tplPreview" class="tpl-preview"></span>
       </div>
@@ -570,7 +639,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle">보내기</button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → project.js → project-changes.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → library.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → project.js → project-changes.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → library.js → library-presets.js → settings-transfer-ui.js (뒤의 것이 앞의 것을 씀) -->
   <script src="../shared/i18n-ko.js"></script>
   <script src="../shared/i18n-en.js"></script>
   <script src="../shared/i18n.js"></script>
@@ -594,6 +663,7 @@
   <script src="../shared/web-ask.js"></script>
   <script src="../shared/send-plan.js"></script>
   <script src="../shared/prompt-lib.js"></script>
+  <script src="../shared/settings-transfer.js"></script>
   <script src="../shared/update-core.js"></script>
   <script src="templates.js"></script>
   <script src="renderer.js"></script>
@@ -612,5 +682,7 @@
   <script src="project-restore.js"></script>
   <script src="project-editor.js"></script>
   <script src="library.js"></script>
+  <script src="library-presets.js"></script>
+  <script src="settings-transfer-ui.js"></script>
 </body>
 </html>

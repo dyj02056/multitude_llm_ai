@@ -158,5 +158,71 @@
     return q ? { kind: 'question', text: q, question: q, at: now } : null;
   }
 
-  return { MAX_SIDE, DEFAULT_SIDE, MAX_PAGE, INLINE_MAX, usableTemplates, applyTemplate, withSkill, handoff, normalizeSelected, toggle, clampRatio, portName, parsePortName, normalizeContext, contextState, contextKey, inlinePrompt, buildSend };
+  // ---------- 한 번 누르기 질문 · 이 페이지에서 전에 물어본 것 (v0.29.0) ----------
+
+  const QUICK = ['summary', 'translate', 'keypoints', 'explain'];
+
+  /** 페이지 글의 언어 어림: 한글이 글자(공백 · 숫자 · 기호 제외)의 30% 이상이면 'ko', 아니면 'en' */
+  function detectLang(text) {
+    const s = String(text || '').slice(0, 5000);
+    let hangul = 0;
+    let letters = 0;
+    for (const ch of s) {
+      if (/[가-힣ㄱ-ㆎ]/.test(ch)) hangul++;
+      if (/\p{L}/u.test(ch)) letters++;
+    }
+    return letters && hangul / letters >= 0.3 ? 'ko' : 'en';
+  }
+
+  /**
+   * 한 번 누르기 질문 글: kind는 QUICK 중 하나, t(키)는 화면 문구 사전.
+   * 번역은 페이지 언어를 보고 한국어 → 영어 / 그 밖 → 한국어. → 질문 글 | ''(모르는 종류)
+   */
+  function quickPrompt(kind, ctx, t) {
+    if (!QUICK.includes(kind)) return '';
+    if (kind === 'translate') return t(detectLang(ctx?.text) === 'ko' ? 'side.quick.translateToEn' : 'side.quick.translateToKo');
+    return t(`side.quick.${kind}Prompt`);
+  }
+
+  // 주소에서 뺄 추적용 칸 (utm_* · 광고 클릭 id 등)
+  const TRACKING = /^(utm_\w+|fbclid|gclid|dclid|gbraid|wbraid|msclkid|yclid|mc_cid|mc_eid|igshid|_ga|_gl|ref_src|spm)$/i;
+
+  /** 같은 페이지인지 볼 주소: http(s)만, # 뒤 · 추적용 칸을 뺀다 (나머지 쿼리는 순서대로 남김) → 주소 | '' */
+  function normalizePageUrl(raw) {
+    let u;
+    try {
+      u = new URL(String(raw || ''));
+    } catch {
+      return '';
+    }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    u.hash = '';
+    u.username = '';
+    u.password = '';
+    for (const k of [...u.searchParams.keys()]) if (TRACKING.test(k)) u.searchParams.delete(k);
+    return `${u.protocol}//${u.host.toLowerCase()}${u.pathname}${u.searchParams.toString() ? `?${u.searchParams}` : ''}`;
+  }
+
+  /**
+   * 이 페이지에서 전에 물어본 것: 사이드탭 기록('history:side')에서 page.url이 같은 기록 → [{ id, question, at, answers }] 최신부터
+   * answers: [{ id, name?, text }] (답이 있는 AI만 — 다시 열어 볼 때)
+   */
+  function recallFor(records, url, max = 20) {
+    const key = normalizePageUrl(url);
+    if (!key) return [];
+    return (Array.isArray(records) ? records : [])
+      .filter((r) => r && r.page && normalizePageUrl(r.page.url) === key && typeof r.question === 'string')
+      .sort((a, b) => (b.at || 0) - (a.at || 0))
+      .slice(0, max)
+      .map((r) => ({
+        id: r.id,
+        question: r.question,
+        at: r.at || 0,
+        answers: Object.entries(r.answers || {})
+          .filter(([, a]) => a && (a.md || a.text))
+          .map(([id, a]) => ({ id, text: String(a.md || a.text) })),
+      }));
+  }
+
+  return { MAX_SIDE, DEFAULT_SIDE, MAX_PAGE, INLINE_MAX, QUICK, detectLang, quickPrompt, normalizePageUrl, recallFor, usableTemplates, applyTemplate, withSkill, handoff, normalizeSelected, toggle, clampRatio, portName, parsePortName, normalizeContext, contextState, contextKey, inlinePrompt, buildSend };
 });

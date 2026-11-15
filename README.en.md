@@ -3,7 +3,7 @@
 [한국어](README.md) · **English**
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.28.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.29.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-not%20needed-3fb950)
@@ -47,12 +47,14 @@
 | | History & export | Saves the last 500 questions with answers (100–2000 in settings); search with filters (period, AI, rating, tags, star), group by conversation thread, export MD / HTML, several records in one document (v0.27.0) |
 | | Stats & self-check | Completion rate, response time, usage-limit detection and satisfaction per AI; suggested AIs per question kind (v0.27.0); warns when a site's layout changes |
 | **Code** | Project mode | Sends folder structure and chosen files (3-level ignore rules, secret scan); handles `NEED_FILES` requests |
+| | Presets & skill versions | Save template · skills · panels · layout · synthesis · debate settings as a work preset and switch in one click; skills keep their previous versions with diff and restore (v0.29.0) |
+| | Move settings | Export settings, templates, skills and presets as one `.mla.json` file, optionally password-encrypted; history, projects and cookies are never included (v0.29.0) |
 | | Apply changes | Apply from the bar under each panel, compare across AIs, apply by hunk, undo; a failed multi-file apply rolls back; mix changes from several AIs per file and pick up work after a restart (v0.28.0) |
 | | Cut-off protection | Blocks truncated or abbreviated code, find/replace blocks for long files, continue automatically, plan-first mode |
 | | Test run, git console & commit | Compare `npm test` and lint / typecheck / build before/after (v0.28.0); commit only the applied files, never pushed (v0.28.0); run git commands in that folder (Windows app) |
 | **Extension** | Side panel | Two AIs in Chrome's side panel; the page you are reading is sent along |
 | | Ask about a page | Right-click › selected text or the whole page goes into the app |
-| | Local LLM | Ollama / LM Studio / any OpenAI-compatible server on localhost as a panel; nothing leaves your PC |
+| | Local LLM | Ollama / LM Studio / any OpenAI-compatible server on localhost as a panel; nothing leaves your PC; can judge synthesis/debate and compress skills without a panel, with a context limit (v0.29.0) |
 
 ## Quick start
 

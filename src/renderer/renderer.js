@@ -491,6 +491,9 @@ function drawLocalChat(id, view) {
     }
     list.append(b);
   }
+  // 컨텍스트 한도 (v0.29.0): 지금까지 대화가 설정한 한도를 넘을 것 같으면 알린다 (서버가 앞부분을 잘라 먹을 수 있음)
+  const ctx = MLA.sendPlan.contextCheck(view.messages.map((m) => m.text).join('\n'), state.local?.contextTokens);
+  if (ctx.over) list.append(span('local-warn', t('local.ctxPanel', { n: ctx.tokens.toLocaleString(), max: ctx.limit.toLocaleString() })));
   if (view.streaming) list.append(span('local-typing', '답하는 중…'));
   else if (view.error && view.messages.length) list.append(span('local-error', `⚠ ${view.error}`));
   p.localMd = nextMd;
@@ -524,6 +527,12 @@ function renderLocalSettings() {
   const names = [...new Set([L.model, ...localModels].filter(Boolean))];
   sel.replaceChildren(...(names.length ? names : ['']).map((n) => Object.assign(document.createElement('option'), { value: n, textContent: n || '(연결 확인으로 목록 받기)' })));
   sel.value = L.model || '';
+  // 컨텍스트 한도 (v0.29.0): 2k ~ 128k 토큰, 기본 8k
+  const ctxSel = $('#localCtx');
+  if (!ctxSel.options.length) {
+    ctxSel.replaceChildren(...[2048, 4096, 8192, 16384, 32768, 131072].map((n) => Object.assign(document.createElement('option'), { value: String(n), textContent: t('local.ctxOption', { k: Math.round(n / 1024) }) })));
+  }
+  ctxSel.value = String(L.contextTokens || 8192);
   $('#localBody').hidden = !L.enabled;
 }
 

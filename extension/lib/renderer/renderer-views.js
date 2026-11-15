@@ -467,6 +467,7 @@ $('#localBase').addEventListener('change', async (e) => {
 });
 $('#localModel').addEventListener('change', (e) => host.local.setPrefs({ model: e.target.value }));
 $('#localCheck').addEventListener('click', () => refreshLocalModels($('#localCheck')));
+$('#localCtx').addEventListener('change', (e) => host.local.setPrefs({ contextTokens: Number(e.target.value) })); // 컨텍스트 한도 (v0.29.0)
 
 $('#remoteRefresh').addEventListener('click', async () => {
   $('#remoteRefresh').disabled = true;

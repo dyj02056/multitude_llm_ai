@@ -64,7 +64,9 @@
   }
 
   function render(payload, ids) {
-    const rows = SP.preview(payload.text, ids, payload.files, payload.opts, state?.services || [], state?.attachLimits);
+    // 로컬 LLM은 설정의 컨텍스트 한도를 넘을 것 같으면 경고한다 (v0.29.0)
+    const services = (state?.services || []).map((s) => (s.kind === 'local' ? { ...s, contextTokens: state.local?.contextTokens } : s));
+    const rows = SP.preview(payload.text, ids, payload.files, payload.opts, services, state?.attachLimits);
     $('#previewBody').replaceChildren(...rows.map(rowBlock));
     const warn = rows.reduce((n, r) => n + r.warnings.length, 0);
     $('#previewSub').textContent = t('preview.sub', { n: rows.length });

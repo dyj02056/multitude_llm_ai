@@ -398,15 +398,50 @@ body[data-view="compare"] #panels { display: none !important; }
 
 /* ---------- 질문 템플릿 ---------- */
 .tpl { display: flex; flex-direction: column; gap: 4px; width: 150px; flex: none; }
-#tplSelect {
+#tplSelect, #presetSelect {
   background: var(--field); color: var(--text); border: 1px solid var(--border);
   border-radius: var(--r-sm); padding: 3px 6px; font-size: 11.5px;
 }
 #tplSelect.on { border-color: rgba(88, 166, 255, .6); color: var(--accent-text); }
+#presetSelect { padding: 2px 6px; font-size: 11px; color: var(--text-2); } /* 작업 프리셋 (v0.29.0) */
 .tpl-preview {
   color: var(--muted); font-size: 11px; line-height: 1.35;
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
 }
+
+/* ---------- 작업 프리셋 · 스킬 이전 버전 (v0.29.0, library-presets.js) ---------- */
+.lib-preset-editor[hidden] { display: none; }
+.preset-summary { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-2); font-size: 12px; }
+.preset-line { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; }
+.lib-versions { border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 12px; }
+.lib-versions[hidden] { display: none; }
+.lib-versions > summary { padding: 4px 8px; cursor: pointer; color: var(--text-2); }
+.lib-versions-body { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 8px; padding: 6px 8px; border-top: 1px solid var(--border); max-height: 260px; }
+.lib-version-list { display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.lib-version { text-align: left; font-size: 11.5px; padding: 2px 6px; }
+.lib-version.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.lib-version-view { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+.lib-version-bar { display: flex; align-items: center; gap: 8px; }
+.lib-version-bar .spacer { flex: 1; }
+.lib-version-diff { margin: 0; flex: 1; min-height: 0; overflow: auto; font: 11.5px/1.45 var(--mono); user-select: text; }
+.lib-version-diff .vd { display: block; white-space: pre-wrap; padding: 0 6px; }
+.lib-version-diff .vd-add { background: rgba(46, 160, 67, .15); color: #aff5b4; }
+.lib-version-diff .vd-del { background: rgba(248, 81, 73, .15); color: #ffdcd7; }
+.lib-version-diff .vd-same { color: var(--muted); }
+
+/* ---------- 설정 옮기기 (v0.29.0, settings-transfer-ui.js) ---------- */
+.transfer-row { flex-wrap: wrap; gap: 6px; }
+#transferPassRow[hidden], #transferConflict[hidden] { display: none; }
+.transfer-row input[type="password"] { width: 170px; }
+#transferStatus[data-kind="ok"] { color: var(--ok-text); }
+#transferStatus[data-kind="error"], #transferModalStatus[data-kind="error"] { color: var(--err-text); }
+#transferStatus[data-kind="warn"] { color: var(--warn-text); }
+.modal-box.transfer-box { width: min(720px, 94vw); height: auto; max-height: 88vh; }
+.transfer-plan h3 { margin: 10px 0 4px; font-size: 13px; color: var(--bright); }
+.transfer-plan p { margin: 4px 0; }
+.transfer-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.transfer-list .pv-warn { margin: 0; }
+.local-warn { color: var(--warn-text); font-size: 12px; } /* 로컬 LLM 컨텍스트 한도 (v0.29.0) */
 
 /* ---------- 질문·답변 기록 ---------- */
 .only-history { display: none; }

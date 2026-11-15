@@ -110,7 +110,7 @@ let prefs = {
   answerTimeoutMin: 20,
   remoteSelectors: true, // 사이트 셀렉터 원격 갱신
   projectRoot: null, // 마지막으로 연 프로젝트 폴더
-  local: { enabled: false, baseUrl: L.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
+  local: { enabled: false, baseUrl: L.DEFAULT_BASE, model: '', contextTokens: L.DEFAULT_CONTEXT }, // 로컬 LLM 패널 (선택 기능, v0.16.0 · 컨텍스트 한도 v0.29.0)
   autoUpdate: true, // 새 버전 자동 확인 (알리기만, v0.20.0)
   historyMax: 500, // 기록 최대 개수 (v0.24.0, 100 · 500 · 1000 · 2000)
   notify: { ...notifyCore.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
@@ -149,7 +149,12 @@ function loadPrefs() {
 // 패널은 웹페이지가 아니라 앱이 대화를 들고 이 PC의 OpenAI 호환 서버(localhost만)에 묻는다 (shared/local-llm.js).
 function normalizeLocalPrefs(v) {
   const o = v && typeof v === 'object' ? v : {};
-  return { enabled: o.enabled === true, baseUrl: L.normalizeBaseUrl(o.baseUrl) || L.DEFAULT_BASE, model: L.cleanModel(o.model) };
+  return { enabled: o.enabled === true, baseUrl: L.normalizeBaseUrl(o.baseUrl) || L.DEFAULT_BASE, model: L.cleanModel(o.model), contextTokens: L.normalizeContext(o.contextTokens) };
+}
+/** 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 판정 · 압축): 패널 대화와 따로인 임시 대화 — 켜 두었을 때만 */
+function askLocal(text) {
+  if (!prefs.local?.enabled) return Promise.resolve({ ok: false, error: '로컬 LLM이 꺼져 있습니다 (설정 › 로컬 LLM)' });
+  return L.askOnce({ fetchFn: (url, opts) => net.fetch(url, opts), getConfig: () => prefs.local, text });
 }
 const localSvc = () => L.localService(prefs.local);
 /** 지금 쓸 수 있는 서비스 전체: 웹 서비스 + (켰으면) 로컬 LLM */
@@ -721,6 +726,8 @@ const rounds = createRounds({
   history: roundHistory,
   prefs: () => prefs,
   diag,
+  // 로컬 LLM 판정 (v0.29.0): 패널이 없으면 임시 대화로, 있으면 패널로. 종합 입력은 컨텍스트 한도에 맞춰 줄인다
+  localJudge: { id: L.LOCAL_ID, available: () => !!prefs.local?.enabled, limit: () => prefs.local.contextTokens, ask: askLocal },
   // 사용 한도 안내 찾기 (shared/page.js pageLimitCheck) — 답변이 끝나지 않았거나 아주 짧을 때만 rounds가 부른다
   notify: (event) => notifier.notify(event),
   checkLimit: async (id, { scope, answer } = {}) => {
@@ -896,6 +903,7 @@ require('./ipc/settings').register({
   refreshRemote,
   localChat: () => localChat,
   closeLocalPanel,
+  askLocal,
   focusId: () => focusId,
   setFocusId: (id) => (focusId = id),
   updater: () => updater,

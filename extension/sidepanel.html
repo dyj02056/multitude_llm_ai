@@ -37,9 +37,22 @@
     <button id="spCtxClear" class="ghost" title="가져온 페이지를 지웁니다">✕</button>
   </div>
 
+  <!-- 이 페이지에서 전에 물어본 것 (v0.29.0): 같은 주소(# 뒤 · utm_* 뺌)의 사이드탭 기록 -->
+  <div id="spRecall" class="sp-recall" hidden>
+    <button id="spRecallBtn" class="ghost" aria-expanded="false"></button>
+    <div id="spRecallList" class="sp-recall-list" hidden></div>
+  </div>
+
   <main id="spPanes"></main>
 
   <footer id="spComposer">
+    <!-- 한 번 누르기 질문 (v0.29.0): 가져온 페이지와 함께 바로 보낸다 -->
+    <div id="spQuick" class="sp-quick">
+      <button data-quick="summary" data-i18n="side.quick.summary" data-i18n-title="side.quick.title"></button>
+      <button data-quick="translate" data-i18n="side.quick.translate" data-i18n-title="side.quick.translateTitle"></button>
+      <button data-quick="keypoints" data-i18n="side.quick.keypoints" data-i18n-title="side.quick.title"></button>
+      <button data-quick="explain" data-i18n="side.quick.explain" data-i18n-title="side.quick.title"></button>
+    </div>
     <div class="sp-input">
       <textarea id="spPrompt" rows="3" spellcheck="false" placeholder="이 페이지에 대해 질문…"></textarea>
     </div>
@@ -52,6 +65,9 @@
     </div>
   </footer>
 
+  <script src="lib/shared/i18n-ko.js"></script>
+  <script src="lib/shared/i18n-en.js"></script>
+  <script src="lib/shared/i18n.js"></script>
   <script src="lib/shared/services.js"></script>
   <script src="lib/shared/remote-core.js"></script>
   <script src="lib/shared/watch.js"></script>
