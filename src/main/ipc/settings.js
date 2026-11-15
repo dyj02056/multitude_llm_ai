@@ -8,6 +8,7 @@
 const L = require('../../shared/local-llm');
 const { RELEASES_URL } = require('../../shared/update-core');
 const { normalizeLibrary } = require('../../shared/prompt-lib');
+const notifyCore = require('../../shared/notify');
 
 const LOCAL_ONLY = '주소는 이 PC(localhost · 127.0.0.1 · [::1])의 http(s) 주소만 쓸 수 있습니다';
 
@@ -20,9 +21,13 @@ function register(ctx) {
   const { ipcMain, history, remote, guard, net, shell } = ctx;
   const isLocal = (id) => id === L.LOCAL_ID;
 
-  // 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 기록 최대 개수, 사이트 셀렉터 자동 갱신, 새 버전 자동 확인
-  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax } = {}) => {
+  // 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 기록 최대 개수, 사이트 셀렉터 자동 갱신, 새 버전 자동 확인,
+  // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0)
+  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview } = {}) => {
     const prefs = ctx.prefs();
+    const notifyPatch = notifyCore.cleanPatch(notify); // 아는 종류의 true/false만
+    if (notifyPatch) prefs.notify = notifyCore.normalizePrefs({ ...prefs.notify, ...notifyPatch });
+    if (typeof sendPreview === 'boolean') prefs.sendPreview = sendPreview;
     if (ctx.TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
     if (ctx.MAX_CHOICES.includes(historyMax)) {
       prefs.historyMax = historyMax;

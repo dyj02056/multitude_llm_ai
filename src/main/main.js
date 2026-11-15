@@ -22,7 +22,7 @@
 // ---------- 필요한 도구(모듈) 불러오기 ----------
 // require는 다른 파일이나 라이브러리의 기능을 가져오는 명령입니다.
 const path = require('path');
-const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard, dialog, net } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard, dialog, net, Notification } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl, limitTextOf } = require('../shared/services');
 const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
 const autologin = require('./autologin');
@@ -44,6 +44,8 @@ const { setupGitConsole } = require('./gitconsole');
 const { setupDevTest } = require('./devtest');
 const { createUpdater } = require('./updater');
 const secure = require('./secure-store'); // 기록 · 설정 · 라이브러리 · 프로젝트 상태 암호화 (v0.22.1)
+const notifyCore = require('../shared/notify');
+const { createOsNotifier } = require('./notifier'); // OS 알림 (v0.25.0)
 
 // ---------- 화면 크기 관련 숫자 (단위: 픽셀) ----------
 // 패널을 어디에 얼마나 크게 놓을지 계산할 때 씁니다. styles.css의 크기와 맞아야 화면이 어긋나지 않습니다.
@@ -73,6 +75,8 @@ const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20
 //   - "자동화 도구로 조종 중" 표시를 꺼서 일부 사이트가 막지 않게 합니다.
 app.userAgentFallback = CHROME_UA;
 if (dev.profile) app.setPath('userData', dev.profile);
+// Windows 알림(v0.25.0)은 설치 프로그램이 만든 바로가기와 같은 앱 id여야 뜬다 (electron-builder appId). 개발 실행은 Electron 기본값 그대로.
+if (process.platform === 'win32' && app.isPackaged) app.setAppUserModelId('com.dyj02056.multitudellm');
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 // ---------- 앱이 지금 어떤 상태인지 기억하는 변수들 ----------
@@ -108,6 +112,8 @@ let prefs = {
   local: { enabled: false, baseUrl: L.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
   autoUpdate: true, // 새 버전 자동 확인 (알리기만, v0.20.0)
   historyMax: 500, // 기록 최대 개수 (v0.24.0, 100 · 500 · 1000 · 2000)
+  notify: { ...notifyCore.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
+  sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
 };
 
 /**
@@ -127,6 +133,8 @@ function loadPrefs() {
   prefs.layout = normalizeLayout(prefs.layout);
   if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
   prefs.historyMax = normalizeMax(prefs.historyMax);
+  prefs.notify = notifyCore.normalizePrefs(prefs.notify);
+  prefs.sendPreview = prefs.sendPreview === true;
 }
 
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
@@ -516,6 +524,8 @@ function pushState() {
     services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { ...prefs.local },
     autoUpdate: prefs.autoUpdate !== false,
+    notify: { ...prefs.notify },
+    sendPreview: prefs.sendPreview,
     update: updater?.status() || null,
     storage: { encrypted: secure.store().available() }, // 로컬 데이터 암호화 (v0.22.1)
     rects: rects.panels,
@@ -641,6 +651,19 @@ function sendSynthStatus(patch) {
 // 답변 평가 (v0.23): 지금 라운드(공통 입력창으로 마지막에 보낸 질문)의 기록 id. rounds가 기록을 만들 때 받아 둔다.
 let roundHistoryId = null;
 const roundHistory = { ...history, add: (rec) => (roundHistoryId = history.add(rec)) };
+// OS 알림 (v0.25.0): 앱 창을 보고 있지 않을 때 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝을 알린다 (main/notifier.js)
+const notifier = createOsNotifier({
+  Notification,
+  getWin: () => win,
+  prefs: () => prefs.notify,
+  icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
+  onClickView: (view) => {
+    if (mode !== 'chat') return;
+    chatView = view;
+    pushState();
+  },
+  log,
+});
 const rounds = createRounds({
   get services() {
     return allServices(); // 로컬 LLM을 켜고 끌 때마다 바뀐다
@@ -683,6 +706,7 @@ const rounds = createRounds({
   prefs: () => prefs,
   diag,
   // 사용 한도 안내 찾기 (shared/page.js pageLimitCheck) — 답변이 끝나지 않았거나 아주 짧을 때만 rounds가 부른다
+  notify: (event) => notifier.notify(event),
   checkLimit: async (id, { scope, answer } = {}) => {
     if (isLocal(id)) return null; // 로컬 LLM에는 사용 한도가 없다
     const wc = panels.get(id)?.view.webContents;

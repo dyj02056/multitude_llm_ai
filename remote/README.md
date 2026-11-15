@@ -70,6 +70,22 @@ ChatGPT·Gemini 같은 서비스 화면이 바뀌어 **입력창·보내기 버�
 5. **확인** — 개발 실행에서 `MLA_REMOTE_URL=remote/selectors.json npm start`로 로컬 파일을 먼저 시험합니다.
 6. **올리기** — main에 커밋 · 푸시합니다. 사용자 앱은 6시간 안에(또는 자가진단 창의 **셀렉터 지금 확인**으로 바로) 받고, 툴바에 `selectors v<번호>`가 잠깐 뜹니다.
 
+## 셀렉터 점검 도구 (v0.25.0)
+
+사용자 신고를 기다리지 않고, 지금 셀렉터가 실제 화면에서 찾아지는지 한 번에 확인합니다. 서비스마다 숨은 창으로 처음 화면을 열어 앱 내장 셀렉터 + 이 폴더의 `selectors.json`으로 입력창 · 보내기 버튼 · 중지 버튼 · 답변 · 로그아웃 단서를 찾아 봅니다. **읽기만 합니다** (입력 · 클릭 · 보내기 없음).
+
+```powershell
+# 로그인된 앱 프로필로 — 앱을 먼저 끕니다
+$env:MLA_PROFILE = "$env:APPDATA\Multitude LLM"; npm run selectors:probe
+npm run selectors:probe -- chatgpt gemini --out probe.json   # 일부만
+npm run selectors:probe -- --fake                            # 가짜 페이지로 도구만 시험 (접속 없음)
+```
+
+- 서비스마다 `정상` · `입력창 못 찾음` · `로그아웃` · `열지 못함`과 항목별 `✓ 찾음 / – 이 화면에서는 안 보임 / ✕ 못 찾음`을 출력하고 JSON 보고서를 남깁니다.
+- 입력창을 못 찾은 서비스가 있으면 이 파일에 넣을 **틀**(`version` +1, 오늘 날짜, 그 서비스의 `input` 빈칸)을 출력합니다. 파일은 바꾸지 않습니다 — 개발자 도구에서 새 셀렉터를 찾아 채우고, 위 "고치는 순서"의 4~6단계와 아래 서명을 거칩니다.
+- 보내기 버튼(`send`)처럼 원격으로 바꿀 수 없는 항목은 틀에 넣지 않고 "services.js를 고쳐 배포"로 안내합니다.
+- `--remote <파일>`로 고친 `selectors.json`을 올리기 전에 점검할 수 있습니다 (`--builtin`은 원격 없이 앱 내장 셀렉터만).
+
 ## 서명
 
 GitHub 계정이나 저장소가 털려도 셀렉터를 바꿀 수 없게, `selectors.json`에 Ed25519 서명(`selectors.json.sig`)을 붙입니다. 앱(`src/shared/remote-core.js`의 `SELECTORS_PUBLIC_KEY`)에 공개 키가 들어 있으면 서명이 맞는 파일만 적용하고, 틀리면 적용하지 않고 지금 쓰는 값을 그대로 둡니다(설정 화면에 `확인 실패: 서명 확인 실패`). 공개 키가 비어 있으면 서명을 보지 않습니다.

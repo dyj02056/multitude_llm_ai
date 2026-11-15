@@ -770,6 +770,11 @@
     saveState(); // 같은 실행 안에서 프로젝트를 다시 열어도 이어지게
   }
 
+  // 보내기 전 미리보기에서 취소했거나 스킬 확인에서 멈췄다: 붙였던 파일을 보낸 것으로 기억하지 않는다 (v0.25.0)
+  window.onProjectSendCanceled = () => {
+    pendingSent = null;
+  };
+
   window.onProjectSent = (okIds) => {
     const sent = pendingSent;
     pendingSent = null;

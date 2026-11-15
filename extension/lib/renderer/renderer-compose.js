@@ -268,10 +268,42 @@ document.addEventListener('drop', (e) => {
 let sending = false;
 
 /**
+ * 보낼 것 만들기 (보내지는 않음, v0.25.0에서 send()에서 나눔): 첨부 파일 읽기 → 템플릿 → 프로젝트 맥락 → 스킬 지침.
+ * → { payload: { text, files, opts }, skill } | null(사용자가 취소)
+ * 패널마다 실제로 들어갈 글은 이 payload로 shared/send-plan.js가 계산한다 (보내기 전 미리보기 · rounds.sendAll이 같은 계산).
+ */
+async function buildPayload(text, ids) {
+  const files = await Promise.all(
+    attachments.map(async ({ file }) => ({
+      name: file.name,
+      type: file.type,
+      lastModified: file.lastModified,
+      data: await file.arrayBuffer(),
+    })),
+  );
+  // 글 없이 파일만 보낼 때는 템플릿을 붙이지 않는다. 변수가 있는 템플릿은 변수 입력 화면을 거친다 (null이면 취소).
+  const qText = text ? await window.libApplyTemplate(text) : '';
+  if (qText === null) return null;
+  let payload = { text: qText, files, opts: {} };
+  // 프로젝트 모드: 프로젝트 구조와 고른 파일 내용을 붙인다 (project.js). null이면 사용자가 취소했다.
+  if (window.projectPrepareSend) payload = await window.projectPrepareSend(payload, ids);
+  if (!payload) return null;
+  // 스킬: 이 대화에 아직 받지 않은 패널(또는 "매 질문마다"면 모두)의 글 앞에 지침을 붙인다 (library.js)
+  const skill = window.libSkillPrefix?.(ids);
+  if (skill?.cancel) {
+    window.onProjectSendCanceled?.(); // 프로젝트가 붙인 파일은 보내지 않았다
+    return null; // 지침이 너무 길어 사용자가 보내기를 멈췄다 (입력 내용은 남김)
+  }
+  if (skill) payload = { ...payload, opts: { ...payload.opts, prefixById: skill.prefixById } };
+  return { payload, skill };
+}
+
+/**
  * 보내기 버튼(또는 Enter)을 눌렀을 때: 템플릿·스킬·프로젝트 맥락을 붙여 고른 AI들에게 동시에 보냅니다.
  * 실제 전송은 본체(host.sendPrompt)가 하고, 결과(서비스별 성공·실패)를 받아 안내합니다.
+ * 보내기 전 미리보기(설정에서 켬, 또는 Shift+클릭 · Ctrl+Shift+Enter로 이번만)가 있으면 그 창에서 [보내기]를 눌러야 보냅니다 (v0.25.0).
  */
-async function send() {
+async function send({ preview = false } = {}) {
   const box = $('#prompt');
   const text = box.value.trim();
   if ((!text && !attachments.length) || sending) return;
@@ -280,25 +312,14 @@ async function send() {
   sending = true;
   $('#sendBtn').disabled = true;
   try {
-    const files = await Promise.all(
-      attachments.map(async ({ file }) => ({
-        name: file.name,
-        type: file.type,
-        lastModified: file.lastModified,
-        data: await file.arrayBuffer(),
-      })),
-    );
-    // 글 없이 파일만 보낼 때는 템플릿을 붙이지 않는다. 변수가 있는 템플릿은 변수 입력 화면을 거친다 (null이면 취소).
-    const qText = text ? await window.libApplyTemplate(text) : '';
-    if (qText === null) return;
-    let payload = { text: qText, files, opts: {} };
-    // 프로젝트 모드: 프로젝트 구조와 고른 파일 내용을 붙인다 (project.js). null이면 사용자가 취소했다.
-    if (window.projectPrepareSend) payload = await window.projectPrepareSend(payload, ids);
-    if (!payload) return;
-    // 스킬: 이 대화에 아직 받지 않은 패널(또는 "매 질문마다"면 모두)의 글 앞에 지침을 붙인다 (library.js)
-    const skill = window.libSkillPrefix?.(ids);
-    if (skill?.cancel) return; // 지침이 너무 길어 사용자가 보내기를 멈췄다 (입력 내용은 남김)
-    if (skill) payload = { ...payload, opts: { ...payload.opts, prefixById: skill.prefixById } };
+    const built = await buildPayload(text, ids);
+    if (!built) return;
+    const { payload, skill } = built;
+    if ((preview || state?.sendPreview) && !(await window.openSendPreview(payload, ids))) {
+      window.onProjectSendCanceled?.();
+      $('#sendHint').textContent = t('preview.canceled');
+      return; // 입력 내용 · 첨부는 그대로 둔다
+    }
     resetFeedback(ids); // 새 질문 = 새 기록: 지난 답변의 평가 버튼을 내린다
     const results = await host.sendPrompt(payload.text, ids, payload.files, payload.opts);
     window.onSkillSent?.(skill, results.filter((r) => r.ok).map((r) => r.id));
@@ -322,13 +343,15 @@ async function send() {
   }
 }
 
-$('#sendBtn').addEventListener('click', send);
+// Shift+클릭: 설정과 상관없이 이번만 보내기 전 미리보기 (v0.25.0)
+$('#sendBtn').addEventListener('click', (e) => send({ preview: e.shiftKey }));
 $('#prompt').addEventListener('keydown', (e) => {
-  // 한글 조합 중 Enter는 글자 확정용이라 보내지 않는다.
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-    e.preventDefault();
-    send();
-  }
+  // 한글 조합 중 Enter는 글자 확정용이라 보내지 않는다. Ctrl+Shift+Enter는 미리보기를 거쳐 보낸다.
+  if (e.key !== 'Enter' || e.isComposing) return;
+  const previewKey = e.shiftKey && (e.ctrlKey || e.metaKey);
+  if (e.shiftKey && !previewKey) return; // Shift+Enter = 줄바꿈
+  e.preventDefault();
+  send({ preview: previewKey });
 });
 
 // ---------- 전체 상태 ----------
@@ -378,6 +401,7 @@ host.on('state', (next) => {
       $('#diagModal').hidden = true;
     } else renderDiagModal();
   }
+  window.onPreviewState?.(); // 보내기 전 미리보기 창: 그 화면을 떠났으면 보내지 않고 닫는다 (send-preview.js)
   if (state.chatView === 'help') renderUpdate();
   // 툴바 이름 뒤의 "~/chat" 같은 경로 = 지금 보는 화면
   $('.brand').dataset.path = state.mode === 'chat' ? (state.chatView === 'panels' || state.chatView === 'dialog' ? 'chat' : state.chatView) : state.mode;

@@ -88,6 +88,26 @@ npm run screenshots -- 02-ask-all 24-side-panel   # 일부만
 - [scripts/screenshots/](../scripts/screenshots)가 실제 화면 코드(`src/renderer` · `extension/sidepanel.html`)에 가짜 본체와 예시 데이터를 붙여 Electron 창(화면 밖 렌더링)에 띄우고 장면마다 저장합니다. 장면 목록은 `run.js`의 `SCENES`, 예시 질문 · 답은 `sample.js`.
 - 패널 안은 실제 AI 사이트가 아니라 **테스트용 채팅 페이지**입니다. 실제 사이트에는 접속하지 않습니다 (서비스 주소 요청은 이 도구 안에서 가짜 페이지로 바뀜).
 - 디자인을 바꾼 뒤 다시 찍으면 문서 그림이 한 번에 맞춰집니다. 프로젝트 폴더가 필요한 장면(09 · 10 · 16 · 21~23)은 아직 없습니다.
+- `MLA_SHOT_OUT=<폴더>`를 주면 문서 그림을 바꾸지 않고 그 폴더에 찍습니다. 화면 스크립트 오류는 `console error:`로 출력됩니다.
+
+## 셀렉터 점검 (v0.25.0)
+
+AI 사이트 화면이 바뀌어 앱이 입력창 · 보내기 버튼 · 답변을 못 찾는지 한 번에 확인합니다. 서비스마다 숨은 창으로 처음 화면을 열고, 앱이 쓰는 셀렉터(앱 내장 + 저장소의 `remote/selectors.json`)가 지금 화면에서 찾아지는지 봅니다. **읽기만 합니다** — 입력 · 클릭 · 보내기를 하지 않습니다.
+
+```powershell
+# 로그인된 앱 프로필로 (앱을 먼저 끄세요 — 같은 프로필을 두 프로그램이 동시에 쓰면 안 됩니다)
+$env:MLA_PROFILE = "$env:APPDATA\Multitude LLM"; npm run selectors:probe
+# 일부 서비스만, 보고서 경로 지정, 창 보이기
+npm run selectors:probe -- gemini claude --out probe.json --show
+# 실제 사이트 대신 가짜 페이지로 도구만 시험 (인터넷 접속 없음)
+npm run selectors:probe -- --fake
+```
+
+- 결과: 터미널 요약(서비스마다 `input ✓ send – stop – response –`, 정상 · 입력창 못 찾음 · 로그아웃 · 열지 못함)과 JSON 보고서(`--out`, 없으면 임시 폴더의 `mla-selectors-probe.json`). 보고서에는 셀렉터 · 찾은 개수 · 로그인 버튼 문구만 있고 대화 글은 없습니다.
+- **입력창**을 못 찾으면 실패입니다. 보내기 버튼은 글을 쓰기 전에는 숨는 사이트가 많고, 중지 버튼 · 답변은 질문을 보내야 생기므로 못 찾아도 `–`(확인 못 함)로만 표시합니다.
+- 입력창을 못 찾은 서비스가 있으면 `remote/selectors.json`에 넣을 틀을 출력합니다(파일은 바꾸지 않음). 고치는 순서는 [remote/README.md](../remote/README.md#셀렉터-점검-도구-v0250).
+- `MLA_PROFILE`이 없으면 빈 프로필이라 대부분 로그아웃 상태로 보입니다. `--builtin`은 원격 셀렉터 없이, `--remote <파일>`은 그 파일을 더해 점검합니다. `--wait <초>`(기본 15)는 입력창이 나타나길 기다리는 최대 시간입니다.
+- 종료 코드: 모두 정상 · 로그아웃이면 0, 입력창 못 찾음 · 열지 못함이 있으면 1.
 
 ## 개발 옵션
 

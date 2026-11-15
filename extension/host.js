@@ -71,6 +71,8 @@
     local: { enabled: false, baseUrl: MLA.localLLM.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
     autoUpdate: true, // 새 버전 알림 (v0.20.0)
     historyMax: 500, // 기록 최대 개수 (v0.24.0)
+    notify: { ...MLA.notify.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
+    sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
   };
   const savePrefs = () => store('prefs', prefs);
 
@@ -408,6 +410,8 @@
       services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
       local: { ...prefs.local },
       autoUpdate: prefs.autoUpdate !== false,
+      notify: { ...prefs.notify },
+      sendPreview: prefs.sendPreview,
       update: updateStatus,
       storage: { encrypted: false, extension: true }, // 크롬 확장은 OS 열쇠 보관소가 없어 암호화하지 않는다 (v0.22.1)
       rects,
@@ -438,6 +442,41 @@
   // 답변 평가 (v0.23): 지금 라운드(공통 입력창으로 마지막에 보낸 질문)의 기록 id. rounds가 기록을 만들 때 받아 둔다.
   let roundHistoryId = null;
   const roundHistory = { ...history, add: (rec) => (roundHistoryId = history.add(rec)) };
+
+  // OS 알림 (v0.25.0): 이 앱 탭을 보고 있지 않을 때 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝을 크롬 알림으로 띄운다.
+  // 무엇을 언제 알릴지와 글은 shared/notify.js. 알림을 누르면 이 탭과 창을 앞으로 가져온다 (분석이 끝났으면 답변 비교 화면).
+  const myNotes = new Map(); // 이 탭이 띄운 알림 id -> 누르면 열 화면
+  const notifier = MLA.notify.createNotifier({
+    prefs: () => prefs.notify,
+    isFocused: () => document.visibilityState === 'visible' && document.hasFocus(),
+    show: (msg) => {
+      if (!chrome.notifications) return;
+      const id = `mla-${crypto.randomUUID()}`;
+      myNotes.set(id, msg.view || null);
+      chrome.notifications
+        .create(id, { type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon-128.png'), title: msg.title, message: msg.body })
+        .catch((err) => {
+          myNotes.delete(id);
+          log('notify', 'failed', err.message);
+        });
+    },
+  });
+  if (chrome.notifications) {
+    chrome.notifications.onClicked.addListener((id) => {
+      if (!myNotes.has(id)) return; // 다른 앱 탭이 띄운 알림
+      const view = myNotes.get(id);
+      myNotes.delete(id);
+      chrome.notifications.clear(id).catch(() => {});
+      if (tabId !== null) chrome.tabs.update(tabId, { active: true }).catch(() => {});
+      if (windowId !== null) chrome.windows.update(windowId, { focused: true }).catch(() => {});
+      if (view && mode === 'chat') {
+        chatView = view;
+        pushState();
+      }
+    });
+    chrome.notifications.onClosed.addListener((id) => myNotes.delete(id));
+  }
+
   const rounds = createRounds({
     get services() {
       return allServices();
@@ -482,6 +521,7 @@
     history: roundHistory,
     prefs: () => prefs,
     diag,
+    notify: (event) => notifier.notify(event),
     checkLimit: async (id, { scope, answer } = {}) => {
       if (isLocal(id) || !panels.has(id)) return null;
       const cfg = { limitText: limitTextOf(svcOf(id)), scope: scope === 'answer' ? 'answer' : 'page', answer: typeof answer === 'string' ? answer : '' };
@@ -822,8 +862,12 @@
       savePrefs();
       pushState();
     },
-    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax }) => {
+    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview } = {}) => {
       if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
+      // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0) — 아는 종류의 true/false만
+      const notifyPatch = MLA.notify.cleanPatch(notify);
+      if (notifyPatch) prefs.notify = MLA.notify.normalizePrefs({ ...prefs.notify, ...notifyPatch });
+      if (typeof sendPreview === 'boolean') prefs.sendPreview = sendPreview;
       if (MAX_CHOICES.includes(historyMax)) {
         prefs.historyMax = historyMax;
         history.setMax(historyMax);
@@ -906,6 +950,8 @@
     if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(LL.LOCAL_ID);
     if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
     prefs.historyMax = normalizeMax(prefs.historyMax);
+    prefs.notify = MLA.notify.normalizePrefs(prefs.notify);
+    prefs.sendPreview = prefs.sendPreview === true;
     history.load(await historyStore.load());
     history.setMax(prefs.historyMax);
     sideHistory.load(await load('history:side', []));

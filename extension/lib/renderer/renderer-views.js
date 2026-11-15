@@ -506,6 +506,11 @@ $('#historyMaxSelect').addEventListener('change', async (e) => {
   host.setSettings({ historyMax: n });
 });
 
+$('#sendPreviewToggle').addEventListener('change', (e) => host.setSettings({ sendPreview: e.target.checked }));
+for (const box of document.querySelectorAll('[data-notify]')) {
+  box.addEventListener('change', () => host.setSettings({ notify: { [box.dataset.notify]: box.checked } }));
+}
+
 const REMOTE_SOURCE = { builtin: '앱에 들어 있는 셀렉터', cache: '저장해 둔 원격 셀렉터', remote: '원격 셀렉터' };
 
 // 설정 화면의 "사이트 셀렉터 원격 갱신" 상태 글
@@ -637,6 +642,9 @@ function renderSettings() {
     ),
   );
   maxSel.value = String(state.historyMax);
+  // 보내기 전 미리보기 · OS 알림 종류별 켜기 (v0.25.0)
+  $('#sendPreviewToggle').checked = !!state.sendPreview;
+  for (const box of document.querySelectorAll('[data-notify]')) box.checked = state.notify?.[box.dataset.notify] !== false;
 }
 
 /** 설정·단축키(?) 화면: 대기 시간 고르기, 원격 갱신 상태, 단축키 표 */

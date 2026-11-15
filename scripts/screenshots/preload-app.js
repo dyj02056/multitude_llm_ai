@@ -18,7 +18,9 @@ const LOCAL = ['19-local-llm', '20-local-llm-settings'].includes(scene);
 const localSvc = LL.localService({ baseUrl: 'http://localhost:11434' });
 const all = LOCAL ? [...SERVICES, localSvc] : SERVICES;
 const svc = (id) => all.find((s) => s.id === id);
-const selected = LOCAL ? ['gemini', 'chatgpt', 'claude', LL.LOCAL_ID] : ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
+const PREVIEW = scene === '26-send-preview';
+// 보내기 전 미리보기 장면은 문서를 받지 않는 Duck.ai를 넣어 "빼고 보냄" 경고가 보이게 한다
+const selected = LOCAL ? ['gemini', 'chatgpt', 'claude', LL.LOCAL_ID] : PREVIEW ? ['gemini', 'chatgpt', 'claude', 'duckai'] : ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
 
 const listeners = { state: [], 'panel:status': [], 'synth:status': [], shortcut: [] };
 const emit = (ch, p) => listeners[ch].forEach((fn) => fn(p));
@@ -89,6 +91,7 @@ function push() {
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b' },
     autoUpdate: true,
+    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false,
     update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
     storage: { encrypted: true },
     rects: rs,
@@ -189,6 +192,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     click('[data-libtab="skills"]');
     await sleep(300);
     [...document.querySelectorAll('.lib-row')].find((r) => r.textContent.includes('코드 리뷰어'))?.click();
+  }
+  if (scene === '26-send-preview') {
+    // 보내기 버튼을 Shift+클릭 → 보내기 전 미리보기 창 (첨부 2개, Duck.ai는 문서를 빼고 보냄)
+    const dt = new DataTransfer();
+    dt.items.add(new File(['# 회의록\n- 결정 사항'], '회의록.md', { type: 'text/markdown' }));
+    dt.items.add(new File([new Uint8Array(420000)], '분기 보고서.pdf', { type: 'application/pdf' }));
+    document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }));
+    $('#prompt').value = '첨부한 보고서와 회의록을 바탕으로 다음 분기 할 일을 세 가지로 정리해 줘';
+    $('#sendBtn').dispatchEvent(new MouseEvent('click', { shiftKey: true, bubbles: true }));
+    await sleep(400);
   }
   if (scene === '07-attachments') {
     const c = Object.assign(document.createElement('canvas'), { width: 64, height: 40 });

@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.24.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.25.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -169,13 +169,11 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.25.0** | 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝 **OS 알림** · **보내기 전 미리보기**(Shift+클릭) · 셀렉터 한국어/영어 짝 · `npm run selectors:probe` |
 | **v0.24.0** | 기록을 기록별로 저장 · **기록 최대 개수** 설정 · 화면 코드 나누기 · 다국어 틀 · 커밋 전 확장 폴더 검사 |
 | **v0.23.1** | 원격 셀렉터 **서명 검사 켬** — 서명이 맞는 `selectors.json`만 적용 |
 | **v0.23.0** | 바뀐 파일만 보내기 · 적용 실패 시 자동 되돌림 · 답변 `[+1]`/`[-1]` 만족도 · 원격 셀렉터 서명 · 버그 9건과 보안 · 성능 보강 |
 | **v0.22.1** | Windows 앱 **로컬 데이터 암호화**(DPAPI) — 기록 · 설정 · 라이브러리 · 프로젝트 상태 |
-| **v0.22.0** | 큰 작업 자동 시작 · 잘리면 자동 이어받기 · 보낼 양 토큰 어림 |
-| **v0.21.1** | 자가진단 창 — 셀렉터 지금 확인 · 처음 화면으로 · 진단 정보 복사 |
-| **v0.21.0** | 사이드탭 ↔ 앱 탭 — 기록 공유, `app ↗`로 질문 · 페이지 넘기기, 템플릿 · 스킬 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

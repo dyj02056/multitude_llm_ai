@@ -2,7 +2,7 @@
 
 **English** · [한국어](#개인정보-처리방침--multitude-llm)
 
-Last updated: 2026-11-14 · Applies to the Multitude LLM Chrome extension and Windows app.
+Last updated: 2026-11-15 · Applies to the Multitude LLM Chrome extension and Windows app.
 
 ## Summary
 
@@ -17,6 +17,7 @@ Multitude LLM has **no server of its own** and **collects nothing**. It does not
 | Settings, library (templates/skills), project state (including originals kept for undo) | Nowhere | Your browser's extension storage (Chrome) or the app data folder (Windows, encrypted with Windows DPAPI) |
 | Cookies of the supported AI sites | Never leave your browser. The extension attaches them to those sites' own WebSocket connections inside the app tab, and for Qwen / Z.ai copies the sign-in token into that site's own frame inside the app tab, so you stay signed in there | In memory / Chrome's session rules only |
 | Optional local LLM requests | Only to `localhost` / `127.0.0.1` on your own PC | Answers in local history |
+| Desktop notifications (answers finished, usage limit, send failure, synthesis finished) | Shown by Windows / Chrome on your own screen only. They contain counts and AI service names, never your question or the answers | Not stored |
 
 The extension also downloads two public files from this project's GitHub repository: `remote/selectors.json` (page selectors used to find input boxes and answers, signed and verified with Ed25519; it contains no code) and `package.json` (to tell you when a new version exists). These requests send no personal data.
 
@@ -45,7 +46,7 @@ Questions: open an issue at https://github.com/dyj02056/multitude_llm_ai/issues
 
 [English](#privacy-policy--multitude-llm) · **한국어**
 
-최종 수정: 2026-11-14 · Multitude LLM 크롬 확장 프로그램과 Windows 앱에 적용됩니다.
+최종 수정: 2026-11-15 · Multitude LLM 크롬 확장 프로그램과 Windows 앱에 적용됩니다.
 
 ## 요약
 
@@ -60,6 +61,7 @@ Multitude LLM은 **자체 서버가 없고 아무것도 수집하지 않습니�
 | 설정 · 라이브러리(템플릿 · 스킬) · 프로젝트 상태(되돌리기용 원본 포함) | 어디로도 보내지 않음 | 브라우저의 확장 저장소(크롬) 또는 앱 데이터 폴더(Windows, DPAPI 암호화) |
 | 지원하는 AI 사이트의 쿠키 | 브라우저 밖으로 나가지 않음. 앱 탭 안 그 사이트의 WebSocket 연결에 붙이고, Qwen · Z.ai는 로그인 토큰을 앱 탭 안 그 사이트 프레임에만 넣어 로그인을 유지 | 메모리 · 크롬 세션 규칙에만 |
 | 선택 기능 로컬 LLM 요청 | 이 PC의 `localhost` · `127.0.0.1`에만 | 답변은 로컬 기록에 |
+| 화면 알림 (답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝) | 이 PC 화면에 Windows · 크롬이 띄우기만 함. 개수와 AI 서비스 이름만 넣고 질문 · 답변은 넣지 않음 | 저장하지 않음 |
 
 이 밖에 이 프로젝트의 GitHub 저장소에서 공개 파일 두 개를 받습니다: `remote/selectors.json`(입력창 · 답변을 찾는 셀렉터, Ed25519 서명 검사, 코드 아님)과 `package.json`(새 버전 알림). 이 요청에는 개인 정보가 들어가지 않습니다.
 

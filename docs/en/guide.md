@@ -35,6 +35,16 @@ Type in the input box at the bottom (`모든 AI에게 한 번에 물어보기`) 
 
 Drag files onto the input box, paste a screenshot with **Ctrl+V**, or click **[+] 파일**. Up to 10 files, 25 MB each, 50 MB total. If a service does not accept a file type the app tells you before sending, and the panel shows `[+] 일부 파일은 빼고 보냄` (some files skipped) or `[+] 첨부 없이 보냄` (sent without attachments).
 
+### Preview before sending (v0.25.0)
+
+**Shift+click** **보내기** (Send) or press **Ctrl+Shift+Enter** in the input box to see, before anything is sent, exactly what each AI will get: the final text (skill instructions + project context + question), your attachments, project file uploads and the character count. File types a service does not accept, files over the service's size limit and very long text (over 100,000 characters) are flagged in yellow. **보내기** sends exactly what is shown; **취소** (Cancel) sends nothing and keeps your input. To preview every time, turn on **보내기 전 미리보기** (preview before sending) in settings (off by default).
+
+![Preview before sending](../screenshots/26-send-preview.png)
+
+### Notifications (v0.25.0)
+
+While you are working in another window, the app shows a Windows / Chrome notification when all answers are in (e.g. `답변 4개 완료 (시간 초과 1)` = 4 answers finished, 1 timed out), when a usage limit is hit, when sending fails, and when a synthesis or analysis is ready. Nothing is shown while you are looking at the app window (the app tab in the extension). Notifications contain counts and service names only, never your question or the answers. Click one to return to the app (to the compare view after an analysis). Each kind can be turned off under **알림** (notifications) in settings.
+
 ## 3. Rate answers
 
 When a panel finishes answering a question you sent from the input box, **`[+1]`** (good) and **`[-1]`** (not good) appear in its header. Click again to clear. Ratings feed the **만족도** (satisfaction) column in the stats table (section 7). A new question resets the buttons.

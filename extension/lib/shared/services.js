@@ -25,6 +25,8 @@
 //   확장 탭 안 iframe의 저장소는 일반 탭과 분리될 수 있어서, 크롬의 그 쿠키 값을 iframe의 localStorage에 넣어 준다.
 //   서비스 주소(url)의 도메인 화면에만 넣는다 (로그인 화면 등 다른 hosts에는 넣지 않는다).
 //
+// 화면 글(aria-label · 버튼 문구)에 기대는 셀렉터는 한국어 · 영어 화면 둘 다 쓰도록 짝을 둔다 (v0.25.0, test/selectors-lang.test.js가 검사).
+// 짝을 더할 때는 구조 셀렉터(id · data-testid · class)보다 뒤에 붙여 엉뚱한 요소를 먼저 고르지 않게 한다.
 // 새로 넣은 서비스(Perplexity·Grok·Mistral·Qwen·Genspark·Duck.ai·Claude·Z.ai)의 셀렉터는 실제 화면에서 다시 확인해야 한다.
 // 틀린 것은 remote/selectors.json으로 앱을 다시 배포하지 않고 고칠 수 있다.
 //
@@ -87,6 +89,7 @@
         '#composer-submit-button',
         'button[type="submit"][aria-label="보내기"]',
         'button[aria-label*="Send prompt" i]',
+        'button[aria-label*="프롬프트 보내기"]',
       ],
       submitKey: 'Enter',
       stop: ['button[data-testid="stop-button"]', 'button[aria-label*="Stop streaming" i]', 'button[aria-label*="스트리밍 중지"]'],
@@ -187,9 +190,9 @@
       hosts: ['chat.qwen.ai', 'auth.qwen.ai'],
       loggedOut: { url: '/auth', text: '^(로그인|log in|sign in|登录)$' },
       input: ['#chat-input', 'textarea[placeholder]', 'textarea'],
-      send: ['#send-message-button', 'button.send-button', 'button[aria-label*="send" i]'],
+      send: ['#send-message-button', 'button.send-button', 'button[aria-label*="send" i]', 'button[aria-label*="보내기"]'],
       submitKey: 'Enter',
-      stop: ['button.stop-button', 'button[aria-label*="stop" i]'],
+      stop: ['button.stop-button', 'button[aria-label*="stop" i]', 'button[aria-label*="중지"]'],
       response: ['.response-message-content .markdown-content', '#response-content-container', '.chat-response-message .markdown-content-container', '.markdown-content'],
       upload: { methods: ['input', 'paste', 'drop'] },
       newChatUrl: 'https://chat.qwen.ai/',
@@ -207,9 +210,9 @@
       // 로그인하지 않아도(손님) 질문할 수 있다. "Sign in" 버튼이 보이면 로그아웃 상태로 본다.
       loggedOut: { url: '/auth', text: '^(로그인|log ?in|sign ?in)$' },
       input: ['#chat-input', 'textarea[placeholder]', 'textarea'],
-      send: ['#send-message-button', 'button.sendMessageButton', 'button[aria-label*="send" i]'],
+      send: ['#send-message-button', 'button.sendMessageButton', 'button[aria-label*="send" i]', 'button[aria-label*="보내기"]'],
       submitKey: 'Enter',
-      stop: ['#stop-response-button', 'button.stop-button', 'button[aria-label*="stop" i]'],
+      stop: ['#stop-response-button', 'button.stop-button', 'button[aria-label*="stop" i]', 'button[aria-label*="중지"]'],
       response: ['.chat-assistant .markdown-prose', '#response-content-container', '.markdown-prose'],
       upload: { methods: ['input', 'paste', 'drop'] },
       newChatUrl: 'https://chat.z.ai/',
@@ -227,9 +230,9 @@
       loggedOut: { text: '^(로그인|log ?in|sign ?in|sign up|가입하기)$' },
       input: ['textarea[name="query"].search-input', 'textarea.search-input', 'textarea[placeholder]', 'textarea'],
       // 보내기 버튼 모양을 확인하지 못해 이름에 enter·send가 들어간 요소만 찾고, 못 찾으면 Enter 키로 보낸다.
-      send: ['.input-icon.enter-icon', 'div.enter-icon', '[class*="enter-icon"]', 'button[type="submit"]', 'button[aria-label*="send" i]'],
+      send: ['.input-icon.enter-icon', 'div.enter-icon', '[class*="enter-icon"]', 'button[type="submit"]', 'button[aria-label*="send" i]', 'button[aria-label*="보내기"]'],
       submitKey: 'Enter',
-      stop: ['[class*="stop-icon"]', '[class*="stop-button"]', 'button[aria-label*="Stop" i]'],
+      stop: ['[class*="stop-icon"]', '[class*="stop-button"]', 'button[aria-label*="Stop" i]', 'button[aria-label*="중지"]'],
       response: ['.conversation-statement.assistant .markdown-viewer', '.conversation-statement.assistant', '.markdown-viewer', '[class*="answer" i] [class*="markdown" i]'],
       newChatUrl: 'https://www.genspark.ai/ko',
     },

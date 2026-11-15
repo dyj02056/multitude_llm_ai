@@ -338,6 +338,19 @@
     </div>
   </div>
 
+  <!-- 보내기 전 미리보기 (v0.25.0): 패널마다 실제로 넣을 글 · 첨부 파일 · 프로젝트 파일 · 글자 수와 경고. send-preview.js -->
+  <div id="previewModal" class="modal" hidden>
+    <div class="modal-box preview-box" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+      <div class="modal-head"><b id="previewTitle" data-i18n="preview.title"></b><span id="previewSub" class="muted-label"></span></div>
+      <div id="previewBody" class="modal-body"></div>
+      <div class="modal-foot">
+        <span id="previewStatus" class="muted-label"></span>
+        <button id="previewCancel" data-i18n="preview.cancel"></button>
+        <button id="previewSend" class="primary" data-i18n="preview.send" data-i18n-title="preview.sendTitle"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- 질문·답변 기록 화면 -->
   <section id="history" class="only-history">
     <aside class="history-side">
@@ -365,6 +378,18 @@
         <select id="historyMaxSelect"></select>
       </div>
       <p class="muted small" data-i18n="settings.historyMaxNote"></p>
+      <div class="setting-row">
+        <label class="check-label"><input type="checkbox" id="sendPreviewToggle" /> <span data-i18n="settings.sendPreview"></span></label>
+      </div>
+      <p class="muted small" data-i18n="settings.sendPreviewNote"></p>
+      <h2 data-i18n="settings.notifyTitle"></h2>
+      <div class="setting-row notify-row">
+        <label class="check-label"><input type="checkbox" data-notify="round" /> <span data-i18n="settings.notifyRound"></span></label>
+        <label class="check-label"><input type="checkbox" data-notify="limit" /> <span data-i18n="settings.notifyLimit"></span></label>
+        <label class="check-label"><input type="checkbox" data-notify="error" /> <span data-i18n="settings.notifyError"></span></label>
+        <label class="check-label"><input type="checkbox" data-notify="synth" /> <span data-i18n="settings.notifySynth"></span></label>
+      </div>
+      <p class="muted small" data-i18n="settings.notifyNote"></p>
       <div class="setting-row">
         <label class="check-label"><input type="checkbox" id="remoteToggle" /> 사이트 셀렉터 자동 갱신</label>
         <button id="remoteRefresh">지금 확인</button>
@@ -448,10 +473,10 @@
         <span id="tplPreview" class="tpl-preview"></span>
       </div>
       <textarea id="prompt" rows="2" placeholder="모든 AI에게 한 번에 물어보기"></textarea>
-      <button id="sendBtn" class="primary">보내기</button>
+      <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle">보내기</button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → renderer-compose.js → project.js → project-changes.js → project-editor.js → library.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → renderer-compose.js → send-preview.js → project.js → project-changes.js → project-editor.js → library.js (뒤의 것이 앞의 것을 씀) -->
   <script src="lib/shared/i18n-ko.js"></script>
   <script src="lib/shared/i18n-en.js"></script>
   <script src="lib/shared/i18n.js"></script>
@@ -466,6 +491,7 @@
   <script src="lib/shared/diag.js"></script>
   <script src="lib/shared/export.js"></script>
   <script src="lib/shared/web-ask.js"></script>
+  <script src="lib/shared/send-plan.js"></script>
   <script src="lib/shared/prompt-lib.js"></script>
   <script src="lib/shared/update-core.js"></script>
   <script src="lib/shared/services.js"></script>
@@ -477,12 +503,14 @@
   <script src="lib/shared/remote-core.js"></script>
   <script src="lib/shared/rounds.js"></script>
   <script src="lib/shared/local-llm.js"></script>
+  <script src="lib/shared/notify.js"></script>
   <script src="project-fs.js"></script>
   <script src="host.js"></script>
   <script src="lib/renderer/templates.js"></script>
   <script src="lib/renderer/renderer.js"></script>
   <script src="lib/renderer/renderer-views.js"></script>
   <script src="lib/renderer/renderer-compose.js"></script>
+  <script src="lib/renderer/send-preview.js"></script>
   <script src="lib/renderer/project.js"></script>
   <script src="lib/renderer/project-changes.js"></script>
   <script src="lib/renderer/project-editor.js"></script>

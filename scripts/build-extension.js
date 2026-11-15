@@ -33,7 +33,7 @@ const GENERATED = '자동 생성 파일 — 직접 고치지 말고 원본을 �
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 
 // 앱 탭(app.html)이 읽는 공통 모듈. 순서가 중요하다 (rounds.js는 synth.js를 쓴다).
-const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'remote-core', 'rounds', 'local-llm'];
+const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'remote-core', 'rounds', 'local-llm', 'notify'];
 // 서비스 페이지(content script)가 읽는 공통 모듈
 const CONTENT_SHARED = ['page', 'markdown', 'shortcuts'];
 const ICON_SIZES = [16, 32, 48, 128];
@@ -43,6 +43,7 @@ const RENDERER_FILES = [
   'renderer.js',
   'renderer-views.js',
   'renderer-compose.js',
+  'send-preview.js',
   'project.js',
   'project-changes.js',
   'project-editor.js',
@@ -172,7 +173,9 @@ function buildManifest() {
     // contextMenus · activeTab · scripting: 오른쪽 클릭 메뉴 "Multitude LLM에 묻기" (background.js) — 메뉴를 누른 그 탭의 글만, 누른 그때만 읽는다.
     //   셋 다 설치 · 업데이트 때 새 권한 확인 창을 띄우지 않는다. 모든 사이트 권한(<all_urls>)은 받지 않는다.
     // sidePanel: 사이드탭 모드 (v0.19.0, sidepanel.html) — 확인 창을 띄우지 않는다. 페이지 글은 위와 같은 한 번 권한(activeTab)으로만 읽는다.
-    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData', 'cookies', 'contextMenus', 'activeTab', 'scripting', 'sidePanel'],
+    // notifications: 앱 탭을 보고 있지 않을 때 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝을 알린다 (v0.25.0, host.js) — 글에는 개수와 서비스 이름만.
+    //   설치 · 업데이트 때 크롬이 "알림 표시" 권한 확인을 한 번 묻는다.
+    permissions: ['storage', 'unlimitedStorage', 'declarativeNetRequest', 'clipboardWrite', 'browsingData', 'cookies', 'contextMenus', 'activeTab', 'scripting', 'sidePanel', 'notifications'],
     // wss://는 WebSocket 요청 헤더(쿠키)를 바꾸는 규칙에 필요하다 (background.js syncWsCookies)
     host_permissions: [...matches, ...hosts.map((h) => `wss://${h}/*`)],
     // 로컬 LLM 패널(v0.16.0, 선택 기능): 설정에서 켤 때만 묻는 이 PC 주소 권한 — 설치 · 업데이트 때 확인 창을 띄우지 않는다

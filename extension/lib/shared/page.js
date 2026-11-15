@@ -267,5 +267,50 @@
     return text.slice(from, m.index + m[0].length + 80).replace(/\s+/g, ' ').trim().slice(0, 160);
   }
 
-  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe, pageLimitCheck };
+  /**
+   * 셀렉터 점검 도구(npm run selectors:probe, v0.25.0)용 읽기 전용 살펴보기: 항목마다 후보 셀렉터가 몇 개 · 보이는 것이 몇 개인지,
+   * 로그아웃 단서(url · selectors · text)가 맞는지. 누르거나 입력하지 않는다. 화면 글은 로그아웃 버튼 문구만 돌려준다.
+   * cfg: { parts: { input: [셀렉터], send, stop, response }, loggedOut: { url, selectors, text } }
+   * → { host, path, parts: { 이름: [{ sel, count, visible, bad? }] }, loggedOut: { url, selectors: [{ sel, visible }], text } }
+   */
+  function pageSelectorReport(cfg) {
+    const visible = (el) =>
+      !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length) && getComputedStyle(el).visibility !== 'hidden';
+    const check = (sel) => {
+      try {
+        const all = [...document.querySelectorAll(sel)];
+        return { sel, count: all.length, visible: all.filter(visible).length };
+      } catch {
+        return { sel, count: 0, visible: 0, bad: true }; // 셀렉터 문법 오류
+      }
+    };
+    const parts = {};
+    for (const [name, list] of Object.entries(cfg.parts || {})) parts[name] = (list || []).map(check);
+    const lo = cfg.loggedOut || {};
+    let text = null;
+    if (lo.text) {
+      try {
+        const re = new RegExp(lo.text, 'i');
+        const label = (el) => String(el.innerText || el.value || el.getAttribute('aria-label') || '').trim();
+        const hit = [...document.querySelectorAll('button,a,[role="button"]')].find((el) => visible(el) && re.test(label(el)));
+        text = hit ? label(hit).slice(0, 40) : null;
+      } catch {
+        text = null;
+      }
+    }
+    let urlHit = false;
+    try {
+      urlHit = !!lo.url && new RegExp(lo.url).test(location.href);
+    } catch {
+      urlHit = false;
+    }
+    return {
+      host: location.hostname,
+      path: location.pathname,
+      parts,
+      loggedOut: { url: urlHit, selectors: (lo.selectors || []).map((sel) => ({ sel, visible: check(sel).visible })), text },
+    };
+  }
+
+  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe, pageLimitCheck, pageSelectorReport };
 });

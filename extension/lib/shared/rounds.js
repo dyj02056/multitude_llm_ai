@@ -8,14 +8,15 @@
 // 원하면 "종합"(다른 AI들의 답을 모아 한 AI에게 정리시키기)까지 하는 "진행자"입니다.
 // 패널을 실제로 다루는 방법(adapter, 아래 a)은 Windows 앱과 크롬 확장이 각자 넘겨줍니다.
 (function (root, factory) {
-  const api = factory(root.MLA && root.MLA.synth, root.MLA && root.MLA.services);
+  const api = factory(root.MLA && root.MLA.synth, root.MLA && root.MLA.services, root.MLA && root.MLA.sendPlan);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.MLA = root.MLA || {}).rounds = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services, sendPlan) {
   'use strict';
 
   const { buildSynthPrompt, analysisNames } = synth || require('./synth');
   const { uploadOf, fileKind } = services || require('./services');
+  const { planSend } = sendPlan || require('./send-plan');
   const FINISHED = new Set(['done', 'timeout', 'no-answer']);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -35,6 +36,7 @@
    *   prefs(): { synthTarget, autoSynth }
    *   diag: 셀렉터 자가진단 (shared/diag.js createDiag, 없어도 됨) — 보내기 · 답변 결과를 기록
    *   checkLimit(id, { scope, answer }): 사용 한도 안내를 찾는다 → 찾은 문구 | null (없어도 됨, page.js pageLimitCheck)
+   *   notify(event): OS 알림 (없어도 됨, shared/notify.js createNotifier) — 라운드 답변이 모두 끝남 · 사용 한도 · 보내기 실패 · 종합 끝
    *   log(tag, ...args)
    */
   function createRounds(a) {
@@ -114,6 +116,7 @@
       if (!res.ok) {
         const limit = await limitOf(id, 'error');
         if (limit) a.diag?.setLimit?.(id, limit);
+        if (limit) a.notify?.({ kind: 'limit', name: nameOf(id) });
         onFinish?.('error', { sendOk: false, limit: limit || undefined });
       } else {
         const sentAt = Date.now();
@@ -131,6 +134,7 @@
               const limit = await limitOf(id, answer, info?.chars);
               // 한도 안내를 찾았으면 그 패널 머리줄에 알리고, 정상으로 끝났으면 지난 한도 표시를 지운다
               if (limit || answer === 'done') a.diag?.setLimit?.(id, limit || null);
+              if (limit) a.notify?.({ kind: 'limit', name: nameOf(id) });
               onFinish?.(answer, { sendOk: true, firstMs, doneMs: answer === 'done' ? Date.now() - sentAt : undefined, chars: info?.chars, limit: limit || undefined });
             }
           },
@@ -156,9 +160,15 @@
       // 기록은 새 질문을 보낸 뒤에 끝난 답변이라도 그 라운드에 남긴다. 숫자(metrics)는 응답 통계에 쓴다.
       const { text, md } = state === 'done' ? await readAnswer(id) : { text: '', md: '' };
       a.history.setAnswer(r.historyId, id, { name: nameOf(id), state, text, md, ...(metrics ? { metrics: cleanMetrics(metrics) } : {}) });
-      if (r !== round) return; // 그사이 새 질문을 보냈으면 자동 종합은 하지 않는다
+      if (state === 'error') a.notify?.({ kind: 'error', name: nameOf(id) });
+      if (r !== round) return; // 그사이 새 질문을 보냈으면 자동 종합 · 완료 알림은 하지 않는다
       r.finished.set(id, state);
-      if (r.finished.size < r.targets.length || r.synthDone || !a.prefs().autoSynth) return;
+      if (r.finished.size < r.targets.length) return;
+      if (!r.notified) {
+        r.notified = true;
+        a.notify?.({ kind: 'round', states: [...r.finished.values()] });
+      }
+      if (r.synthDone || !a.prefs().autoSynth) return;
       r.synthDone = true;
       runSynth(null, 'auto');
     }
@@ -177,18 +187,11 @@
       const question = typeof opts.question === 'string' && opts.question ? opts.question : text;
       const historyId = a.history.add({ question, targets: ids, files: meta });
       const r = (round = { question, targets: ids, finished: new Map(), synthDone: false, historyId });
-      // prefixById: 스킬 지침처럼 그 패널의 글 앞에 붙일 것 (첨부 실패 때의 예비 글에도 붙인다)
-      const prefix = (id) => (typeof opts.prefixById?.[id] === 'string' ? opts.prefixById[id] : '');
-      const textFor = (id) => prefix(id) + (typeof opts.textById?.[id] === 'string' ? opts.textById[id] : text);
-      const fallbackFor = (id) => (typeof opts.fallbackText === 'string' ? prefix(id) + opts.fallbackText : undefined);
-      // plainIds: 프로젝트 파일을 보내지 않을 서비스 — 앞의 userFileCount개(사용자가 직접 올린 파일)만 보내고 예비 글도 쓰지 않는다
-      const plain = new Set(Array.isArray(opts.plainIds) ? opts.plainIds : []);
-      const own = Number.isInteger(opts.userFileCount) && opts.userFileCount >= 0 ? Math.min(opts.userFileCount, files.length) : files.length;
+      // 패널마다 넣을 글 · 파일 · 예비 글은 shared/send-plan.js가 계산한다 (화면의 보내기 전 미리보기와 같은 계산)
+      //   prefixById(스킬 지침)는 글과 예비 글 앞에, plainIds는 사용자가 직접 올린 파일만 · 예비 글 없음
       return Promise.all(
-        ids.map((id) =>
-          plain.has(id)
-            ? sendToPanel(id, textFor(id), (state, m) => onRoundAnswer(r, id, state, m), files.slice(0, own))
-            : sendToPanel(id, textFor(id), (state, m) => onRoundAnswer(r, id, state, m), files, fallbackFor(id)),
+        planSend(text, ids, files, opts).map((p) =>
+          sendToPanel(p.id, p.text, (state, m) => onRoundAnswer(r, p.id, state, m), p.files, p.fallbackText),
         ),
       );
     }
@@ -204,6 +207,7 @@
         id,
         text,
         async (state) => {
+          if (state === 'error') a.notify?.({ kind: 'error', name: nameOf(id) });
           // noHistory: 기록에 남기지 않는 요청 (스킬 압축 등 — 질문의 답변을 덮어쓰지 않게)
           if (!r || state !== 'done' || opts.noHistory) return;
           const { text: answer, md } = await readAnswer(id);
@@ -246,11 +250,13 @@
           // 분석은 화면이 "분석하는 중"을 기다리므로, 답이 오지 않고 끝나도(시간 초과 · 답변 없음) 알려 준다
           const why = state === 'timeout' ? '시간 안에 답하지 않았습니다' : state === 'no-answer' ? '답변을 찾지 못했습니다' : '답하지 못했습니다';
           if (mode === 'analysis' && state !== 'error') fail(`분석 실패: ${judgeName}이(가) ${why}`);
+          else if (state !== 'error') a.notify?.({ kind: 'synth', ok: false, judge: judgeName, mode });
           return;
         }
         const got = await readAnswer(judge);
         const entry = { judge: judgeName, at: Date.now(), ...got, ...(mode === 'analysis' ? { mode, names } : {}) };
         a.history.addSynth(historyId, entry);
+        a.notify?.({ kind: 'synth', ok: true, judge: judgeName, mode });
         if (mode === 'analysis') {
           r.analysis = entry;
           a.sendSynthStatus({ state: 'done', judge: judgeName, count: answers.length, cause, mode });
@@ -262,6 +268,7 @@
 
       function fail(error) {
         a.sendSynthStatus({ state: 'error', error, cause, mode });
+        a.notify?.({ kind: 'synth', ok: false, judge: nameOf(judge), mode }); // 이름은 nameOf로 (judgeName을 정하기 전에도 불린다)
         return { ok: false, error };
       }
     }
