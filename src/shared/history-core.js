@@ -1,7 +1,7 @@
 // 질문·답변 기록. 최근 것부터 담는다. 저장 방법(파일 / chrome.storage)은 쓰는 쪽이 save로 넘긴다.
 // 기록 하나 = 공통 입력창으로 보낸 질문 한 번(라운드):
 //   { id, at, question, targets: [id], files: [{ name, size, type }], answers: { [svcId]: { name, state, text, md } },
-//     synth: [{ judge, at, text, md, mode?: 'analysis', names? }], feedback?: { [svcId]: 1 | -1 } }  (mode 'analysis' = 답변 일치·이견 분석, names = 비교한 AI 이름)   (첨부 파일은 이름·크기·종류만 남기고 내용은 저장하지 않는다)
+//     synth: [{ judge, at, text, md, mode?: 'analysis' | 'debate', names? }], feedback?: { [svcId]: 1 | -1 }, chain?: [이어 묻기 · 토론 (v0.26.0, cleanChain)] }  (mode 'analysis' = 답변 일치·이견 분석, names = 비교한 AI 이름)   (첨부 파일은 이름·크기·종류만 남기고 내용은 저장하지 않는다)
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.historyCore)이 같이 쓴다.
 //
 // [쉽게 말하면] 질문·답변 기록장(기본 최근 500개)을 다루는 공통 부품입니다: 새 기록 추가, 답변 채우기, 검색, 지우기.
@@ -57,6 +57,55 @@
     for (const k of Object.keys(fb)) if (okSvcId(k) && (fb[k] === 1 || fb[k] === -1)) out[k] = fb[k];
     return out;
   }
+
+  // 이어 묻기 · 토론 (v0.26.0): 기록의 chain = [{ kind, at, ... }] (일어난 순서)
+  //   handoff  : { intent: 'review' | 'counter' | 'continue', from, to, fromName, toName, state, text, md } — 한 답변을 다른 AI에게 넘김
+  //   fallback : { from, to, fromName, toName, state, text, md } — 사용 한도에 걸린 AI 대신 다른 AI에게 같은 질문
+  //   debate   : { round, rounds, answers: [{ id, name, state, text, md }] } — 토론 한 라운드 (결론은 synth의 mode 'debate')
+  const CHAIN_KINDS = new Set(['handoff', 'fallback', 'debate']);
+  const CHAIN_INTENTS = new Set(['review', 'counter', 'continue']);
+  const MAX_CHAIN = 60; // 기록 하나의 chain 최대 개수
+  const MAX_CHAIN_TEXT = 200000; // 글 하나 최대 길이
+  const MAX_NAME = 80;
+  const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+  const ANSWER_STATES = new Set(['done', 'timeout', 'no-answer', 'error', 'stopped']);
+  const stateOf = (v) => (ANSWER_STATES.has(v) ? v : 'done');
+
+  /** 이어 묻기 · 토론 한 줄 검사 → 깨끗한 값 | null (모르는 종류 · 잘못된 id · 라운드 번호는 받지 않는다) */
+  function cleanChain(e) {
+    if (!e || typeof e !== 'object' || Array.isArray(e) || !CHAIN_KINDS.has(e.kind)) return null;
+    const at = Number.isFinite(e.at) && e.at > 0 ? Math.round(e.at) : Date.now();
+    if (e.kind === 'debate') {
+      const round = Number(e.round);
+      const rounds = Number(e.rounds);
+      if (!Number.isInteger(round) || round < 1 || round > 10) return null;
+      const answers = (Array.isArray(e.answers) ? e.answers : [])
+        .filter((x) => x && typeof x === 'object' && okSvcId(x.id))
+        .slice(0, 6)
+        .map((x) => ({ id: x.id, name: str(x.name, MAX_NAME) || x.id, state: stateOf(x.state), text: str(x.text, MAX_CHAIN_TEXT), md: str(x.md, MAX_CHAIN_TEXT) }));
+      if (!answers.length) return null;
+      return { kind: 'debate', round, rounds: Number.isInteger(rounds) && rounds >= round ? rounds : round, at, answers };
+    }
+    if (!okSvcId(e.from) || !okSvcId(e.to) || e.from === e.to) return null;
+    if (e.kind === 'handoff' && !CHAIN_INTENTS.has(e.intent)) return null;
+    return {
+      kind: e.kind,
+      ...(e.kind === 'handoff' ? { intent: e.intent } : {}),
+      from: e.from,
+      to: e.to,
+      fromName: str(e.fromName, MAX_NAME) || e.from,
+      toName: str(e.toName, MAX_NAME) || e.to,
+      at,
+      state: stateOf(e.state),
+      text: str(e.text, MAX_CHAIN_TEXT),
+      md: str(e.md, MAX_CHAIN_TEXT),
+    };
+  }
+
+  /** 기록의 chain (없거나 깨졌으면 빈 목록) */
+  const chainOf = (rec) => (rec && Array.isArray(rec.chain) ? rec.chain.filter((c) => c && typeof c === 'object') : []);
+  /** chain 한 줄의 글들 (검색용) */
+  const chainTexts = (c) => (c.kind === 'debate' ? (Array.isArray(c.answers) ? c.answers.map((x) => (x && x.text) || '') : []) : [c.text || '']);
 
   /**
    * save(records, info): 바뀐 기록을 저장한다. 답변이 끝날 때마다 바뀌므로 잠깐 모았다가 한 번에 부른다.
@@ -165,6 +214,20 @@
       changed(id);
     }
 
+    /**
+     * 이어 묻기 · 토론 한 줄을 기록에 더한다 (v0.26.0, cleanChain으로 검사). → true | false (기록이 없거나 값이 잘못됨)
+     * 기록 하나에 MAX_CHAIN개까지 (넘으면 오래된 것부터 뺀다)
+     */
+    function addChain(id, entry) {
+      const rec = find(id);
+      const e = cleanChain(entry);
+      if (!rec || !e) return false;
+      const list = Array.isArray(rec.chain) ? rec.chain : [];
+      rec.chain = [...list, e].slice(-MAX_CHAIN);
+      changed(id);
+      return true;
+    }
+
     /** 목록용 요약. query가 있으면 질문·답변 글에서 찾는다 (대소문자 무시). */
     function list(query = '') {
       const q = query.trim().toLowerCase();
@@ -173,15 +236,18 @@
         r.question.toLowerCase().includes(q) ||
         (r.files || []).some((f) => f.name.toLowerCase().includes(q)) ||
         Object.values(r.answers).some((a) => (a.text || '').toLowerCase().includes(q)) ||
-        r.synth.some((s) => (s.text || '').toLowerCase().includes(q));
+        r.synth.some((s) => (s.text || '').toLowerCase().includes(q)) ||
+        chainOf(r).some((c) => chainTexts(c).some((x) => x.toLowerCase().includes(q)));
       return records.filter(hit).map((r) => ({
         id: r.id,
         at: r.at,
         question: r.question.slice(0, 200),
         answered: Object.values(r.answers).filter((a) => a.text).length,
         targets: r.targets.length,
-        synth: r.synth.filter((s) => s.mode !== 'analysis').length,
+        synth: r.synth.filter((s) => s.mode !== 'analysis' && s.mode !== 'debate').length,
         analysis: r.synth.filter((s) => s.mode === 'analysis').length,
+        debate: r.synth.filter((s) => s.mode === 'debate').length,
+        chain: chainOf(r).length,
         files: (r.files || []).length,
         ...(r.source ? { source: r.source } : {}),
       }));
@@ -255,7 +321,7 @@
       changed();
     }
 
-    return { load, add, setAnswer, setFeedback, addSynth, list, get, stats, remove, clear, all, flush, setMax, max: () => limit };
+    return { load, add, setAnswer, setFeedback, addSynth, addChain, list, get, stats, remove, clear, all, flush, setMax, max: () => limit };
   }
 
   /**
@@ -330,6 +396,9 @@
     createHistory,
     createAreaStore,
     feedbackOf,
+    cleanChain,
+    chainOf,
+    MAX_CHAIN,
     planWrites,
     okRecordId,
     newId,

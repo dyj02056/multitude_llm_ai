@@ -23,11 +23,12 @@ function register(ctx) {
 
   // 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 기록 최대 개수, 사이트 셀렉터 자동 갱신, 새 버전 자동 확인,
   // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0)
-  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview } = {}) => {
+  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce } = {}) => {
     const prefs = ctx.prefs();
     const notifyPatch = notifyCore.cleanPatch(notify); // 아는 종류의 true/false만
     if (notifyPatch) prefs.notify = notifyCore.normalizePrefs({ ...prefs.notify, ...notifyPatch });
     if (typeof sendPreview === 'boolean') prefs.sendPreview = sendPreview;
+    if (typeof retryOnce === 'boolean') prefs.retryOnce = retryOnce; // 실패하면 한 번 다시 보내기 (v0.26.0)
     if (ctx.TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
     if (ctx.MAX_CHOICES.includes(historyMax)) {
       prefs.historyMax = historyMax;

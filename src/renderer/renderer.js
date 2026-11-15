@@ -140,7 +140,7 @@ function syncPanels() {
 /**
  * 패널 하나의 머리줄을 만듭니다: 점(상태 색) · 이름 · 주소 · 상태 글자 · 버튼들
  * 아래쪽 변경 바(프로젝트 모드, 수정안이 있을 때만)는 project.js가 채운다.
- * 버튼: 파일 모아보기 · 요청 파일 보내기 · 로그인 · copy(복사) · ⤢ 크게 보기 · + 새 대화 · ← 뒤로 · ⌂ 처음 주소 · ↻ 새로고침
+ * 버튼: 파일 모아보기 · 요청 파일 보내기 · 로그인 · copy(복사) · → 넘기기 · ⤢ 크게 보기 · + 새 대화 · ← 뒤로 · ⌂ 처음 주소 · ↻ 새로고침
  */
 function createPanel(svc) {
   const el = document.createElement('section');
@@ -170,6 +170,9 @@ function createPanel(svc) {
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
   const focusBtn = button('⤢', '이 패널만 크게 보기', () => host.setFocus(svc.id));
+  // 넘기기 (v0.26.0): 이 패널의 최신 답변을 다른 패널에 보내 검토 · 반박 · 이어서 쓰기 (panel-offers.js가 패널 아래 바를 띄움)
+  const handoffBtn = button('→', t('handoff.btnTitle'), () => window.onHandoffClick?.(svc.id));
+  handoffBtn.className = 'handoff-btn';
   // 답변 평가 (v0.23): 공통 입력창 질문의 답변이 끝나면 띄운다. 같은 것을 다시 누르면 지운다.
   const goodBtn = button('[+1]', '이 답변이 좋았음', () => setFeedback(svc.id, 1));
   const badBtn = button('[-1]', '이 답변이 별로였음', () => setFeedback(svc.id, -1));
@@ -197,6 +200,7 @@ function createPanel(svc) {
       const r = await host.copyAnswer(svc.id);
       flash(status, r.copied ? '답변을 복사했습니다' : '복사할 답변이 없습니다');
     }),
+    handoffBtn,
     focusBtn,
     button('+', '새 대화', () => host.panelAction(svc.id, 'newchat')),
   );
@@ -565,8 +569,23 @@ function renderDiagTable() {
 /** 패널 아래 변경 바를 띄우거나 내린다. 본체가 웹페이지 높이를 바만큼 줄여 바가 페이지에 가리지 않게 한다. */
 function setChangeBar(id, on) {
   const p = panels.get(id);
-  if (!p || p.changeBar.hidden === !on) return;
+  if (!p) return;
   p.changeBar.hidden = !on;
+  syncPanelBar(id);
+}
+
+/**
+ * 패널 아래 자리(BAR_H)를 변경 바 또는 제안 바(v0.26.0 panel-offers.js: 넘기기 · 다시 보내기 · 다른 AI로)가 쓰는 동안만 비워 달라고 본체에 알린다.
+ * 둘 다 떠 있으면 제안 바가 위에 그려진다 (.panel.has-offer).
+ */
+function syncPanelBar(id) {
+  const p = panels.get(id);
+  if (!p) return;
+  const offer = !!p.offerBar && !p.offerBar.hidden;
+  const on = offer || !p.changeBar.hidden;
+  p.el.classList.toggle('has-offer', offer);
+  if (p.barOn === on) return;
+  p.barOn = on;
   host.setPanelBar(id, on);
 }
 
@@ -592,7 +611,7 @@ function flash(el, text) {
   }, 1800);
 }
 
-const SEND_TEXT = { sending: '보내는 중…', sent: '보냄', error: '보내기 실패' };
+const SEND_TEXT = { sending: '보내는 중…', sent: '보냄', error: '보내기 실패', retrying: t('retry.retrying') };
 const ATTACH_TEXT = { failed: '첨부 없이 보냄', skipped: '첨부 없이 보냄', partial: '일부 파일은 빼고 보냄', fallback: '업로드 실패 → 본문으로 보냄' };
 
 // 답변을 기다리는 동안 걸린 시간을 1초마다 보여 준다.

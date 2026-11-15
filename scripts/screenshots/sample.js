@@ -107,4 +107,51 @@ function chatPage(name, color, messages, { typing = false, input = '' } = {}) {
   <div class="msgs">${msgs}${typing ? '<div class="dots">답변 작성 중…</div>' : ''}</div><div class="in">${esc(input || '메시지 입력')}</div></div>`;
 }
 
-module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, SYNTH_ANSWER, chatPage };
+// v0.26.0 장면: 다른 판정 AI의 분석 (다시 분석 비교) · 이어 묻기 · 토론
+const ANALYSIS_MD2 = `## 공통 의견
+- Python은 데이터 · AI, JavaScript는 웹에 주로 쓰인다
+
+## 이견
+| 쟁점 | Gemini | ChatGPT | DeepSeek | Perplexity | 판단 |
+|---|---|---|---|---|---|
+| 처음 배울 언어 | 목적에 맞춰 | 웹이면 JS | 언급 없음 | 함께 쓰기도 | 목적에 따라 고르는 것이 맞음 |
+| 타입 시스템 | TypeScript로 정적 | 언급 없음 | 언급 없음 | 언급 없음 | Gemini 설명이 정확함 |
+
+## 근거 부족
+- 없음
+
+## 최종 답변
+목적에 맞춰 고르세요. 웹이면 JavaScript(필요하면 TypeScript), 데이터 · AI면 Python입니다.`;
+
+const DEBATE_RESULT = `## 합의한 점
+- 웹 프런트엔드는 JavaScript, 데이터 · AI는 Python이 표준이다
+- 처음 배울 언어는 만들고 싶은 것에 맞춰 고른다
+
+## 남은 이견
+- [성능] DeepSeek은 "JS가 빠르다", ChatGPT는 "작업에 따라 다르다" — 작업에 따라 다르다는 쪽이 정확함
+
+## 최종 답변
+Python은 데이터 · AI · 자동화, JavaScript는 웹(브라우저 · Node.js)에 강합니다. 성능은 작업에 따라 다르므로 언어보다 라이브러리 선택이 더 중요합니다.`;
+
+/** 이어 묻기 · 토론 기록 예시 (chain) */
+const CHAIN = (now) => [
+  { kind: 'handoff', intent: 'review', from: 'chatgpt', to: 'deepseek', fromName: 'ChatGPT', toName: 'DeepSeek', at: now - 9 * 60e3, state: 'done', text: 'ChatGPT 답변 검토:\n1) 틀린 점: 없음\n2) 빠진 점: 성능 · 타입 시스템 비교가 없습니다.\n3) 고친 답: 표에 "성능"과 "타입" 줄을 더하면 좋습니다.', md: '' },
+  {
+    kind: 'debate', round: 1, rounds: 2, at: now - 6 * 60e3,
+    answers: [
+      { id: 'chatgpt', name: 'ChatGPT', state: 'done', text: '[1라운드] DeepSeek의 "JS가 빠르다"는 작업에 따라 다릅니다. 수치 계산은 NumPy를 쓰는 Python이 더 빠를 때가 많습니다.' },
+      { id: 'deepseek', name: 'DeepSeek', state: 'done', text: '[1라운드] 순수 언어 실행 속도는 V8이 빠르지만, 라이브러리를 쓰면 달라진다는 지적은 맞습니다.' },
+      { id: 'perplexity', name: 'Perplexity', state: 'done', text: '[1라운드] 두 답 모두 일리가 있습니다. 처음 배울 언어는 성능보다 목적이 중요합니다.' },
+    ],
+  },
+  {
+    kind: 'debate', round: 2, rounds: 2, at: now - 3 * 60e3,
+    answers: [
+      { id: 'chatgpt', name: 'ChatGPT', state: 'done', text: '[2라운드] 결론: 성능은 작업에 따라 다르다는 데 동의가 모였습니다.' },
+      { id: 'deepseek', name: 'DeepSeek', state: 'done', text: '[2라운드] 동의합니다. 표의 "성능" 줄을 "작업에 따라 다름"으로 고칩니다.' },
+      { id: 'perplexity', name: 'Perplexity', state: 'timeout', text: '[2라운드] (시간 초과 — 지난 입장 그대로)' },
+    ],
+  },
+];
+
+module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, chatPage };

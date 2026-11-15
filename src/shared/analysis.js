@@ -197,5 +197,111 @@
     return total ? marks.filter((m) => m.changed).reduce((n, m) => n + m.text.length, 0) / total : 0;
   }
 
-  return { SECTIONS, sectionOf, parseAnalysis, sentences, similarity, diffMarks, changedRatio };
+  // ---------- 이견 → 관련 문단 (v0.26.0) ----------
+  // 이견 표에서 AI 이름을 누르면 그 AI 답변 중 쟁점과 가장 관련 있는 문단을 강조한다.
+  // 점수는 단순하게: 쟁점 글과 문단이 같이 쓴 낱말 수 (한국어 조사는 떼고 비교, 두 글자 이상 낱말만).
+  const PARTICLE_RE = /(으로|에서|에게|까지|부터|보다|처럼|이나|이며|이고|은|는|이|가|을|를|의|에|로|와|과|도|만)$/;
+  const STOP = new Set(['그리고', '하지만', '그러나', '또는', '있다', '없다', '있습니다', '없습니다', '합니다', 'the', 'and', 'for', 'with', 'that', 'this', 'are', 'is']);
+
+  /** 글 → 비교용 낱말 집합 (소문자, 조사 뗌, 두 글자 이상, 흔한 말 뺌) */
+  function tokens(text) {
+    const out = new Set();
+    for (const raw of String(text || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []) {
+      const w = /[가-힣]$/.test(raw) && raw.length > 2 ? raw.replace(PARTICLE_RE, '') : raw;
+      if (w.length >= 2 && !STOP.has(w)) out.add(w);
+    }
+    return out;
+  }
+
+  /** s[start, end)를 splitter로 나눈 조각들 → [{ start, end, text }] */
+  function pieces(s, start, end, splitter) {
+    const out = [];
+    const part = s.slice(start, end);
+    let at = 0;
+    for (const m of part.matchAll(splitter)) {
+      if (m.index > at) out.push({ start: start + at, end: start + m.index, text: part.slice(at, m.index) });
+      at = m.index + m[0].length;
+    }
+    if (at < part.length) out.push({ start: start + at, end, text: part.slice(at) });
+    return out;
+  }
+  const ROW_RE = /^\s*(\||[-*•]\s|\d+[.)]\s)/; // 표 줄 · 목록 줄
+
+  /**
+   * 답변을 문단으로 나눈다 → [{ start, end, text }] (빈 줄마다, 빈 줄이 없으면 줄마다). start · end는 글 안의 위치.
+   * 표 · 목록 덩어리는 줄마다 나눈다 (표 전체가 아니라 그 쟁점의 줄만 강조하려고)
+   */
+  function paragraphs(text) {
+    const s = String(text || '');
+    const blocks = pieces(s, 0, s.length, /\n[ \t]*\n/.test(s) ? /\n[ \t]*\n+/g : /\n+/g);
+    const out = [];
+    for (const b of blocks) {
+      const lines = b.text.split('\n');
+      if (lines.length > 1 && lines.every((l) => !l.trim() || ROW_RE.test(l))) out.push(...pieces(s, b.start, b.end, /\n+/g));
+      else out.push(b);
+    }
+    return out.filter((p) => /\S/.test(p.text));
+  }
+
+  /**
+   * 쟁점(query)과 관련 있는 문단 → [{ start, end, text, score }] (점수 높은 순, 최대 max개, 겹치는 낱말이 min개 이상만)
+   * score = 겹친 낱말 수 (짧은 문단이 유리하지 않게 문단 낱말 수로 나누지 않는다)
+   */
+  function relatedParagraphs(query, text, { max = 2, min = 1 } = {}) {
+    const q = tokens(query);
+    if (!q.size) return [];
+    return paragraphs(text)
+      .map((p, i) => {
+        let score = 0;
+        for (const w of tokens(p.text)) if (q.has(w)) score++;
+        return { ...p, score, i };
+      })
+      .filter((p) => p.score >= min)
+      .sort((x, y) => y.score - x.score || x.i - y.i)
+      .slice(0, max)
+      .map(({ i, ...p }) => p);
+  }
+
+  // ---------- 다시 분석 비교 (v0.26.0) ----------
+  const SAME_TOPIC = 0.5; // 쟁점 글이 이만큼 비슷하면(글자 bigram Dice 또는 낱말 겹침) 같은 쟁점으로 본다
+  function topicSimilarity(a, b) {
+    const x = tokens(a);
+    const y = tokens(b);
+    let both = 0;
+    for (const w of x) if (y.has(w)) both++;
+    const words = x.size && y.size ? (2 * both) / (x.size + y.size) : 0;
+    const chars = similarity(String(a).replace(/\d+/g, ''), String(b).replace(/\d+/g, ''));
+    return Math.max(words, chars);
+  }
+
+  /**
+   * 두 분석 결과(parseAnalysis의 ok 결과)의 이견 쟁점 비교 → { onlyA: [index], onlyB: [index], same: [[ia, ib]] }
+   * 한쪽에만 있는 쟁점을 화면이 강조한다.
+   */
+  function compareAnalyses(a, b) {
+    const A = a && a.ok ? a.disagreements : [];
+    const B = b && b.ok ? b.disagreements : [];
+    const usedB = new Set();
+    const same = [];
+    A.forEach((d, ia) => {
+      let best = -1;
+      let bestScore = SAME_TOPIC;
+      B.forEach((e, ib) => {
+        if (usedB.has(ib)) return;
+        const s = topicSimilarity(d.topic, e.topic);
+        if (s >= bestScore) {
+          best = ib;
+          bestScore = s;
+        }
+      });
+      if (best >= 0) {
+        usedB.add(best);
+        same.push([ia, best]);
+      }
+    });
+    const inA = new Set(same.map(([ia]) => ia));
+    return { onlyA: A.map((_, i) => i).filter((i) => !inA.has(i)), onlyB: B.map((_, i) => i).filter((i) => !usedB.has(i)), same };
+  }
+
+  return { SECTIONS, sectionOf, parseAnalysis, sentences, similarity, diffMarks, changedRatio, tokens, paragraphs, relatedParagraphs, compareAnalyses };
 });

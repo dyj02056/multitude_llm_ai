@@ -38,6 +38,11 @@ const SCENES = [
   { name: '20-local-llm-settings', page: 'app' },
   { name: '25-diag', page: 'app' },
   { name: '26-send-preview', page: 'app' },
+  { name: '27-handoff', page: 'app' },
+  { name: '28-debate', page: 'app' },
+  { name: '29-debate-result', page: 'app' },
+  { name: '30-analysis-compare', page: 'app' },
+  { name: '31-analysis-jump', page: 'app' },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];
 

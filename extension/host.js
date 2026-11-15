@@ -73,6 +73,7 @@
     historyMax: 500, // 기록 최대 개수 (v0.24.0)
     notify: { ...MLA.notify.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
     sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
+    retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
   };
   const savePrefs = () => store('prefs', prefs);
 
@@ -412,6 +413,7 @@
       autoUpdate: prefs.autoUpdate !== false,
       notify: { ...prefs.notify },
       sendPreview: prefs.sendPreview,
+      retryOnce: prefs.retryOnce,
       update: updateStatus,
       storage: { encrypted: false, extension: true }, // 크롬 확장은 OS 열쇠 보관소가 없어 암호화하지 않는다 (v0.22.1)
       rects,
@@ -529,6 +531,9 @@
     },
     log,
   });
+
+  /** 이어 묻기 · 토론에서 화면이 넘긴 패널 id 모양 검사 (v0.26.0) */
+  const okChainId = (v) => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(v);
 
   /** 첨부 파일 한도 검사 (화면에서도 막지만 한 번 더 본다) */
   function checkFiles(files) {
@@ -775,6 +780,26 @@
       if (!checkFiles(files)) return { id, ok: false, error: '첨부 파일이 한도를 넘었습니다' };
       return rounds.sendFollowUp(id, text, files, opts || {});
     },
+    // AI끼리 이어 묻기 (v0.26.0, Windows 앱 main/ipc/chain.js와 같은 검사): 넘기기 · 다시 보내기 · 다른 AI로 보내기 · 토론
+    handoff: async (from, to, intent) => {
+      if (!okChainId(from) || !okChainId(to) || !MLA.chain.INTENTS.includes(intent)) return { ok: false, error: MLA.i18n.t('handoff.errIntent') };
+      if (!hasPanelId(from) || !hasPanelId(to)) return { ok: false, error: MLA.i18n.t('handoff.errClosed') };
+      return rounds.handoff(from, to, intent);
+    },
+    resend: async (id) => (okChainId(id) && hasPanelId(id) ? rounds.resend(id) : { ok: false, error: MLA.i18n.t('handoff.errClosed') }),
+    sendElsewhere: async (from, to) =>
+      okChainId(from) && okChainId(to) && hasPanelId(to) ? rounds.sendElsewhere(from, to) : { ok: false, error: MLA.i18n.t('handoff.errClosed') },
+    debate: {
+      start: async (cfg) => {
+        const c = cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? cfg : {};
+        return rounds.startDebate({
+          participants: Array.isArray(c.participants) ? c.participants.filter(okChainId).slice(0, 6) : [],
+          rounds: Number.isInteger(c.rounds) && c.rounds >= 1 && c.rounds <= MLA.chain.MAX_ROUNDS ? c.rounds : undefined,
+          judge: okChainId(c.judge) ? c.judge : undefined,
+        });
+      },
+      stop: async () => rounds.stopDebate(),
+    },
     copyAnswer: async (id) => {
       const { text, copied, total } = await rounds.collectMarkdown(id);
       if (copied) await copyText(text);
@@ -862,12 +887,13 @@
       savePrefs();
       pushState();
     },
-    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview } = {}) => {
+    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce } = {}) => {
       if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
       // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0) — 아는 종류의 true/false만
       const notifyPatch = MLA.notify.cleanPatch(notify);
       if (notifyPatch) prefs.notify = MLA.notify.normalizePrefs({ ...prefs.notify, ...notifyPatch });
       if (typeof sendPreview === 'boolean') prefs.sendPreview = sendPreview;
+      if (typeof retryOnce === 'boolean') prefs.retryOnce = retryOnce; // 실패하면 한 번 다시 보내기 (v0.26.0)
       if (MAX_CHOICES.includes(historyMax)) {
         prefs.historyMax = historyMax;
         history.setMax(historyMax);
@@ -952,6 +978,7 @@
     prefs.historyMax = normalizeMax(prefs.historyMax);
     prefs.notify = MLA.notify.normalizePrefs(prefs.notify);
     prefs.sendPreview = prefs.sendPreview === true;
+    prefs.retryOnce = prefs.retryOnce !== false;
     history.load(await historyStore.load());
     history.setMax(prefs.historyMax);
     sideHistory.load(await load('history:side', []));

@@ -7,13 +7,14 @@
 //   - HTML(.html): 브라우저로 열면 밝은 보고서 모양. 인쇄(Ctrl+P)하면 PDF로도 저장됩니다.
 // HTML에는 바깥 파일(글꼴 · 그림 · 스크립트)을 하나도 쓰지 않고, 모든 글은 이스케이프해서 넣습니다 (답변 속 <script>가 실행되지 않게).
 (function (root, factory) {
-  const api = factory(root.MLA && root.MLA.analysis);
+  const api = factory(root.MLA && root.MLA.analysis, root.MLA && root.MLA.i18n);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.MLA = root.MLA || {}).exporter = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (analysis) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (analysis, i18n) {
   'use strict';
 
   const AN = analysis || require('./analysis');
+  const t = (i18n || require('./i18n')).t;
   const NO_TEXT = '(글 없이 첨부 파일만 보냄)';
 
   const fmtTime = (ms) =>
@@ -32,7 +33,9 @@
       const a = rec.answers?.[id];
       if (a?.text) answers.push({ name: a.name || id, text: a.md || a.text });
     }
-    const synth = (rec.synth || []).filter((s) => s.mode !== 'analysis').map((s) => ({ judge: s.judge, text: s.md || s.text || '' }));
+    const synth = (rec.synth || [])
+      .filter((s) => s.mode !== 'analysis')
+      .map((s) => ({ judge: s.judge, text: s.md || s.text || '', ...(s.mode === 'debate' ? { mode: 'debate' } : {}) }));
     const analyses = (rec.synth || []).filter((s) => s.mode === 'analysis');
     const last = analyses[analyses.length - 1];
     return {
@@ -43,11 +46,33 @@
       answers,
       synth,
       analysis: last ? { judge: last.judge, at: last.at, md: last.md || last.text || '', names: last.names || [] } : null,
+      chain: chainItems(rec.chain),
     };
   }
 
+  // ---------- 이어 묻기 · 토론 (v0.26.0) ----------
+
+  /** 기록의 chain → 문서용 [{ title, parts: [{ name, text }] }] (일어난 순서, 글이 없는 것은 뺀다) */
+  function chainItems(chain) {
+    const out = [];
+    for (const c of Array.isArray(chain) ? chain : []) {
+      if (!c || typeof c !== 'object') continue;
+      if (c.kind === 'debate') {
+        const parts = (Array.isArray(c.answers) ? c.answers : [])
+          .filter((x) => x && (x.md || x.text))
+          .map((x) => ({ name: String(x.name || x.id || ''), text: x.md || x.text }));
+        if (parts.length) out.push({ title: t('chain.debateRound', { round: c.round, rounds: c.rounds || c.round }), parts });
+      } else if (c.md || c.text) {
+        const what = c.kind === 'handoff' ? t(`handoff.intent.${c.intent}`) : t('chain.fallback');
+        out.push({ title: t('chain.title', { from: c.fromName || c.from, to: c.toName || c.to, what }), parts: [{ name: String(c.toName || c.to || ''), text: c.md || c.text }] });
+      }
+    }
+    return out;
+  }
+  const synthTitle = (s) => (s.mode === 'debate' ? t('chain.debateResult') : '종합');
+
   /** 답변 비교 화면 → 문서 (지금 열린 패널의 최신 답변과 이번 질문의 분석) */
-  function docFromCompare({ question, answers, analysis: an }) {
+  function docFromCompare({ question, answers, analysis: an, chain, debates }) {
     const q = question || '(질문 없음)';
     return {
       title: q.split('\n')[0].slice(0, 120),
@@ -55,8 +80,9 @@
       question: q,
       files: [],
       answers: (answers || []).filter((a) => a.text).map((a) => ({ name: a.name, text: a.md || a.text })),
-      synth: [],
+      synth: (debates || []).map((s) => ({ judge: s.judge, text: s.md || s.text || '', mode: 'debate' })),
       analysis: an ? { judge: an.judge, at: an.at, md: an.md || an.text || '', names: an.names || [] } : null,
+      chain: chainItems(chain),
     };
   }
 
@@ -68,7 +94,13 @@
     if (doc.files.length) parts.push('', `첨부: ${doc.files.map((f) => `${f.name} (${fmtSize(f.size || 0)})`).join(' · ')}`);
     if (doc.analysis) parts.push('', `## 분석 (판정 ${doc.analysis.judge})`, '', doc.analysis.md);
     for (const a of doc.answers) parts.push('', `## ${a.name}`, '', a.text);
-    for (const s of doc.synth) parts.push('', `## 종합 (${s.judge})`, '', s.text);
+    for (const s of doc.synth) parts.push('', `## ${synthTitle(s)} (${s.judge})`, '', s.text);
+    const chain = doc.chain || [];
+    if (chain.length) parts.push('', `## ${t('chain.section')}`);
+    for (const c of chain) {
+      parts.push('', `### ${c.title}`);
+      for (const p of c.parts) parts.push('', ...(c.parts.length > 1 ? [`#### ${p.name}`, ''] : []), p.text);
+    }
     return `${parts.join('\n')}\n`;
   }
 
@@ -222,7 +254,13 @@ footer { margin-top: 30px; color: #9aa1b1; font-size: 12px; text-align: center; 
       files,
       doc.analysis ? analysisHtml(doc.analysis) : '',
       ...doc.answers.map((a) => `<h2>${esc(a.name)}</h2>\n<div class="answer">${mdToHtml(a.text)}</div>`),
-      ...doc.synth.map((s) => `<h2>종합 <small>${esc(s.judge)}</small></h2>\n<div class="answer">${mdToHtml(s.text)}</div>`),
+      ...doc.synth.map((s) => `<h2>${esc(synthTitle(s))} <small>${esc(s.judge)}</small></h2>\n<div class="answer">${mdToHtml(s.text)}</div>`),
+      (doc.chain || []).length ? `<h2>${esc(t('chain.section'))}</h2>` : '',
+      ...(doc.chain || []).map(
+        (c) =>
+          `<h3>${esc(c.title)}</h3>\n` +
+          c.parts.map((p) => `${c.parts.length > 1 ? `<h4>${esc(p.name)}</h4>\n` : ''}<div class="answer">${mdToHtml(p.text)}</div>`).join('\n'),
+      ),
       `<footer>Multitude LLM에서 내보냄 · ${esc(fmtTime(Date.now()))}</footer>`,
     ]
       .filter(Boolean)

@@ -55,6 +55,20 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 
 ![Synthesis](../screenshots/03-synthesis.png)
 
+### Hand-offs and debate (v0.26.0)
+
+- **Hand-off**: press **→** in a panel header. A bar appears under the panel: pick what to ask — **검토** (review: errors and omissions), **반박** (counter-argue) or **이어서** (continue: go deeper, next steps) — and click the AI that should receive it. Only that AI gets the original question plus this panel's latest answer. The reply is kept in history as a hand-off.
+- **Debate**: press **토론** (Debate) next to the synthesis controls. Pick **2–3** participants, **1–3** rounds (default 2) and a judge AI (default: the synthesis target), then **시작** (Start). Each round every participant gets the other participants' latest answers and is asked to rebut and refine; at the end the judge writes agreements, remaining disagreements and a final answer. The debate starts from the answers to the current question, so send a question first.
+- Progress shows under the input box (`Debate round 1/2 — waiting for …`); **토론 멈추기** (Stop debate) ends it at any time (finished rounds are kept). A notification is shown when it ends.
+- Results appear in **Compare › Hand-offs · Debate** and in **History** (expand the hand-offs line), and are included in MD/HTML exports.
+- A debate sends one extra message per participant per round (2 rounds × 3 AIs = 6, plus 1 for the judge). Use fewer rounds on services with tight usage limits.
+
+![Hand-off bar, send again and send-to-another-AI suggestion](../screenshots/27-handoff.png)
+
+![Debate setup](../screenshots/28-debate.png)
+
+![Compare › Hand-offs · Debate](../screenshots/29-debate-result.png)
+
 ## 5. Compare answers
 
 **cmp** (`Ctrl+Shift+D`) shows the last question and each AI's latest answer in columns. Each column can be copied as Markdown.
@@ -64,12 +78,22 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 
 | Section | Korean | Contents |
 |---|---|---|
-| Disagreements | `이견` | One row per issue: each AI's position and a verdict. Click a cell to jump to that answer |
+| Disagreements | `이견` | One row per issue: each AI's position and a verdict. Click a cell to jump to that answer; the paragraph (or table/list line) most related to the issue is highlighted (v0.26.0) |
 | Agreements | `공통 의견` | What most AIs agree on |
 | Weak claims | `근거 부족` | Claims without support, by AI |
 | Final answer | `최종 답변` | The merged answer, with a copy button |
 
 ![Analysis](../screenshots/13-analysis.png)
+
+Run the analysis again (also with another judge) and earlier analyses are kept: with two or more, pick two to see them **side by side**; issues found by only one of them are marked `이쪽에만` (only here) (v0.26.0).
+
+![Two analyses side by side](../screenshots/30-analysis-compare.png)
+
+### Retry and fallback (v0.26.0)
+
+- If sending to a panel fails, the app tries **once more** after 1.5 s (`?` › **실패하면 한 번 다시 보내기**, on by default). Usage limits and closed panels are not retried.
+- Timeouts and "no answer" are **not** re-sent automatically (the site may still be answering); a **다시 보내기** (Send again) button appears under the panel instead.
+- When a usage limit is detected, the panel asks **다른 AI로 보낼까요?** (send to another AI?) with buttons for open panels that are not limited, fastest first by your stats. Nothing is sent until you click; the chosen AI gets the same text and attachments.
 
 ## 6. History and export
 

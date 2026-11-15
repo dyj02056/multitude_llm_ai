@@ -26,6 +26,7 @@ function renderSynth() {
   else select.value = state.synthTarget;
   $('#autoSynth').checked = !!state.autoSynth;
   $('#synthBtn').disabled = open.length < 2;
+  $('#debateBtn').disabled = open.length < 2; // 토론은 패널이 2개 이상일 때 (v0.26.0)
 }
 
 $('#synthTarget').addEventListener('change', (e) => host.setSynth({ target: e.target.value }));
@@ -34,6 +35,7 @@ $('#synthBtn').addEventListener('click', () => host.runSynth($('#synthTarget').v
 
 // 종합 요청 진행 상황(보내는 중·보냄·실패)을 입력창 아래 안내 글로 보여 줍니다.
 host.on('synth:status', ({ state: st, judge, count, error, cause, mode }) => {
+  if (mode === 'debate') return; // 토론 진행은 debate-ui.js가 보여 준다 (v0.26.0)
   const prefix = cause === 'auto' ? '자동 종합: ' : '';
   const what = mode === 'analysis' ? '일치 · 이견 분석' : '종합';
   $('#sendHint').textContent =
@@ -402,6 +404,7 @@ host.on('state', (next) => {
     } else renderDiagModal();
   }
   window.onPreviewState?.(); // 보내기 전 미리보기 창: 그 화면을 떠났으면 보내지 않고 닫는다 (send-preview.js)
+  window.onDebateState?.(); // 토론 설정 창도 같은 규칙 (debate-ui.js, v0.26.0)
   if (state.chatView === 'help') renderUpdate();
   // 툴바 이름 뒤의 "~/chat" 같은 경로 = 지금 보는 화면
   $('.brand').dataset.path = state.mode === 'chat' ? (state.chatView === 'panels' || state.chatView === 'dialog' ? 'chat' : state.chatView) : state.mode;

@@ -20,6 +20,14 @@ contextBridge.exposeInMainWorld('host', {
   // opts: { question(기록·종합용 질문), textById({ 서비스 id: 그 서비스에 보낼 글 }) }
   sendPrompt: (text, targets, files, opts) => ipcRenderer.invoke('prompt:send', { text, targets, files, opts }),
   sendFollowUp: (id, text, files, opts) => ipcRenderer.invoke('prompt:followup', { id, text, files, opts }),
+  // AI끼리 이어 묻기 (v0.26.0): 한 패널의 답을 다른 패널에 넘기기(review · counter · continue) · 다시 보내기 · 다른 AI로 보내기 · 토론
+  handoff: (from, to, intent) => ipcRenderer.invoke('chain:handoff', from, to, intent),
+  resend: (id) => ipcRenderer.invoke('prompt:resend', id),
+  sendElsewhere: (from, to) => ipcRenderer.invoke('prompt:elsewhere', from, to),
+  debate: {
+    start: (cfg) => ipcRenderer.invoke('debate:start', cfg),
+    stop: () => ipcRenderer.invoke('debate:stop'),
+  },
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
   setView: (value) => ipcRenderer.send('view:set', value),
   getAnswers: () => ipcRenderer.invoke('answers:get'),

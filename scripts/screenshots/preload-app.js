@@ -34,6 +34,14 @@ const answers = {
   answers: selected.filter((id) => S.ANSWERS[id]).map((id) => ({ id, name: svc(id).name, color: svc(id).color, text: S.ANSWERS[id], md: S.ANSWERS[id] })),
   analysis: { judge: 'Claude', at: now, text: S.ANALYSIS_MD, md: S.ANALYSIS_MD, mode: 'analysis', names: ['Gemini', 'ChatGPT', 'DeepSeek', 'Perplexity'] },
 };
+// v0.26.0 장면: 다시 분석(판정 AI를 바꿔 두 번) · 이어 묻기 · 토론
+const NAMES4 = ['Gemini', 'ChatGPT', 'DeepSeek', 'Perplexity'];
+const analysis2 = { judge: 'Gemini', at: now - 10 * 60e3, text: S.ANALYSIS_MD2, md: S.ANALYSIS_MD2, mode: 'analysis', names: NAMES4 };
+if (scene === '30-analysis-compare') answers.analyses = [analysis2, answers.analysis];
+if (scene === '29-debate-result') {
+  answers.chain = S.CHAIN(now);
+  answers.debates = [{ judge: 'Gemini', at: now - 60e3, text: S.DEBATE_RESULT, md: S.DEBATE_RESULT, mode: 'debate', names: ['ChatGPT', 'DeepSeek', 'Perplexity'], rounds: 2 }];
+}
 const record = {
   id: 'r1',
   at: now - 5 * 60e3,
@@ -43,7 +51,8 @@ const record = {
   synth: [answers.analysis],
   answers: Object.fromEntries(answers.answers.map((a, i) => [a.id, { text: a.text, md: a.md, state: 'done', chars: a.text.length, firstMs: 2100 + i * 900, doneMs: 9000 + i * 2500 }])),
 };
-const item = (id, q, mins, n) => ({ id, at: now - mins * 60e3, question: q, answered: n, targets: 4, files: 0, synth: id === 'r1' ? 1 : 0, analysis: id === 'r1' ? 1 : 0 });
+record.chain = S.CHAIN(now); // 기록 화면 아래 이어 묻기 · 토론 (v0.26.0)
+const item = (id, q, mins, n) => ({ id, at: now - mins * 60e3, question: q, answered: n, targets: 4, files: 0, synth: id === 'r1' ? 1 : 0, analysis: id === 'r1' ? 1 : 0, chain: id === 'r1' ? 3 : 0 });
 
 // 서비스 화면 상태 표 예시: 셋은 정상, DeepSeek은 답변 영역을 못 찾음 (실제로는 shared/diag.js가 채움)
 const ok = { input: 'ok', send: 'ok', response: 'ok', level: 'ok', message: '', hint: '', notes: [], limit: null, limitHint: '' };
@@ -91,7 +100,7 @@ function push() {
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b' },
     autoUpdate: true,
-    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false,
+    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true,
     update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
     storage: { encrypted: true },
     rects: rs,
@@ -106,6 +115,10 @@ window.host = {
   sendPrompt: async (_t, targets) => targets.map((id) => ({ id, ok: true })),
   sendFollowUp: async (id) => ({ id, ok: true }),
   copyAnswer: async () => ({ copied: 1, total: 1 }),
+  handoff: async () => ({ ok: true }),
+  resend: async () => ({ ok: true }),
+  sendElsewhere: async () => ({ ok: true }),
+  debate: { start: async () => ({ ok: true }), stop: async () => ({ ok: true }) },
   setView: (v) => ((chatView = v), push()),
   getAnswers: async () => answers,
   getAnswer: async (id) => answers.answers.find((a) => a.id === id) || null,
@@ -171,6 +184,39 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (scene === '14-diff-highlight') click('#diffToggle');
   }
   if (scene === '05-history') click('#historyBtn');
+  if (scene === '27-handoff') {
+    // 넘기기 바(Gemini) · 시간 초과 [다시 보내기](DeepSeek) · 사용 한도 → 다른 AI로(Perplexity)
+    for (const id of ['gemini', 'chatgpt']) emit('panel:status', { id, answer: 'done', chars: S.ANSWERS[id].length });
+    emit('panel:status', { id: 'deepseek', answer: 'timeout' });
+    emit('panel:status', { id: 'perplexity', diag: { ...DIAG.perplexity, limit: 'You have reached your daily limit' } });
+    await sleep(100);
+    document.querySelector('.panel .handoff-btn')?.click();
+    await sleep(50);
+    const sel = document.querySelector('.offer-intent');
+    if (sel) sel.value = 'counter';
+  }
+  if (scene === '28-debate') {
+    click('#debateBtn');
+    await sleep(400);
+  }
+  if (['29-debate-result', '30-analysis-compare', '31-analysis-jump'].includes(scene)) {
+    click('#compareBtn');
+    await sleep(500);
+    if (scene === '29-debate-result') click('#compareTabs button[data-ctab="chain"]');
+    if (scene === '30-analysis-compare') click('#compareTabs button[data-ctab="analysis"]');
+    if (scene === '29-debate-result') {
+      await sleep(100);
+      emit('synth:status', { mode: 'debate', state: 'done', judge: 'Gemini', rounds: 2 });
+    }
+    if (scene === '31-analysis-jump') {
+      // 이견 표에서 DeepSeek의 성능 칸을 누른 모습 → 답변 탭에서 관련 문단 강조
+      if ($('#diffToggle').classList.contains('active')) click('#diffToggle'); // 지난 장면의 차이 강조가 남아 있으면 끈다
+      click('#compareTabs button[data-ctab="analysis"]');
+      await sleep(200);
+      [...document.querySelectorAll('.an-table td.an-jump')].find((td) => td.textContent.includes('V8'))?.click();
+      await sleep(600);
+    }
+  }
   if (scene === '25-diag') {
     // 머리줄의 ⚠ 화면이 바뀐 것 같음 → 자가진단 창
     const badge = [...document.querySelectorAll('.panel-head .diag-badge')].find((b) => !b.hidden && b.textContent.includes('화면이'));

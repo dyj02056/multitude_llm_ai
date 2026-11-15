@@ -29,14 +29,23 @@ const saveCompareView = () => {
 
 /** 답변 비교 화면: 마지막 질문과 각 AI의 최신 답변(또는 분석 결과)을 보여 줍니다. */
 async function renderCompare() {
-  const { question, answers, analysis } = await host.getAnswers();
+  const { question, answers, analysis, analyses, chain, debates } = await host.getAnswers();
   $('#compareQuestion').textContent = question || '(아직 공통 입력창으로 보낸 질문이 없습니다)';
   compareView.answers = answers;
   compareView.analysis = analysis || null;
+  compareView.analyses = analyses || []; // 이번 질문의 분석 전부 (v0.26.0 다시 분석 비교)
+  compareView.chain = chain || []; // 이어 묻기 · 토론 (v0.26.0)
+  compareView.debates = debates || [];
   compareView.question = question;
   renderCompareTabs();
   renderCompareAnswers();
   renderCompareAnalysis();
+  renderCompareChain();
+}
+
+/** 이어 묻기 · 토론 탭 (v0.26.0, chain-views.js chainBlock) */
+function renderCompareChain() {
+  $('#chainView').replaceChildren(chainBlock(compareView.chain || [], compareView.debates || []));
 }
 
 function renderCompareTabs() {
@@ -49,6 +58,8 @@ function renderCompareTabs() {
   const n = compareView.analysis ? AN.parseAnalysis(compareView.analysis.md || compareView.analysis.text, { names: compareView.analysis.names }) : null;
   const tab = document.querySelector('#compareTabs [data-ctab="analysis"]');
   tab.textContent = n?.ok ? `분석 · 이견 ${n.disagreements.length}` : '분석';
+  const count = (compareView.chain || []).length + (compareView.debates || []).length;
+  document.querySelector('#compareTabs [data-ctab="chain"]').textContent = count ? t('compare.chainTabCount', { n: count }) : t('compare.chainTab');
 }
 
 /** 답변 탭: 칸마다 답변. 차이 강조를 켜면 기준 답변(diffBase)과 다른 문장을 표시합니다. */
@@ -106,11 +117,17 @@ function renderCompareAnalysis() {
     );
     return box.replaceChildren(...pending, empty);
   }
+  // 다시 분석했으면(분석 2개 이상) 두 분석을 골라 나란히 비교할 수 있다 (v0.26.0, chain-views.js)
+  const list = compareView.analyses?.length ? compareView.analyses : [compareView.analysis];
+  if (list.length >= 2) return box.replaceChildren(...pending, analysisCompareBlock(list, { onJump: jumpToAnswer }));
   box.replaceChildren(...pending, analysisBlock(compareView.analysis, { onJump: jumpToAnswer }));
 }
 
-/** 이견 표에서 AI 이름을 누르면: 답변 탭으로 가서 그 AI 칸으로 이동하고 잠깐 빛나게 */
-function jumpToAnswer(name) {
+/**
+ * 이견 표에서 AI 이름을 누르면: 답변 탭으로 가서 그 AI 칸으로 이동하고 잠깐 빛나게.
+ * query(쟁점 · 그 AI의 입장 글)가 있으면 그 답변에서 가장 관련 있는 문단을 강조하고 그 문단으로 스크롤 (v0.26.0)
+ */
+function jumpToAnswer(name, query) {
   const svc = state.services.find((s) => s.name === name);
   if (!svc) return;
   compareView.tab = 'answers';
@@ -119,7 +136,13 @@ function jumpToAnswer(name) {
   const idx = compareView.answers.findIndex((a) => a.id === svc.id);
   const col = $('#compareCols').children[idx];
   if (!col) return;
-  col.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  flashColumn(col, compareView.answers[idx]?.text, query);
+}
+
+/** 답변 칸으로 이동 · 잠깐 빛나기 · 관련 문단 강조 (비교 화면 · 기록 화면 공용) */
+function flashColumn(col, text, query) {
+  const hit = query && text ? highlightRelated(col, text, query) : null;
+  (hit || col).scrollIntoView({ block: hit ? 'center' : 'nearest', inline: 'center', behavior: 'smooth' });
   col.classList.remove('jump-flash');
   void col.offsetWidth; // 애니메이션을 다시 시작하려고
   col.classList.add('jump-flash');
@@ -127,9 +150,10 @@ function jumpToAnswer(name) {
 
 /**
  * 분석 결과 하나를 그립니다 (비교 화면 · 기록 화면 공용).
- * entry: { judge, at, md, text, names }, onJump(name): 이견 · 근거 부족의 AI 이름을 눌렀을 때
+ * entry: { judge, at, md, text, names }, onJump(name, query): 이견 · 근거 부족의 AI 이름을 눌렀을 때 (query: 관련 문단을 찾을 글)
+ * unique: 다시 분석 비교에서 이 분석에만 있는 이견 쟁점 번호(Set) — 그 줄을 강조 (v0.26.0)
  */
-function analysisBlock(entry, { onJump } = {}) {
+function analysisBlock(entry, { onJump, unique } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'analysis';
   const raw = entry.md || entry.text || '';
@@ -158,8 +182,8 @@ function analysisBlock(entry, { onJump } = {}) {
   }
 
   const colorOf = (name) => state.services.find((s) => s.name === name)?.color || 'var(--muted)';
-  const nameChip = (name) => {
-    const b = button(name, `${name} 답변으로 이동`, () => onJump?.(name));
+  const nameChip = (name, query) => {
+    const b = button(name, `${name} 답변으로 이동`, () => onJump?.(name, query));
     b.className = 'an-chip';
     b.style.setProperty('--svc', colorOf(name));
     b.disabled = !onJump || !state.services.some((s) => s.name === name);
@@ -207,7 +231,7 @@ function analysisBlock(entry, { onJump } = {}) {
     const thead = document.createElement('thead');
     thead.append(tr);
     const tbody = document.createElement('tbody');
-    for (const d of res.disagreements) {
+    res.disagreements.forEach((d, di) => {
       const row = document.createElement('tr');
       const td = (text, cls) => {
         const c = document.createElement('td');
@@ -215,26 +239,31 @@ function analysisBlock(entry, { onJump } = {}) {
         c.textContent = text;
         return c;
       };
-      row.append(td(d.topic, 'an-topic'));
+      const topic = td(d.topic, 'an-topic');
+      if (unique?.has(di)) {
+        row.classList.add('an-unique'); // 다시 분석 비교: 이 분석에만 있는 쟁점
+        topic.append(' ', span('an-unique-badge', t('analysis.onlyHere')));
+      }
+      row.append(topic);
       if (hasText) {
         for (const name of cols) {
           const p = d.positions.find((x) => x.name === name);
           const c = td(p?.text && p.text !== '-' ? p.text : '—', p?.text && p.text !== '-' ? '' : 'an-blank');
           if (p && onJump && state.services.some((s) => s.name === name)) {
             c.classList.add('an-jump');
-            c.title = `${name} 답변으로 이동`;
-            c.addEventListener('click', () => onJump(name));
+            c.title = t('analysis.jumpTitle', { name });
+            c.addEventListener('click', () => onJump(name, `${d.topic} ${p.text || ''}`)); // 쟁점 + 그 AI 입장으로 관련 문단 찾기
           }
           row.append(c);
         }
       } else {
         const c = document.createElement('td');
-        c.append(...d.positions.map((p) => nameChip(p.name)));
+        c.append(...d.positions.map((p) => nameChip(p.name, d.topic)));
         row.append(c);
       }
       row.append(td(d.verdict || '—', d.verdict ? 'an-verdict' : 'an-blank'));
       tbody.append(row);
-    }
+    });
     table.append(thead, tbody);
     const scroller = document.createElement('div');
     scroller.className = 'an-table-wrap';
@@ -247,7 +276,7 @@ function analysisBlock(entry, { onJump } = {}) {
   weak.append(
     res.unsupported.length
       ? list(res.unsupported, (li, u) => {
-          if (u.name) li.append(nameChip(u.name), ' ');
+          if (u.name) li.append(nameChip(u.name, u.text), ' ');
           li.append(u.text);
         })
       : span('muted-label', '근거가 부족하다고 짚은 내용이 없습니다'),
@@ -310,7 +339,8 @@ function answerColumn(a) {
 }
 
 // 내보내기: 지금 비교 화면의 질문 · 답변 · 이번 질문의 분석
-const compareDoc = () => EX.docFromCompare({ question: compareView.question, answers: compareView.answers, analysis: compareView.analysis });
+const compareDoc = () =>
+  EX.docFromCompare({ question: compareView.question, answers: compareView.answers, analysis: compareView.analysis, chain: compareView.chain, debates: compareView.debates });
 $('#compareExportMd').addEventListener('click', () => exportDoc(compareDoc(), 'md', $('#compareQuestion')));
 $('#compareExportHtml').addEventListener('click', () => exportDoc(compareDoc(), 'html', $('#compareQuestion')));
 
@@ -373,6 +403,7 @@ async function renderHistoryList() {
       const meta =
         `${fmtTime(it.at)} · 답변 ${it.answered}/${it.targets}` +
         `${it.files ? ` · 첨부 ${it.files}` : ''}${it.synth ? ` · 종합 ${it.synth}` : ''}${it.analysis ? ` · 분석 ${it.analysis}` : ''}` +
+        `${it.chain ? ` · ${t('history.chainCount', { n: it.chain })}` : ''}${it.debate ? ` · ${t('history.debateCount', { n: it.debate })}` : ''}` +
         `${it.source === 'side' ? ' · side' : ''}`; // 사이드탭에서 보낸 질문 (v0.21.0)
       row.append(span('history-q', it.question || NO_TEXT), span('history-meta', meta));
       row.addEventListener('click', () => {
@@ -449,23 +480,31 @@ async function renderHistoryDetail() {
     };
   });
   for (const sy of rec.synth) {
-    if (sy.mode !== 'analysis') columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text, md: sy.md });
+    if (sy.mode === 'debate') columns.push({ name: t('chain.debateResultCol', { judge: sy.judge }), color: 'var(--ok)', text: sy.text, md: sy.md });
+    else if (sy.mode !== 'analysis') columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text, md: sy.md });
   }
   cols.style.gridTemplateColumns = `repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))`;
   cols.replaceChildren(...columns.map(answerColumn));
   // 분석 결과(최신 것)는 답변 칸 위에 표로. AI 이름을 누르면 그 답변 칸으로 이동
   const analyses = rec.synth.filter((sy) => sy.mode === 'analysis');
-  const jump = (name) => {
+  const jump = (name, query) => {
     const idx = columns.findIndex((c) => c.name === name);
     const col = cols.children[idx];
-    if (!col) return;
-    col.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-    col.classList.remove('jump-flash');
-    void col.offsetWidth;
-    col.classList.add('jump-flash');
+    if (col) flashColumn(col, columns[idx].text, query);
   };
-  const extra = analyses.length ? [analysisBlock(analyses[analyses.length - 1], { onJump: jump })] : [];
-  box.replaceChildren(head, question, ...extra, cols);
+  // 분석이 2개 이상이면 둘을 골라 나란히 비교 (v0.26.0)
+  const extra = analyses.length >= 2 ? [analysisCompareBlock(analyses, { onJump: jump })] : analyses.length ? [analysisBlock(analyses[0], { onJump: jump })] : [];
+  // 이어 묻기 · 토론 (v0.26.0): 답변 칸 아래에 일어난 순서대로
+  const chain = Array.isArray(rec.chain) ? rec.chain : [];
+  // 답변 칸을 가리지 않게 접어 둔다 — 누르면 펼침
+  const after = [];
+  if (chain.length) {
+    const det = document.createElement('details');
+    det.className = 'history-chain';
+    det.append(Object.assign(document.createElement('summary'), { textContent: t('compare.chainTabCount', { n: chain.length }) }), chainBlock(chain, []));
+    after.push(det);
+  }
+  box.replaceChildren(head, question, ...extra, cols, ...after);
 }
 
 let searchTimer = null;
@@ -507,6 +546,7 @@ $('#historyMaxSelect').addEventListener('change', async (e) => {
 });
 
 $('#sendPreviewToggle').addEventListener('change', (e) => host.setSettings({ sendPreview: e.target.checked }));
+$('#retryOnceToggle').addEventListener('change', (e) => host.setSettings({ retryOnce: e.target.checked })); // v0.26.0
 for (const box of document.querySelectorAll('[data-notify]')) {
   box.addEventListener('change', () => host.setSettings({ notify: { [box.dataset.notify]: box.checked } }));
 }
@@ -644,6 +684,7 @@ function renderSettings() {
   maxSel.value = String(state.historyMax);
   // 보내기 전 미리보기 · OS 알림 종류별 켜기 (v0.25.0)
   $('#sendPreviewToggle').checked = !!state.sendPreview;
+  $('#retryOnceToggle').checked = state.retryOnce !== false;
   for (const box of document.querySelectorAll('[data-notify]')) box.checked = state.notify?.[box.dataset.notify] !== false;
 }
 

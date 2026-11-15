@@ -347,8 +347,6 @@ body[data-view="compare"] #panels { display: none !important; }
 /* ---------- 답변 비교: 탭 · 차이 강조 · 분석 (v0.11.0) ----------
    [쉽게 말하면] 비교 화면 왼쪽 위 "답변 | 분석" 탭, 차이 강조(기준과 다른 문장에 노란 표시),
    분석 탭의 이견 표 · 공통 의견 · 근거 부족 · 최종 답변 칸입니다. */
-#compare[data-ctab="answers"] .only-ctab-analysis,
-#compare[data-ctab="analysis"] .only-ctab-answers { display: none !important; }
 #compareTabs { flex: none; }
 #compareTabs button { padding: 2px 10px; }
 .diff-tools { display: inline-flex; gap: 6px; align-items: center; }
@@ -925,3 +923,59 @@ body[data-view="compress"] #panels { display: none !important; }
 .local-settings input { flex: 1; margin-left: 10px; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 3px 8px; font-weight: 400; user-select: text; }
 .local-settings select { flex: 1; }
 .local-settings[hidden] { display: none; }
+
+/* ---------- 이어 묻기 · 토론 · 다시 보내기 · 분석 비교 (v0.26.0) ----------
+   [쉽게 말하면] 패널 머리줄의 → 넘기기, 패널 아래 제안 바(넘기기 · 다시 보내기 · 다른 AI로), 토론 설정 창,
+   비교 화면의 "이어 묻기 · 토론" 탭, 이견 표에서 고른 AI 답변의 관련 문단 강조, 두 분석 나란히 보기입니다. */
+.panel-head .handoff-btn { font-weight: 700; }
+.panel.has-offer .change-bar:not(.offer-bar) { display: none; }
+.offer-bar { border-top-color: var(--accent); z-index: 2; }
+.offer-bar .cb-icon { color: var(--accent-text); }
+.offer-bar .cb-text { flex: none; cursor: default; }
+.offer-bar .offer-intent { flex: none; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11.5px; }
+.offer-bar .offer-target { box-shadow: inset 2px 0 0 var(--svc, var(--border)); }
+.offer-bar .cb-close { margin-left: auto; }
+.status[data-state="send-retrying"] { color: var(--warn-text); }
+#debateStop[hidden], #debateBtn[hidden] { display: none; }
+.modal-box.debate-box { width: min(560px, 94vw); height: auto; max-height: 88vh; }
+.debate-field { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.debate-field > .muted-label { min-width: 90px; }
+.debate-field select { background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; }
+.debate-parts { display: flex; gap: 6px; flex-wrap: wrap; }
+.debate-part { padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); box-shadow: inset 2px 0 0 var(--svc); }
+.debate-part:has(input:disabled) { opacity: .5; }
+.debate-question { margin: 0; padding: 6px 10px; border-left: 2px solid var(--ok); color: var(--text-2); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+#debateStatus[data-kind="warn"] { color: var(--warn-text); }
+#compare:not([data-ctab="answers"]) .only-ctab-answers,
+#compare:not([data-ctab="analysis"]) .only-ctab-analysis,
+#compare:not([data-ctab="chain"]) .only-ctab-chain { display: none !important; }
+.chain-view { flex: 1; min-height: 0; overflow: auto; }
+.chain { display: flex; flex-direction: column; gap: 8px; }
+.history-chain { flex: none; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 10px; }
+.history-chain[open] { max-height: 45%; overflow: auto; }
+.history-chain > summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--bright); padding: 2px 0; }
+.history-chain .chain-title { display: none; }
+.history-chain .chain { padding: 4px 0 6px; }
+.chain-title { margin: 4px 0 0; font-size: 12.5px; color: var(--bright); }
+.chain-title::before { content: "## "; color: var(--muted); font-weight: 400; }
+.chain-card { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--r-sm); }
+.chain-card.chain-debate { border-left-color: var(--warn); }
+.chain-card.chain-result { border-left-color: var(--ok); }
+.chain-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.chain-kind { font-weight: 700; color: var(--bright); }
+.chain-route { color: var(--text-2); }
+.chain-answer { border-left: 2px solid var(--svc, var(--border)); padding-left: 8px; }
+.chain-answer summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; }
+.chain-answer summary .name { font-weight: 700; }
+.chain-answer summary button { margin-left: auto; padding: 0 8px; font-size: 11.5px; }
+.chain-body { white-space: pre-wrap; word-break: break-word; line-height: 1.6; font-size: 12.5px; padding: 6px 0 2px; max-height: 360px; overflow: auto; user-select: text; }
+.compare-body mark.an-hit { background: var(--accent-soft); color: inherit; outline: 1px solid rgba(88, 166, 255, .55); border-radius: 2px; }
+.an-table tr.an-unique td { background: var(--warn-soft); }
+.an-unique-badge { font-size: 10.5px; font-weight: 400; padding: 0 5px; border-radius: var(--r-sm); border: 1px solid rgba(210, 153, 34, .55); color: var(--warn-text); white-space: nowrap; }
+.an-compare { display: flex; flex-direction: column; gap: 8px; }
+.an-compare-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.an-compare-bar select { background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; font-size: 11.5px; max-width: 280px; }
+.an-compare-bar button { padding: 1px 8px; font-size: 11.5px; }
+.an-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.an-compare-grid .analysis-grid { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1100px) { .an-compare-grid { grid-template-columns: minmax(0, 1fr); } }

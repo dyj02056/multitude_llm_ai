@@ -114,6 +114,7 @@ let prefs = {
   historyMax: 500, // 기록 최대 개수 (v0.24.0, 100 · 500 · 1000 · 2000)
   notify: { ...notifyCore.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
   sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
+  retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
 };
 
 /**
@@ -135,6 +136,7 @@ function loadPrefs() {
   prefs.historyMax = normalizeMax(prefs.historyMax);
   prefs.notify = notifyCore.normalizePrefs(prefs.notify);
   prefs.sendPreview = prefs.sendPreview === true;
+  prefs.retryOnce = prefs.retryOnce !== false;
 }
 
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
@@ -526,6 +528,7 @@ function pushState() {
     autoUpdate: prefs.autoUpdate !== false,
     notify: { ...prefs.notify },
     sendPreview: prefs.sendPreview,
+    retryOnce: prefs.retryOnce,
     update: updater?.status() || null,
     storage: { encrypted: secure.store().available() }, // 로컬 데이터 암호화 (v0.22.1)
     rects: rects.panels,
@@ -846,6 +849,7 @@ require('./ipc/history').register({
   roundHistoryId: () => roundHistoryId,
   win: () => win,
 });
+require('./ipc/chain').register({ ipcMain, rounds: () => rounds, hasPanel: hasPanelId }); // 이어 묻기 · 토론 (v0.26.0)
 require('./ipc/project').register({
   ipcMain,
   project,

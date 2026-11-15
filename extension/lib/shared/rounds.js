@@ -8,15 +8,20 @@
 // 원하면 "종합"(다른 AI들의 답을 모아 한 AI에게 정리시키기)까지 하는 "진행자"입니다.
 // 패널을 실제로 다루는 방법(adapter, 아래 a)은 Windows 앱과 크롬 확장이 각자 넘겨줍니다.
 (function (root, factory) {
-  const api = factory(root.MLA && root.MLA.synth, root.MLA && root.MLA.services, root.MLA && root.MLA.sendPlan);
+  const M = root.MLA || {};
+  const api = factory(M.synth, M.services, M.sendPlan, M.chain, M.retry, M.debate, M.i18n);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.MLA = root.MLA || {}).rounds = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services, sendPlan) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services, sendPlan, chainLib, retryLib, debateLib, i18n) {
   'use strict';
 
   const { buildSynthPrompt, analysisNames } = synth || require('./synth');
   const { uploadOf, fileKind } = services || require('./services');
   const { planSend } = sendPlan || require('./send-plan');
+  const { buildHandoffPrompt, INTENTS } = chainLib || require('./chain');
+  const { retryDecision } = retryLib || require('./retry');
+  const { createDebate } = debateLib || require('./debate');
+  const t = (i18n || require('./i18n')).t;
   const FINISHED = new Set(['done', 'timeout', 'no-answer']);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -32,8 +37,9 @@
    *   watch(id, before, isCurrent, onState): 답변 감시 (shared/watch.js의 watchAnswer)
    *   sendPanel(id, patch): 패널 상태를 화면에 알린다
    *   sendSynthStatus(patch): 종합 상태를 화면에 알린다
-   *   history: { add, setAnswer, addSynth }  (add는 { question, targets, files(이름·크기·종류) })
-   *   prefs(): { synthTarget, autoSynth }
+   *   history: { add, setAnswer, addSynth, addChain?, get? }  (add는 { question, targets, files(이름·크기·종류) }, addChain은 v0.26.0 이어 묻기 · 토론)
+   *   prefs(): { synthTarget, autoSynth, retryOnce }  (retryOnce: 보내기 실패면 잠깐 뒤 한 번 다시 보냄, v0.26.0)
+   *   retryDelayMs: 다시 보내기 전 기다리는 시간 (없으면 shared/retry.js RETRY_DELAY_MS, 테스트용)
    *   diag: 셀렉터 자가진단 (shared/diag.js createDiag, 없어도 됨) — 보내기 · 답변 결과를 기록
    *   checkLimit(id, { scope, answer }): 사용 한도 안내를 찾는다 → 찾은 문구 | null (없어도 됨, page.js pageLimitCheck)
    *   notify(event): OS 알림 (없어도 됨, shared/notify.js createNotifier) — 라운드 답변이 모두 끝남 · 사용 한도 · 보내기 실패 · 종합 끝
@@ -41,7 +47,9 @@
    */
   function createRounds(a) {
     const tokens = new Map(); // id -> 지금 유효한 답변 감시 번호 (새로 보내면 이전 감시는 멈춘다)
-    let round = null; // { question, targets: [id], finished: Map(id -> 상태), synthDone, historyId }
+    let round = null; // { question, targets: [id], finished: Map(id -> 상태), synthDone, historyId, analyses }
+    // 패널마다 마지막으로 보낸 것 { text, files, fallbackText, onFinish } — [다시 보내기] · 다른 AI로 보내기 (v0.26.0, 메모리에만)
+    const lastSent = new Map();
 
     const nameOf = (id) => a.services.find((s) => s.id === id)?.name || id;
     const openIds = () => a.services.map((s) => s.id).filter((id) => a.hasPanel(id));
@@ -96,17 +104,35 @@
       const accept = uploadOf(svc).accept;
       const sendFiles = files.filter((f) => accept.includes(fileKind(f.type)));
       const skipped = files.filter((f) => !sendFiles.includes(f));
+      lastSent.set(id, { text, files, fallbackText, onFinish });
       a.sendPanel(id, { send: 'sending', attaching: sendFiles.length || undefined });
-      const before = await a.snapshot(id);
-      let res;
-      try {
-        // 글 없이 파일만 보내는데 이 서비스가 받는 파일이 하나도 없으면 보낼 것이 없다.
-        res =
-          !text && !sendFiles.length
+      let before = await a.snapshot(id);
+      const trySend = async () => {
+        try {
+          // 글 없이 파일만 보내는데 이 서비스가 받는 파일이 하나도 없으면 보낼 것이 없다.
+          return !text && !sendFiles.length
             ? { ok: false, error: `보낼 내용이 없습니다 (받지 않는 파일 종류: ${skipped.map((f) => f.name).join(', ')})` }
             : await a.sendPrompt(id, text, sendFiles, { fallbackText: sendFiles.length && typeof fallbackText === 'string' ? fallbackText : undefined });
-      } catch (err) {
-        res = { ok: false, error: err.message };
+        } catch (err) {
+          return { ok: false, error: err.message };
+        }
+      };
+      let res = await trySend();
+      let limitText = null;
+      if (!res.ok) {
+        // 보내기 실패 (v0.26.0): 사용 한도가 아니면 설정에 따라 잠깐 뒤 한 번만 다시 보낸다 (shared/retry.js)
+        limitText = await limitOf(id, 'error');
+        const d = retryDecision({ state: 'error', attempt: 0, enabled: a.prefs().retryOnce === true, error: res.error, limit: !!limitText });
+        if (d.action === 'resend' && tokens.get(id) === token) {
+          a.log('send', id, 'retry', res.error);
+          a.sendPanel(id, { send: 'retrying', error: res.error });
+          await sleep(a.retryDelayMs ?? d.delayMs);
+          if (tokens.get(id) === token && a.hasPanel(id)) {
+            before = await a.snapshot(id);
+            res = { ...(await trySend()), retried: true };
+            limitText = res.ok ? null : await limitOf(id, 'error');
+          }
+        }
       }
       const attach = res.ok ? attachResult(sendFiles, skipped, res) : undefined;
       a.log('send', id, JSON.stringify(res), attach ? JSON.stringify(attach) : '');
@@ -114,7 +140,7 @@
       a.diag?.fromSend(id, res);
       a.sendPanel(id, { send: res.ok ? 'sent' : 'error', error: res.ok ? undefined : res.error, attach });
       if (!res.ok) {
-        const limit = await limitOf(id, 'error');
+        const limit = limitText;
         if (limit) a.diag?.setLimit?.(id, limit);
         if (limit) a.notify?.({ kind: 'limit', name: nameOf(id) });
         onFinish?.('error', { sendOk: false, limit: limit || undefined });
@@ -259,6 +285,7 @@
         a.notify?.({ kind: 'synth', ok: true, judge: judgeName, mode });
         if (mode === 'analysis') {
           r.analysis = entry;
+          r.analyses = [...(r.analyses || []), entry]; // 다시 분석해도 지난 분석을 남겨 둘을 나란히 비교한다 (v0.26.0)
           a.sendSynthStatus({ state: 'done', judge: judgeName, count: answers.length, cause, mode });
         }
       });
@@ -291,7 +318,17 @@
         if (!a.hasPanel(svc.id)) continue;
         list.push({ id: svc.id, name: svc.name, color: svc.color, ...(await readAnswer(svc.id)) });
       }
-      return { question: round?.question || '', answers: list, analysis: round?.analysis || null };
+      const rec = round && a.history.get ? a.history.get(round.historyId) : null;
+      const synths = Array.isArray(rec?.synth) ? rec.synth : [];
+      return {
+        question: round?.question || '',
+        answers: list,
+        analysis: round?.analysis || null,
+        // v0.26.0: 이번 질문의 분석 전부(다시 분석 비교) · 이어 묻기 · 토론 기록 · 토론 결론
+        analyses: round?.analyses || [],
+        chain: Array.isArray(rec?.chain) ? rec.chain : [],
+        debates: synths.filter((s) => s.mode === 'debate'),
+      };
     }
 
     /** 패널 하나의 최신 답변 (답변이 끝날 때마다 그 패널만 읽으려고 — 열린 패널을 다 읽는 answers()보다 가볍다) */
@@ -301,7 +338,114 @@
       return { id, name: svc.name, color: svc.color, ...(await readAnswer(id)) };
     }
 
-    return { sendAll, sendFollowUp, runSynth, collectMarkdown, answers, answer, cancelWatch };
+    // ---------- 이어 묻기 · 다시 보내기 · 토론 (v0.26.0) ----------
+
+    /** 기록에 이어 묻기 한 줄 (기록이 없거나 addChain이 없으면 건너뜀) */
+    function addChain(r, entry) {
+      if (r && a.history.addChain) a.history.addChain(r.historyId, entry);
+    }
+
+    /** 패널 하나에 보내고 답이 끝날 때까지 기다린다 → { state, text, md } (시간 초과면 그때까지 쓴 글) */
+    function sendAndWait(id, text) {
+      return new Promise((resolve) => {
+        let done = false;
+        sendToPanel(id, text, async (state) => {
+          if (done) return; // 시간 초과 뒤 늦게 끝난 것은 무시 (토론은 이미 다음으로 갔다)
+          done = true;
+          const got = state === 'done' || state === 'timeout' ? await readAnswer(id) : { text: '', md: '' };
+          resolve({ state, ...got });
+        }).then((res) => {
+          if (!res.ok && !done) {
+            done = true;
+            resolve({ state: 'error', text: '', md: '', error: res.error });
+          }
+        });
+      });
+    }
+
+    /**
+     * 넘기기: fromId 패널의 최신 답변을 toId 패널에 보내 검토 · 반박 · 이어서 쓰기를 부탁한다.
+     * 답이 끝나면 지금 라운드 기록의 chain에 { kind: 'handoff', intent, from, to, ... } 로 남긴다. → { ok } | { ok: false, error }
+     */
+    async function handoff(fromId, toId, intent) {
+      if (!INTENTS.includes(intent)) return { ok: false, error: t('handoff.errIntent') };
+      if (fromId === toId) return { ok: false, error: t('handoff.errSame') };
+      if (!a.hasPanel(fromId) || !a.hasPanel(toId)) return { ok: false, error: t('handoff.errClosed') };
+      const { md } = await readAnswer(fromId);
+      if (!md) return { ok: false, error: t('handoff.errNoAnswer', { name: nameOf(fromId) }) };
+      const r = round;
+      const text = buildHandoffPrompt({ intent, question: r?.question || '', fromName: nameOf(fromId), answer: md });
+      const res = await sendToPanel(toId, text, async (state) => {
+        if (state === 'error') a.notify?.({ kind: 'error', name: nameOf(toId) });
+        if (state !== 'done') return;
+        const got = await readAnswer(toId);
+        addChain(r, { kind: 'handoff', intent, from: fromId, to: toId, fromName: nameOf(fromId), toName: nameOf(toId), at: Date.now(), state, ...got });
+      });
+      return res.ok ? { ok: true, from: nameOf(fromId), to: nameOf(toId) } : { ok: false, error: res.error };
+    }
+
+    /** [다시 보내기]: 그 패널에 마지막으로 보낸 글 · 파일을 그대로 다시 보낸다 (끝나면 처음 보낸 것과 같은 곳에 기록) */
+    async function resend(id) {
+      const last = lastSent.get(id);
+      if (!last || !a.hasPanel(id)) return { ok: false, error: t('retry.errNothing') };
+      const res = await sendToPanel(id, last.text, last.onFinish, last.files, last.fallbackText);
+      return res.ok ? { ok: true } : { ok: false, error: res.error };
+    }
+
+    /**
+     * 다른 AI로 보내기 (사용 한도 제안에서 사용자가 고른 것만): fromId에 마지막으로 보낸 글 · 파일을 toId에 보낸다.
+     * 답이 끝나면 기록의 chain에 { kind: 'fallback', from, to, ... }.
+     */
+    async function sendElsewhere(fromId, toId) {
+      const last = lastSent.get(fromId);
+      if (fromId === toId) return { ok: false, error: t('handoff.errSame') };
+      if (!last) return { ok: false, error: t('retry.errNothing') };
+      if (!a.hasPanel(toId)) return { ok: false, error: t('handoff.errClosed') };
+      const r = round;
+      const res = await sendToPanel(
+        toId,
+        last.text,
+        async (state) => {
+          if (state === 'error') a.notify?.({ kind: 'error', name: nameOf(toId) });
+          if (state !== 'done') return;
+          const got = await readAnswer(toId);
+          addChain(r, { kind: 'fallback', from: fromId, to: toId, fromName: nameOf(fromId), toName: nameOf(toId), at: Date.now(), state, ...got });
+        },
+        last.files,
+        last.fallbackText,
+      );
+      return res.ok ? { ok: true, to: nameOf(toId) } : { ok: false, error: res.error };
+    }
+
+    const debate = createDebate({
+      sendAndWait,
+      readAnswer,
+      nameOf,
+      openIds,
+      defaultJudge: () => a.prefs().synthTarget,
+      getRound: () => round,
+      history: { addChain: (hid, e) => a.history.addChain?.(hid, e), addSynth: (hid, e) => a.history.addSynth(hid, e) },
+      status: (patch) => a.sendSynthStatus({ ...patch, mode: 'debate' }),
+      notify: (e) => a.notify?.(e),
+      cancel: cancelWatch,
+      log: a.log,
+    });
+
+    return {
+      sendAll,
+      sendFollowUp,
+      runSynth,
+      collectMarkdown,
+      answers,
+      answer,
+      cancelWatch,
+      handoff,
+      resend,
+      sendElsewhere,
+      startDebate: (cfg) => debate.start(cfg),
+      stopDebate: () => debate.stop(),
+      debateDone: () => debate.whenDone(),
+    };
   }
 
   return { createRounds };

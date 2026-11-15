@@ -1,0 +1,140 @@
+// 자동 생성 파일 — 직접 고치지 말고 원본을 고친 뒤 npm run build:ext (원본: src/renderer/debate-ui.js)
+'use strict';
+
+// 토론 설정 창 · 진행 표시 (v0.26.0) — Windows 앱과 크롬 확장이 똑같이 씀. panel-offers.js 다음에 읽힌다.
+// 입력창 아래 종합 옆의 [토론] → 참가 AI(2~3개) · 라운드(1~3, 기본 2) · 판정 AI(기본 종합 담당)를 고르고 [시작].
+// 진행은 본체(shared/debate.js)가 synth:status(mode 'debate')로 알려 준다: 라운드 i/N · 기다리는 AI · 판정 중 · 끝 · 멈춤 · 실패.
+// 진행 중에는 [토론 멈추기]가 보인다. 결과는 답변 비교 › 이어 묻기 · 토론 탭과 기록 화면에 남는다.
+// Windows 앱은 패널 웹페이지가 화면 맨 위에 얹혀 있어 창을 띄울 때 'dialog' 화면으로 바꿔 패널을 치운다 (미리보기 창과 같음).
+//
+// [쉽게 말하면] "AI 몇 개를 몇 번 토론시킬지" 고르는 창과, 토론이 어디까지 왔는지 입력창 아래에 보여 주는 부분입니다.
+
+(() => {
+  const CH = MLA.chain;
+  let open = null; // { dialog, pending }
+  let running = false;
+
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+  const openIds = () => (state?.rects || []).map((r) => r.id);
+  const nameOf = (id) => state?.services.find((s) => s.id === id)?.name || id;
+  const checked = () => [...document.querySelectorAll('#debateParts input:checked')].map((b) => b.value);
+
+  function limitChecks() {
+    const full = checked().length >= CH.MAX_PARTICIPANTS;
+    for (const b of document.querySelectorAll('#debateParts input')) b.disabled = full && !b.checked;
+    const n = checked().length;
+    $('#debateSub').textContent = t('debate.sub', { n, max: CH.MAX_PARTICIPANTS });
+    $('#debateStart').disabled = n < CH.MIN_PARTICIPANTS || !open?.question;
+  }
+
+  function fill(question) {
+    const ids = openIds();
+    $('#debateParts').replaceChildren(
+      ...ids.map((id, i) => {
+        const label = el('label', 'check-label debate-part');
+        label.style.setProperty('--svc', state.services.find((s) => s.id === id)?.color || 'var(--border)');
+        const box = Object.assign(document.createElement('input'), { type: 'checkbox', value: id, checked: i < CH.MAX_PARTICIPANTS });
+        box.addEventListener('change', limitChecks);
+        label.append(box, ' ', el('span', '', nameOf(id)));
+        return label;
+      }),
+    );
+    const rounds = $('#debateRounds');
+    rounds.replaceChildren(
+      ...Array.from({ length: CH.MAX_ROUNDS }, (_, i) => Object.assign(document.createElement('option'), { value: String(i + 1), textContent: t('debate.roundsOption', { n: i + 1 }) })),
+    );
+    rounds.value = String(CH.DEFAULT_ROUNDS);
+    const judge = $('#debateJudge');
+    judge.replaceChildren(...ids.map((id) => Object.assign(document.createElement('option'), { value: id, textContent: nameOf(id) })));
+    judge.value = ids.includes(state.synthTarget) ? state.synthTarget : ids[0] || '';
+    $('#debateQuestion').textContent = question ? t('debate.questionLine', { q: question.split('\n')[0].slice(0, 200) }) : t('debate.noQuestion');
+    $('#debateStatus').textContent = '';
+    limitChecks();
+  }
+
+  function close() {
+    if (!open) return;
+    const { dialog } = open;
+    open = null;
+    $('#debateModal').hidden = true;
+    if (dialog && state?.chatView === 'dialog') host.setView('panels');
+  }
+
+  async function openDialog() {
+    if (running) return;
+    if (open) close();
+    const dialog = state?.chatView === 'panels';
+    open = { dialog, pending: dialog, question: '' };
+    if (dialog) host.setView('dialog');
+    const { question } = await host.getAnswers().catch(() => ({ question: '' }));
+    if (!open) return;
+    open.question = question || '';
+    fill(open.question);
+    $('#debateModal').hidden = false;
+    $('#debateStart').focus();
+  }
+
+  async function start() {
+    const cfg = { participants: checked(), rounds: Number($('#debateRounds').value), judge: $('#debateJudge').value };
+    $('#debateStart').disabled = true;
+    const r = await host.debate.start(cfg).catch((err) => ({ ok: false, error: err.message }));
+    if (!r?.ok) {
+      $('#debateStatus').textContent = r?.error || t('debate.errStart');
+      $('#debateStatus').dataset.kind = 'warn';
+      limitChecks();
+      return;
+    }
+    close();
+  }
+
+  /** 진행 상태 → 입력창 아래 안내 글 · 멈추기 버튼 */
+  function statusText({ state: st, round, rounds, waiting, judge, error }) {
+    if (st === 'running') return waiting?.length ? t('debate.statusRound', { round, rounds, names: waiting.join(', ') }) : t('debate.statusRoundDone', { round, rounds });
+    if (st === 'judging') return t('debate.statusJudging', { judge });
+    if (st === 'done') return t('debate.statusDone', { judge });
+    if (st === 'stopped') return t('debate.statusStopped');
+    return t('debate.statusError', { error: error || '' });
+  }
+
+  host.on('synth:status', (patch) => {
+    if (patch.mode !== 'debate') return;
+    running = patch.state === 'running' || patch.state === 'judging';
+    $('#sendHint').textContent = statusText(patch);
+    $('#debateStop').hidden = !running;
+    $('#debateBtn').hidden = running;
+    if (patch.state === 'done' && state?.chatView === 'compare') renderCompare();
+  });
+
+  /** 화면 상태가 올 때마다 (renderer-compose.js): 창을 띄운 화면을 떠났으면 닫는다 */
+  window.onDebateState = () => {
+    if (!open) return;
+    if (open.pending) {
+      if (state.chatView === 'dialog') open.pending = false;
+      return;
+    }
+    if (open.dialog && state.chatView !== 'dialog') {
+      open.dialog = false;
+      close();
+    }
+  };
+
+  $('#debateBtn').addEventListener('click', openDialog);
+  $('#debateStop').addEventListener('click', async () => {
+    const r = await host.debate.stop().catch(() => null);
+    if (!r?.ok) $('#sendHint').textContent = r?.error || t('debate.errStop');
+  });
+  $('#debateStart').addEventListener('click', start);
+  $('#debateCancel').addEventListener('click', close);
+  $('#debateModal').addEventListener('click', (e) => e.target === $('#debateModal') && close());
+  $('#debateModal').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      close();
+    }
+  });
+})();

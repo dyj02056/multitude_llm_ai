@@ -32,8 +32,9 @@ const GENERATED = '자동 생성 파일 — 직접 고치지 말고 원본을 �
 
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 
-// 앱 탭(app.html)이 읽는 공통 모듈. 순서가 중요하다 (rounds.js는 synth.js를 쓴다).
-const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'remote-core', 'rounds', 'local-llm', 'notify'];
+// 앱 탭(app.html)이 읽는 공통 모듈. 순서가 중요하다 (rounds.js는 synth.js · debate.js를 쓴다).
+// chain.js · retry.js는 화면도 쓰므로 index.html의 공통 모듈 줄에서 먼저 읽힌다 (v0.26.0).
+const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'remote-core', 'debate', 'rounds', 'local-llm', 'notify'];
 // 서비스 페이지(content script)가 읽는 공통 모듈
 const CONTENT_SHARED = ['page', 'markdown', 'shortcuts'];
 const ICON_SIZES = [16, 32, 48, 128];
@@ -42,8 +43,11 @@ const RENDERER_FILES = [
   'templates.js',
   'renderer.js',
   'renderer-views.js',
+  'chain-views.js',
   'renderer-compose.js',
   'send-preview.js',
+  'panel-offers.js',
+  'debate-ui.js',
   'project.js',
   'project-changes.js',
   'project-editor.js',

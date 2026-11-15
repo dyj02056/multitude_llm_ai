@@ -124,6 +124,7 @@
       <div id="compareTabs" class="seg" role="tablist" aria-label="답변 비교 보기">
         <button data-ctab="answers" role="tab" title="AI마다 최신 답변을 나란히 봅니다">답변</button>
         <button data-ctab="analysis" role="tab" title="판정 AI가 답변의 공통 의견 · 이견 · 근거 부족 · 최종 답변을 표로 정리합니다">분석</button>
+        <button data-ctab="chain" role="tab" data-i18n="compare.chainTab" data-i18n-title="compare.chainTabTitle"></button>
       </div>
       <span class="muted-label">질문</span>
       <span id="compareQuestion" class="compare-question"></span>
@@ -139,6 +140,7 @@
     </div>
     <div id="compareCols" class="compare-cols only-ctab-answers"></div>
     <div id="analysisView" class="analysis-view only-ctab-analysis"></div>
+    <div id="chainView" class="chain-view only-ctab-chain"></div>
   </section>
 
   <!-- 변경 제안 화면: AI별 코드 수정안 비교 (project.js) -->
@@ -351,6 +353,25 @@
     </div>
   </div>
 
+  <!-- 토론 설정 (v0.26.0): 참가 AI 2~3개 · 라운드 1~3 · 판정 AI. debate-ui.js -->
+  <div id="debateModal" class="modal" hidden>
+    <div class="modal-box debate-box" role="dialog" aria-modal="true" aria-labelledby="debateTitle">
+      <div class="modal-head"><b id="debateTitle" data-i18n="debate.title"></b><span id="debateSub" class="muted-label"></span></div>
+      <div class="modal-body">
+        <p class="muted small" data-i18n="debate.intro"></p>
+        <div class="debate-field"><span class="muted-label" data-i18n="debate.participants"></span><div id="debateParts" class="debate-parts"></div></div>
+        <div class="debate-field"><label for="debateRounds" class="muted-label" data-i18n="debate.rounds"></label><select id="debateRounds"></select></div>
+        <div class="debate-field"><label for="debateJudge" class="muted-label" data-i18n="debate.judge"></label><select id="debateJudge"></select></div>
+        <p id="debateQuestion" class="debate-question"></p>
+      </div>
+      <div class="modal-foot">
+        <span id="debateStatus" class="muted-label"></span>
+        <button id="debateCancel" data-i18n="debate.cancel"></button>
+        <button id="debateStart" class="primary" data-i18n="debate.start"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- 질문·답변 기록 화면 -->
   <section id="history" class="only-history">
     <aside class="history-side">
@@ -382,6 +403,10 @@
         <label class="check-label"><input type="checkbox" id="sendPreviewToggle" /> <span data-i18n="settings.sendPreview"></span></label>
       </div>
       <p class="muted small" data-i18n="settings.sendPreviewNote"></p>
+      <div class="setting-row">
+        <label class="check-label"><input type="checkbox" id="retryOnceToggle" /> <span data-i18n="settings.retryOnce"></span></label>
+      </div>
+      <p class="muted small" data-i18n="settings.retryOnceNote"></p>
       <h2 data-i18n="settings.notifyTitle"></h2>
       <div class="setting-row notify-row">
         <label class="check-label"><input type="checkbox" data-notify="round" /> <span data-i18n="settings.notifyRound"></span></label>
@@ -447,6 +472,8 @@
         <span class="muted-label">종합</span>
         <select id="synthTarget" aria-label="종합을 맡을 AI"></select>
         <button id="synthBtn" title="Ctrl+Shift+S">종합 요청</button>
+        <button id="debateBtn" data-i18n="debate.open" data-i18n-title="debate.openTitle"></button>
+        <button id="debateStop" class="danger" hidden data-i18n="debate.stop" data-i18n-title="debate.stopTitle"></button>
         <label class="check"><input type="checkbox" id="autoSynth" /> 완료 후 자동</label>
       </div>
     </div>
@@ -476,7 +503,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle">보내기</button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → renderer-compose.js → send-preview.js → project.js → project-changes.js → project-editor.js → library.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → project.js → project-changes.js → project-editor.js → library.js (뒤의 것이 앞의 것을 씀) -->
   <script src="lib/shared/i18n-ko.js"></script>
   <script src="lib/shared/i18n-en.js"></script>
   <script src="lib/shared/i18n.js"></script>
@@ -488,6 +515,8 @@
   <script src="lib/shared/project-upload.js"></script>
   <script src="lib/shared/patch.js"></script>
   <script src="lib/shared/analysis.js"></script>
+  <script src="lib/shared/chain.js"></script>
+  <script src="lib/shared/retry.js"></script>
   <script src="lib/shared/diag.js"></script>
   <script src="lib/shared/export.js"></script>
   <script src="lib/shared/web-ask.js"></script>
@@ -501,6 +530,7 @@
   <script src="lib/shared/watch.js"></script>
   <script src="lib/shared/history-core.js"></script>
   <script src="lib/shared/remote-core.js"></script>
+  <script src="lib/shared/debate.js"></script>
   <script src="lib/shared/rounds.js"></script>
   <script src="lib/shared/local-llm.js"></script>
   <script src="lib/shared/notify.js"></script>
@@ -509,8 +539,11 @@
   <script src="lib/renderer/templates.js"></script>
   <script src="lib/renderer/renderer.js"></script>
   <script src="lib/renderer/renderer-views.js"></script>
+  <script src="lib/renderer/chain-views.js"></script>
   <script src="lib/renderer/renderer-compose.js"></script>
   <script src="lib/renderer/send-preview.js"></script>
+  <script src="lib/renderer/panel-offers.js"></script>
+  <script src="lib/renderer/debate-ui.js"></script>
   <script src="lib/renderer/project.js"></script>
   <script src="lib/renderer/project-changes.js"></script>
   <script src="lib/renderer/project-editor.js"></script>
