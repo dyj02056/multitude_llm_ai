@@ -258,5 +258,84 @@
     return { load, add, setAnswer, setFeedback, addSynth, list, get, stats, remove, clear, all, flush, setMax, max: () => limit };
   }
 
-  return { createHistory, feedbackOf, planWrites, okRecordId, newId, normalizeMax, MAX_RECORDS, MAX_CHOICES };
+  /**
+   * 예전 기록(배열)을 기록별 저장소에 옮길 수 있게 다듬는다: 객체가 아니면 버리고, id가 파일 이름 · 저장소 키로 안전하지 않거나
+   * 겹치면 새 id를 준다 (내용은 그대로). Windows 앱 · 크롬 확장이 같이 쓴다.
+   */
+  function cleanLegacy(data) {
+    const seen = new Set();
+    const out = [];
+    for (const r of Array.isArray(data) ? data : []) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+      let id = r.id;
+      while (!okRecordId(id) || seen.has(id)) id = newId();
+      seen.add(id);
+      out.push(id === r.id ? r : { ...r, id });
+    }
+    return out;
+  }
+
+  const AREA_INDEX = 'history:index';
+  const areaKey = (id) => `history:r:${id}`;
+
+  /**
+   * 크롬 확장용 기록별 저장 (v0.24.0): 'history:index' = { v: 2, ids }, 'history:r:<id>' = 기록 하나. 바뀐 기록만 쓴다.
+   * area: chrome.storage.local 모양 { get(keys) → Promise<obj>, set(obj) → Promise, remove(keys) → Promise }
+   * legacyKey: 예전에 배열 전체를 두던 칸 ('history') — 처음 읽을 때 옮기고 지운다.
+   * → { save(records, info): history-core의 save, load(): Promise<기록 배열> }
+   */
+  function createAreaStore(area, { legacyKey = 'history', onError = () => {} } = {}) {
+    let known = new Set();
+    function save(records, info) {
+      const plan = planWrites(records, info, known);
+      const set = {};
+      for (const r of plan.write) set[areaKey(r.id)] = r;
+      if (plan.index) {
+        set[AREA_INDEX] = { v: 2, ids: plan.index };
+        known = new Set(plan.index);
+      }
+      const jobs = [];
+      if (Object.keys(set).length) jobs.push(Promise.resolve(area.set(set)).catch(onError));
+      if (plan.remove.length) jobs.push(Promise.resolve(area.remove(plan.remove.map(areaKey))).catch(onError));
+      return Promise.all(jobs);
+    }
+    async function load() {
+      const got = await Promise.resolve(area.get(AREA_INDEX)).catch(() => ({}));
+      const idx = got && got[AREA_INDEX];
+      if (idx && Array.isArray(idx.ids)) {
+        const ids = idx.ids.filter(okRecordId);
+        const recs = ids.length ? await Promise.resolve(area.get(ids.map(areaKey))).catch(() => ({})) : {};
+        const records = ids.map((id) => recs && recs[areaKey(id)]).filter((r) => r && typeof r === 'object' && okRecordId(r.id));
+        known = new Set(records.map((r) => r.id));
+        return records;
+      }
+      const old = await Promise.resolve(area.get(legacyKey)).catch(() => ({}));
+      if (!old || !Array.isArray(old[legacyKey])) return [];
+      const records = cleanLegacy(old[legacyKey]);
+      const set = { [AREA_INDEX]: { v: 2, ids: records.map((r) => r.id) } };
+      for (const r of records) set[areaKey(r.id)] = r;
+      try {
+        await area.set(set);
+        await area.remove(legacyKey); // 새 칸에 다 쓴 뒤에만 예전 칸을 지운다
+      } catch (err) {
+        onError(err);
+      }
+      known = new Set(records.map((r) => r.id));
+      return records;
+    }
+    return { save, load };
+  }
+
+  return {
+    createHistory,
+    createAreaStore,
+    feedbackOf,
+    planWrites,
+    okRecordId,
+    newId,
+    cleanLegacy,
+    normalizeMax,
+    MAX_RECORDS,
+    MAX_CHOICES,
+  };
 });

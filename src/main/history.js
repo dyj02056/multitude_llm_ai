@@ -14,7 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createHistory, planWrites, okRecordId, newId } = require('../shared/history-core');
+const { createHistory, planWrites, okRecordId, cleanLegacy } = require('../shared/history-core');
 const { store } = require('./secure-store'); // 암호화해 저장 (v0.22.1)
 
 /**
@@ -191,18 +191,6 @@ function createRecordStore({ dir, sec = store, fsMod = fs, onError = () => {} })
  * 예전 기록(배열)을 새 저장소에 옮길 수 있게 다듬는다: 객체가 아니면 버리고, id가 파일 이름으로 안전하지 않거나
  * 겹치면 새 id를 준다.
  */
-function cleanLegacy(data) {
-  const seen = new Set();
-  const out = [];
-  for (const r of Array.isArray(data) ? data : []) {
-    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
-    let id = r.id;
-    while (!okRecordId(id) || seen.has(id)) id = newId();
-    seen.add(id);
-    out.push(id === r.id ? r : { ...r, id });
-  }
-  return out;
-}
 
 /**
  * 기록 읽기 + 예전 history.json 옮기기.

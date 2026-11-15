@@ -148,10 +148,61 @@ test('옮기기: 예전 기록이 없으면 빈 기록, 이상한 id · 겹치�
   assert.equal(out[1].question, '../evil'); // 내용은 그대로, id만 새로
 });
 
-test('확장: 기록을 history:index + history:r:<id>에 나눠 저장하고 예전 history 칸을 옮김', () => {
+/** chrome.storage.local 흉내: get(키 | 키 목록) · set(객체) · remove(키 | 키 목록) */
+function fakeArea(init = {}) {
+  const data = { ...init };
+  const keys = (k) => (Array.isArray(k) ? k : [k]);
+  return {
+    data,
+    get: async (k) => Object.fromEntries(keys(k).filter((x) => x in data).map((x) => [x, structuredClone(data[x])])),
+    set: async (o) => Object.assign(data, structuredClone(o)),
+    remove: async (k) => keys(k).forEach((x) => delete data[x]),
+  };
+}
+
+test('확장: 예전 history 칸을 history:index + history:r:<id>로 옮기고, 이상한 id는 새 id로 살림', async () => {
+  const area = fakeArea({ history: [rec('e2'), rec('../bad'), rec('e2'), null], prefs: { keep: 1 } });
+  const { createAreaStore } = require('../src/shared/history-core');
+  const store = createAreaStore(area);
+  const records = await store.load();
+  assert.equal(records.length, 3);
+  assert.ok(!('history' in area.data));
+  assert.deepEqual(area.data['history:index'].ids, records.map((r) => r.id));
+  for (const r of records) assert.deepEqual(area.data[`history:r:${r.id}`], r);
+  assert.deepEqual(area.data.prefs, { keep: 1 }); // 다른 칸은 건드리지 않는다
+  // 다시 켜면 새 칸에서 같은 순서로 읽는다
+  assert.deepEqual((await createAreaStore(area).load()).map((r) => r.id), records.map((r) => r.id));
+});
+
+test('확장: history-core와 이어 쓰면 바뀐 기록만 쓰고, 지운 기록은 칸도 지움', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const area = fakeArea();
+  const { createAreaStore } = require('../src/shared/history-core');
+  const store = createAreaStore(area);
+  const h = createHistory(store.save);
+  h.load(await store.load());
+  const a = h.add({ question: 'a', targets: ['x'] });
+  const b = h.add({ question: 'b', targets: ['x'] });
+  h.flush();
+  await Promise.resolve();
+  assert.deepEqual(area.data['history:index'].ids, [b, a]);
+  const writes = [];
+  const origSet = area.set;
+  area.set = async (o) => (writes.push(Object.keys(o)), origSet(o));
+  h.setAnswer(a, 'x', { name: 'X', state: 'done', text: '답' });
+  h.flush();
+  await Promise.resolve();
+  assert.deepEqual(writes, [[`history:r:${a}`]]); // 색인 · 다른 기록은 다시 쓰지 않는다
+  h.remove(b);
+  h.flush();
+  await new Promise((r) => setImmediate(r));
+  assert.ok(!(`history:r:${b}` in area.data));
+  assert.deepEqual(area.data['history:index'].ids, [a]);
+  assert.equal(area.data[`history:r:${a}`].answers.x.text, '답');
+});
+
+test('확장: host.js가 공통 createAreaStore로 기록을 읽고 쓴다', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'extension', 'host.js'), 'utf8');
-  assert.match(src, /const HIST_INDEX = 'history:index'/);
-  assert.match(src, /history:r:\$\{id\}/);
-  assert.match(src, /chrome\.storage\.local\.remove\('history'\)/);
-  assert.match(src, /history\.load\(await loadHistory\(\)\)/);
+  assert.match(src, /createAreaStore\(chrome\.storage\.local/);
+  assert.match(src, /history\.load\(await historyStore\.load\(\)\)/);
 });

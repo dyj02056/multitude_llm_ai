@@ -20,7 +20,7 @@
   const { watchAnswer } = MLA.watch;
   const { createRounds } = MLA.rounds;
   const { createDiag } = MLA.diag;
-  const { createHistory, planWrites, okRecordId, normalizeMax, MAX_CHOICES } = MLA.historyCore;
+  const { createHistory, createAreaStore, normalizeMax, MAX_CHOICES } = MLA.historyCore;
   const remoteCore = MLA.remoteCore;
   const { shortcutList, shortcutFor } = MLA.shortcuts;
 
@@ -100,48 +100,10 @@
     localChat = null;
   }
 
-  // 기록별 저장 (v0.24.0): 'history:index' = { v: 2, ids }, 'history:r:<id>' = 기록 하나. 바뀐 기록만 쓴다.
-  // 예전 'history' 칸(배열 전체)은 처음 읽을 때 옮기고 지운다 (loadHistory).
-  const HIST_INDEX = 'history:index';
-  const histKey = (id) => `history:r:${id}`;
-  let histKnown = new Set();
-  function saveHistory(records, info) {
-    const plan = planWrites(records, info, histKnown);
-    const set = {};
-    for (const r of plan.write) set[histKey(r.id)] = r;
-    if (plan.index) {
-      set[HIST_INDEX] = { v: 2, ids: plan.index };
-      histKnown = new Set(plan.index);
-    }
-    const fail = (err) => console.error('[storage] 기록 저장 실패:', err.message);
-    if (Object.keys(set).length) chrome.storage.local.set(set).catch(fail);
-    if (plan.remove.length) chrome.storage.local.remove(plan.remove.map(histKey)).catch(fail);
-  }
-  async function loadHistory() {
-    const idx = await load(HIST_INDEX, null);
-    if (idx && Array.isArray(idx.ids)) {
-      const ids = idx.ids.filter(okRecordId);
-      const got = ids.length ? await chrome.storage.local.get(ids.map(histKey)).catch(() => ({})) : {};
-      const records = ids.map((id) => got[histKey(id)]).filter((r) => r && typeof r === 'object' && okRecordId(r.id));
-      histKnown = new Set(records.map((r) => r.id));
-      return records;
-    }
-    const legacy = await load('history', null);
-    if (!Array.isArray(legacy)) return [];
-    const seen = new Set();
-    const records = legacy.filter((r) => r && typeof r === 'object' && okRecordId(r.id) && !seen.has(r.id) && seen.add(r.id));
-    const set = { [HIST_INDEX]: { v: 2, ids: records.map((r) => r.id) } };
-    for (const r of records) set[histKey(r.id)] = r;
-    try {
-      await chrome.storage.local.set(set);
-      await chrome.storage.local.remove('history');
-    } catch (err) {
-      console.error('[storage] 기록 옮기기 실패:', err.message);
-    }
-    histKnown = new Set(records.map((r) => r.id));
-    return records;
-  }
-  const history = createHistory(saveHistory);
+  // 기록별 저장 (v0.24.0, shared/history-core.js createAreaStore): 'history:index' + 'history:r:<id>'.
+  // 예전 'history' 칸(배열 전체)은 처음 읽을 때 옮기고 지운다.
+  const historyStore = createAreaStore(chrome.storage.local, { onError: (err) => console.error('[storage] 기록 저장 실패:', err.message) });
+  const history = createHistory(historyStore.save);
   // 사이드탭 기록 (v0.21.0): 사이드탭이 'history:side'에 쓰고, 앱 탭 기록 화면이 함께 보여 준다.
   // 같은 칸을 두 화면이 함께 쓰면 서로 덮어쓸 수 있어서 칸을 나눴다. 앱 탭은 지우기만 한다.
   const sideHistory = createHistory((records) => store('history:side', records));
@@ -944,7 +906,7 @@
     if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(LL.LOCAL_ID);
     if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
     prefs.historyMax = normalizeMax(prefs.historyMax);
-    history.load(await loadHistory());
+    history.load(await historyStore.load());
     history.setMax(prefs.historyMax);
     sideHistory.load(await load('history:side', []));
     // 마지막으로 받은 원격 셀렉터를 먼저 적용한다 (새로 받아 오는 것은 아래에서).
