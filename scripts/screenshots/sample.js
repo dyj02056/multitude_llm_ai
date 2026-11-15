@@ -154,4 +154,46 @@ const CHAIN = (now) => [
   },
 ];
 
-module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, chatPage };
+// v0.27.0: 기록 화면 · 추천용 예시 기록 (진짜 기록장에 넣는다). 종류마다 AI별 답이 5개 넘게 쌓이도록 지난 기록을 만든다.
+const HISTORY_QUESTIONS = {
+  code: ['이 함수 리팩터링해 줘\n\nfunction add(a, b) { return a + b; }', 'TypeError: Cannot read properties of undefined (reading map) 원인?', 'SELECT * FROM orders WHERE id = 1 이 느린 이유', 'Python asyncio.gather 예외 처리 예시 (async def main())', 'React useEffect 무한 루프 고치기 const [x, setX] = useState()', 'git rebase 충돌 해결 순서 — app.js 파일'],
+  general: ['React와 Vue 중 무엇을 먼저 배울까?', '여름 제주 3박 4일 일정 짜줘', '좋은 회의록 쓰는 법', '전세와 월세 차이', '운동 루틴 추천', '책 추천 — 데이터 과학 입문'],
+};
+function HISTORY(now, ids) {
+  const out = [];
+  let n = 0;
+  const speed = { gemini: 8000, chatgpt: 11000, deepseek: 15000, perplexity: 7000, claude: 9500, duckai: 6000 };
+  for (const [kind, qs] of Object.entries(HISTORY_QUESTIONS)) {
+    for (let round = 0; round < 2; round++) {
+      qs.forEach((q, i) => {
+        n++;
+        const at = now - (n * 7 + 40) * 3600e3; // 지난 며칠 ~ 몇 주
+        const answers = {};
+        const feedback = {};
+        ids.forEach((id, j) => {
+          const fail = (kind === 'code' && id === 'perplexity' && (i + round) % 3 === 0) || (id === 'deepseek' && (i + round) % 4 === 1);
+          answers[id] = { state: fail ? 'timeout' : 'done', text: fail ? '' : `${id} 답변 ${n}`, md: '', metrics: { doneMs: speed[id] + j * 300 + i * 400 } };
+          if (!fail && (i + j) % 4 === 0) feedback[id] = kind === 'code' && id === 'chatgpt' ? 1 : (i + j) % 8 === 0 ? 1 : -1;
+        });
+        out.push({
+          id: `h${n}`,
+          at,
+          question: q,
+          targets: ids,
+          files: [],
+          answers,
+          synth: i === 1 ? [{ judge: 'Gemini', at, text: '종합', md: '종합' }] : [],
+          ...(Object.keys(feedback).length ? { feedback } : {}),
+          ...(i < 2 ? { threadId: `t${kind}${round}` } : {}),
+          ...(i === 0 && round === 0 ? { tags: ['업무'] } : {}),
+          ...(kind === 'code' && i === 0 && round === 1 ? { project: { name: 'shop-api' } } : {}),
+        });
+      });
+    }
+  }
+  // 지금 기록과 같은 대화 줄기로 이어진 질문 (대화 줄기 장면)
+  out.unshift({ id: 'r0', at: now - 8 * 60e3, question: '처음 프로그래밍을 배우려는데 Python과 JavaScript 중 무엇이 좋을까?', targets: ids, files: [], threadId: 'tpyjs', kind: 'general', synth: [], answers: Object.fromEntries(ids.map((id) => [id, { state: 'done', text: `하고 싶은 일에 따라 다르지만, 처음이라면 문법이 단순한 Python을 많이 권합니다.`, md: '' }])) });
+  return out.sort((a, b) => b.at - a.at);
+}
+
+module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage };

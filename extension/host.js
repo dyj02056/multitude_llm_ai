@@ -20,7 +20,8 @@
   const { watchAnswer } = MLA.watch;
   const { createRounds } = MLA.rounds;
   const { createDiag } = MLA.diag;
-  const { createHistory, createAreaStore, normalizeMax, MAX_CHOICES } = MLA.historyCore;
+  const { createHistory, createAreaStore, normalizeMax, MAX_CHOICES, okRecordId } = MLA.historyCore;
+  const HS = MLA.historySearch;
   const remoteCore = MLA.remoteCore;
   const { shortcutList, shortcutFor } = MLA.shortcuts;
 
@@ -74,6 +75,7 @@
     notify: { ...MLA.notify.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
     sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
     retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
+    autoRecommend: false, // 추천 조합 제안 (v0.27.0, 기본 끔): 질문 종류의 추천 조합이 지금 대상과 다르면 [추천 조합으로 바꾸기]만 띄운다
   };
   const savePrefs = () => store('prefs', prefs);
 
@@ -101,6 +103,7 @@
   function closeLocalPanel() {
     localChat?.stop();
     localChat = null;
+    rounds.resetPanel(LL.LOCAL_ID); // 대화 줄기 (v0.27.0): 닫은 패널은 지난 대화를 잇지 않는다
   }
 
   // 기록별 저장 (v0.24.0, shared/history-core.js createAreaStore): 'history:index' + 'history:r:<id>'.
@@ -257,6 +260,7 @@
     p.iframe.remove();
     panels.delete(id);
     barIds.delete(id);
+    rounds.resetPanel(id);
   }
 
   /** 패널 페이지의 content.js에 요청을 보낸다. */
@@ -414,6 +418,7 @@
       notify: { ...prefs.notify },
       sendPreview: prefs.sendPreview,
       retryOnce: prefs.retryOnce,
+      autoRecommend: prefs.autoRecommend,
       update: updateStatus,
       storage: { encrypted: false, extension: true }, // 크롬 확장은 OS 열쇠 보관소가 없어 암호화하지 않는다 (v0.22.1)
       rects,
@@ -535,6 +540,15 @@
   /** 이어 묻기 · 토론에서 화면이 넘긴 패널 id 모양 검사 (v0.26.0) */
   const okChainId = (v) => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(v);
 
+  /** 보내기 옵션 (v0.27.0): project는 이름만 남긴다 (Windows 앱 main.js sendOpts와 같은 검사). 나머지는 예전처럼 그대로 */
+  function cleanSendOpts(opts) {
+    const o = opts && typeof opts === 'object' && !Array.isArray(opts) ? { ...opts } : {};
+    const name = o.project && typeof o.project === 'object' && typeof o.project.name === 'string' ? o.project.name.trim().slice(0, 120) : '';
+    if (name) o.project = { name };
+    else delete o.project;
+    return o;
+  }
+
   /** 첨부 파일 한도 검사 (화면에서도 막지만 한 번 더 본다) */
   function checkFiles(files) {
     if (!Array.isArray(files) || files.length > ATTACH_LIMITS.maxFiles) return false;
@@ -568,6 +582,7 @@
       if (action === 'stop') localChat.stop();
       else {
         localChat.reset();
+        rounds.resetPanel(LL.LOCAL_ID);
         sendPanel(LL.LOCAL_ID, { answer: 'clear' });
       }
     }
@@ -582,6 +597,7 @@
       } else if (action === 'home') {
         // 처음 주소는 새 대화로 열린다 (스킬·프로젝트 파일을 다시 보내게 화면에 알린다)
         rounds.cancelWatch(pid);
+        rounds.resetPanel(pid);
         sendPanel(pid, { answer: 'clear' });
         navigate(pid, svc.url);
       }
@@ -589,6 +605,7 @@
       else if (action === 'login') chrome.tabs.create({ url: svc.url }); // 일반 탭에서 로그인 → 돌아와서 ↻
       else if (action === 'newchat') {
         rounds.cancelWatch(pid);
+        rounds.resetPanel(pid);
         sendPanel(pid, { answer: 'clear' });
         navigate(pid, svc.newChatUrl);
       }
@@ -772,7 +789,7 @@
       if (typeof text !== 'string' || !Array.isArray(targets)) return [];
       if (!checkFiles(files)) return targets.map((id) => ({ id, ok: false, error: '첨부 파일이 한도를 넘었습니다' }));
       if (!text.trim() && !files.length) return [];
-      return rounds.sendAll(text, targets, files, opts || {});
+      return rounds.sendAll(text, targets, files, cleanSendOpts(opts));
     },
     // opts: { fallbackText(첨부 실패 때 대신 보낼 글) }
     sendFollowUp: async (id, text, files = [], opts = {}) => {
@@ -814,11 +831,19 @@
     getAnswers: () => rounds.answers(),
     getAnswer: (id) => (typeof id === 'string' ? rounds.answer(id) : null),
     history: {
-      list: async (query) => {
+      // filters (v0.27.0): 기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석/이어 묻기 · 태그 · 즐겨찾기 (shared/history-search.js가 다시 검사)
+      list: async (query, filters) => {
         const q = typeof query === 'string' ? query : '';
-        return [...history.list(q), ...sideHistory.list(q)].sort(byNewest);
+        const f = HS.cleanFilters(filters);
+        return [...history.list(q, f), ...sideHistory.list(q, f)].sort(byNewest);
       },
       get: async (id) => history.get(id) || sideHistory.get(id),
+      // 태그 · 즐겨찾기 (v0.27.0, Windows 앱 main/ipc/history.js와 같은 검사). 사이드탭 기록은 사이드탭이 쓰는 칸이라 바꾸지 않는다
+      setTags: async (id, tags) => (okRecordId(id) && Array.isArray(tags) && tags.length <= 50 ? history.setTags(id, tags.filter((x) => typeof x === 'string').map((x) => x.slice(0, 200))) : null),
+      setStar: async (id, on) => (okRecordId(id) && typeof on === 'boolean' ? history.setStar(id, on) : null),
+      thread: async (threadId) => (okRecordId(threadId) ? history.thread(threadId) : []),
+      tags: async () => history.tags(),
+      recommend: async () => history.recommend(),
       stats: async () => history.stats(),
       // 답변 평가 (Windows 앱 history:feedback과 같음): 지금 라운드 기록의 그 AI 답변에 1 · -1 · 0(지우기) → 남긴 값 | null
       feedback: async (svcId, value) =>
@@ -887,7 +912,8 @@
       savePrefs();
       pushState();
     },
-    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce } = {}) => {
+    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend } = {}) => {
+      if (typeof autoRecommend === 'boolean') prefs.autoRecommend = autoRecommend; // 추천 조합 제안 (v0.27.0)
       if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
       // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0) — 아는 종류의 true/false만
       const notifyPatch = MLA.notify.cleanPatch(notify);
@@ -979,6 +1005,7 @@
     prefs.notify = MLA.notify.normalizePrefs(prefs.notify);
     prefs.sendPreview = prefs.sendPreview === true;
     prefs.retryOnce = prefs.retryOnce !== false;
+    prefs.autoRecommend = prefs.autoRecommend === true;
     history.load(await historyStore.load());
     history.setMax(prefs.historyMax);
     sideHistory.load(await load('history:side', []));

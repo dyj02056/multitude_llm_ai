@@ -8,6 +8,7 @@ const { placeCells } = require('../../src/shared/layout');
 const { shortcutList } = require('../../src/shared/shortcuts');
 const { normalizeLibrary } = require('../../src/shared/prompt-lib');
 const LL = require('../../src/shared/local-llm');
+const { createHistory } = require('../../src/shared/history-core');
 const S = require('./sample');
 
 const scene = new URLSearchParams(location.search).get('scene') || '02-ask-all';
@@ -52,7 +53,11 @@ const record = {
   answers: Object.fromEntries(answers.answers.map((a, i) => [a.id, { text: a.text, md: a.md, state: 'done', chars: a.text.length, firstMs: 2100 + i * 900, doneMs: 9000 + i * 2500 }])),
 };
 record.chain = S.CHAIN(now); // 기록 화면 아래 이어 묻기 · 토론 (v0.26.0)
-const item = (id, q, mins, n) => ({ id, at: now - mins * 60e3, question: q, answered: n, targets: 4, files: 0, synth: id === 'r1' ? 1 : 0, analysis: id === 'r1' ? 1 : 0, chain: id === 'r1' ? 3 : 0 });
+// v0.27.0: 진짜 기록장(shared/history-core.js)에 예시 기록을 넣어 거르기 · 대화 줄기 · 태그 · 추천을 그대로 계산한다
+Object.assign(record, { threadId: 'tpyjs', kind: 'general', star: true, tags: ['언어 비교', '공부'], feedback: { gemini: 1 } });
+for (const [i, a] of Object.values(record.answers).entries()) a.metrics = { doneMs: 9000 + i * 2500 };
+const fakeHistory = createHistory(() => {});
+fakeHistory.load([record, ...S.HISTORY(now, selected)]);
 
 // 서비스 화면 상태 표 예시: 셋은 정상, DeepSeek은 답변 영역을 못 찾음 (실제로는 shared/diag.js가 채움)
 const ok = { input: 'ok', send: 'ok', response: 'ok', level: 'ok', message: '', hint: '', notes: [], limit: null, limitHint: '' };
@@ -100,7 +105,7 @@ function push() {
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b' },
     autoUpdate: true,
-    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true,
+    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip',
     update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
     storage: { encrypted: true },
     rects: rs,
@@ -123,8 +128,13 @@ window.host = {
   getAnswers: async () => answers,
   getAnswer: async (id) => answers.answers.find((a) => a.id === id) || null,
   history: {
-    list: async () => [item('r1', S.QUESTION, 5, 4), item('r2', 'React와 Vue 중 무엇을 먼저 배울까?', 42, 4), item('r3', '이 SQL 쿼리 느린 이유 찾아줘', 180, 3), item('r4', '여름 제주 3박 4일 일정 짜줘', 1500, 4)],
-    get: async () => record,
+    list: async (q, f) => fakeHistory.list(q || '', f),
+    get: async (id) => fakeHistory.get(id),
+    setTags: async (id, tags) => fakeHistory.setTags(id, tags),
+    setStar: async (id, on) => fakeHistory.setStar(id, on),
+    thread: async (tid) => fakeHistory.thread(tid),
+    tags: async () => fakeHistory.tags(),
+    recommend: async () => fakeHistory.recommend(),
     stats: async () => ({ rows: answers.answers.map((a, i) => ({ id: a.id, name: a.name, asked: 24 - i, sent: 24 - i, done: 22 - i, timeout: i % 2, noAnswer: 0, sendFail: 0, limit: i === 3 ? 1 : 0, firstMedianMs: 2100 + i * 900, doneMedianMs: 9000 + i * 2500, charsAvg: 1400 - i * 120 })) }),
     remove: async () => true,
     clear: async () => true,
@@ -184,6 +194,30 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (scene === '14-diff-highlight') click('#diffToggle');
   }
   if (scene === '05-history') click('#historyBtn');
+  // v0.27.0 기록 찾기: 거르기를 펼쳐 7일 · ChatGPT를 고르고 두 기록을 내보내기로 고른 모습
+  if (scene === '32-history-filters') {
+    click('#historyBtn');
+    await sleep(300);
+    click('#historyFilterBtn');
+    await sleep(150);
+    $('#hfPeriod').value = '7d';
+    $('#hfPeriod').dispatchEvent(new Event('change'));
+    await sleep(150);
+    [...document.querySelectorAll('#hfServices .chip')].find((c) => c.textContent === 'ChatGPT')?.click();
+    await sleep(200);
+    for (const box of [...document.querySelectorAll('.history-pick')].slice(0, 2)) box.click();
+  }
+  if (scene === '33-history-thread') {
+    click('#historyBtn');
+    await sleep(300);
+    click('#historyGroup button[data-group="threads"]');
+    await sleep(400);
+  }
+  if (scene === '35-recommend-chip') {
+    $('#prompt').value = '이 함수가 왜 undefined를 돌려주는지 봐 줘\n\nfunction total(items) {\n  items.reduce((n, x) => n + x.price, 0);\n}';
+    $('#prompt').dispatchEvent(new Event('input'));
+    await sleep(500);
+  }
   if (scene === '27-handoff') {
     // 넘기기 바(Gemini) · 시간 초과 [다시 보내기](DeepSeek) · 사용 한도 → 다른 AI로(Perplexity)
     for (const id of ['gemini', 'chatgpt']) emit('panel:status', { id, answer: 'done', chars: S.ANSWERS[id].length });
@@ -224,12 +258,16 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   if (scene === '06-settings-shortcuts') click('#helpBtn');
   // 설정 화면의 표들: 그 칸이 맨 위에 오게 스크롤
-  const helpAt = { '15-screen-status': '#diagTable', '17-stats': '#statsTable', '20-local-llm-settings': '#localEnabled' }[scene];
+  const helpAt = { '15-screen-status': '#diagTable', '17-stats': '#statsTable', '20-local-llm-settings': '#localEnabled', '34-recommend-stats': '#recommendTable' }[scene];
   if (helpAt) {
     click('#helpBtn');
     await sleep(500);
     const el = $(helpAt);
     const box = $('.help-box');
+    if (scene === '34-recommend-stats') {
+      await sleep(300);
+      for (const d of [...document.querySelectorAll('.rec-kind')].slice(0, 2)) d.open = true;
+    }
     box.scrollTop = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 60;
   }
   if (scene === '12-library') {

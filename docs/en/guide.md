@@ -101,11 +101,20 @@ Run the analysis again (also with another judge) and earlier analyses are kept: 
 
 History stays on this PC. Questions sent from the extension's side panel appear with a `side` tag.
 
+**Filters, tags and stars (v0.27.0).** **필터** (Filters) under the search box opens: period (all · today · 7 days · 30 days · date range), rating (`+1` / `−1` / not rated), sent from (app / side panel, extension only), tag, AI (any of), and checkboxes for starred, with project, synthesis, analysis, hand-offs/debates. In the record detail, **☆** stars a record and the tag box adds tags (Enter, comma separated; up to 10 tags of 30 characters). Tick the boxes in the list to save several records as **one** MD/HTML document (**MD로 묶어 저장** / **HTML로 묶어 저장**), oldest first.
+
+![History filters](../screenshots/32-history-filters.png)
+
+**Conversation threads (v0.27.0).** Questions that continue the same conversation share a thread: if at least one target panel received the previous question and was not reset since (new chat, home, clearing the local LLM chat, closing the panel, logging out), the new question joins that thread. **대화 줄기로** (by thread) groups them; open a thread to read its questions in order and save the whole thread as one file. Starting a new chat inside the site itself is not visible to the app, and records from before v0.27.0 have no thread.
+
+![Thread view](../screenshots/33-history-thread.png)
+
 ## 7. Settings, stats and shortcuts
 
 **?** (`Ctrl+/`) opens settings: answer wait time, automatic selector updates, local LLM, updates (Windows app), and:
 
 - **AI별 응답 통계** (response stats per AI): questions, completed (%), timeouts / no answer, send failures, usage limits hit, median time to first response and to completion, average length, **만족도** (satisfaction, e.g. `75% (3/4)`).
+- **질문 종류별 추천** (suggestions by question kind, v0.27.0): questions are labelled project / code / long text / general. Per kind and AI the app counts only facts — answers, completion rate, median time to finish, satisfaction of rated answers — never an accuracy score, and suggests up to 3 AIs with at least 5 answers of that kind. Shown on the model picker (`코드 질문에는 보통: A · B · C`, "pick these" only ticks boxes) and in settings. **추천 조합 자동 선택** (off by default) only shows a **추천 조합으로 바꾸기** chip when the typed question's suggested set differs from your targets; targets change only when you click it.
 - **서비스 화면 상태** (site status): whether the app can still find each site's input box, send button and answer area. If a site changes its layout, the panel shows `⚠ 화면이 바뀐 것 같음`; click it to open the self-check window (`셀렉터 지금 확인` = re-check selectors now, `진단 정보 복사` = copy diagnostics without your content).
 
 | Shortcut | Action |

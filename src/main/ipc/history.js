@@ -7,6 +7,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const { cleanFilters } = require('../../shared/history-search');
+const { okRecordId } = require('../../shared/history-core');
 
 // 내보내기 (v0.14.0): 저장 창에서 고른 곳에 Markdown · HTML 글을 씁니다. 이름은 화면이 정한 기본값, 종류는 md · html만.
 const SAVE_KINDS = { md: { name: 'Markdown', ext: 'md' }, html: { name: 'HTML 문서', ext: 'html' } };
@@ -26,8 +28,17 @@ function register(ctx) {
   });
 
   // 질문·답변 기록
-  ipcMain.handle('history:list', (_e, query) => history.list(typeof query === 'string' ? query : ''));
+  // filters (v0.27.0): 기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석/이어 묻기 · 태그 · 즐겨찾기 — 아는 칸만 남긴다
+  ipcMain.handle('history:list', (_e, query, filters) => history.list(typeof query === 'string' ? query.slice(0, 500) : '', cleanFilters(filters)));
   ipcMain.handle('history:get', (_e, id) => history.get(id));
+  // 태그 · 즐겨찾기 (v0.27.0): 기록 id 모양 · 태그 글자 수를 먼저 보고, 다듬기(10개 · 30자)는 history-core가 한다
+  ipcMain.handle('history:setTags', (_e, id, tags) => (okRecordId(id) && okTagInput(tags) ? history.setTags(id, tags) : null));
+  ipcMain.handle('history:setStar', (_e, id, on) => (okRecordId(id) && typeof on === 'boolean' ? history.setStar(id, on) : null));
+  // 대화 줄기 (v0.27.0): 같은 threadId의 기록 전부 (오래된 것부터)
+  ipcMain.handle('history:thread', (_e, threadId) => (okRecordId(threadId) ? history.thread(threadId) : []));
+  ipcMain.handle('history:tags', () => history.tags());
+  // 질문 종류별 추천 조합 (v0.27.0, shared/recommend.js)
+  ipcMain.handle('history:recommend', () => history.recommend());
   ipcMain.handle('history:stats', () => history.stats());
   // 답변 평가: 지금 라운드 기록의 그 AI 답변에 1(좋았음) · -1(별로였음) · 0(지우기) → 남긴 값 | null
   ipcMain.handle('history:feedback', (_e, svcId, value) => {
@@ -60,4 +71,9 @@ function register(ctx) {
   ipcMain.handle('answer:get', (_e, id) => (typeof id === 'string' ? ctx.rounds().answer(id) : null));
 }
 
-module.exports = { register, SAVE_KINDS };
+/** 화면이 보낸 태그 목록: 글자 50개 이하, 하나 200자 이하 (그보다 큰 값은 통째로 받지 않는다) */
+function okTagInput(tags) {
+  return Array.isArray(tags) && tags.length <= 50 && tags.every((x) => typeof x === 'string' && x.length <= 200);
+}
+
+module.exports = { register, SAVE_KINDS, okTagInput };

@@ -43,6 +43,10 @@ const SCENES = [
   { name: '29-debate-result', page: 'app' },
   { name: '30-analysis-compare', page: 'app' },
   { name: '31-analysis-jump', page: 'app' },
+  { name: '32-history-filters', page: 'app' },
+  { name: '33-history-thread', page: 'app' },
+  { name: '34-recommend-stats', page: 'app' },
+  { name: '35-recommend-chip', page: 'app' },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];
 

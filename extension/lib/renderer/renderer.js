@@ -87,6 +87,7 @@ function renderPick() {
     list.append(label);
   }
   updatePickLimit();
+  renderPickRecommend(); // 질문 종류별 추천 조합 (v0.27.0, recommend-ui.js)
 }
 
 // 최대 개수만큼 고르면 나머지 칸은 고를 수 없게 막는다.
@@ -812,4 +813,5 @@ function renderTargets() {
     box.append(chip);
   }
   renderAttachHint();
+  window.renderRecommendChip?.(); // 추천 조합 제안 (v0.27.0, recommend-ui.js — 설정에서 켰을 때만)
 }

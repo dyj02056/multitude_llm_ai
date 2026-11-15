@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.26.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.27.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -57,8 +57,8 @@ flowchart LR
 | **답 다루기** | 종합 | 다른 AI 답을 모아 한 AI에게 오류 · 빠진 점 · 최종 답 정리 요청 | [종합](docs/guide.md#4-교차검토종합) |
 | | 답변 비교 · 분석 | 칸별 비교, 기준과 다른 문장 강조, 공통 의견 · 이견 표 · 근거 부족 · 최종 답 | [답변 비교](docs/guide.md#5-답변-비교) |
 | | 넘기기 · 토론 | 한 AI의 답을 다른 AI에게 검토 · 반박 · 이어서 부탁, AI 2~3개 토론 뒤 판정 AI가 결론 (v0.26.0) | [넘기기 · 토론](docs/guide.md#ai끼리-넘기기--토론-v0260) |
-| | 기록 · 내보내기 | 질문 · 답 자동 저장(최근 500개) · 검색, MD · HTML(→PDF) 저장 | [기록](docs/guide.md#6-기록) · [내보내기](docs/guide.md#내보내기) |
-| | 응답 통계 · 자가진단 | AI별 완료율 · 응답 시간 · 사용 한도 감지, 사이트 화면이 바뀌면 알림 → 자가진단 창(셀렉터 지금 확인 · 진단 정보 복사) | [응답 통계](docs/guide.md#응답-통계) · [자가진단](docs/guide.md#셀렉터-자가진단) |
+| | 기록 · 내보내기 | 질문 · 답 자동 저장(최근 500개) · 검색과 필터(기간 · AI · 평가 · 태그 · ★), 대화 줄기로 묶어 보기, MD · HTML(→PDF) 저장 · 여러 기록을 한 문서로 (v0.27.0) | [기록](docs/guide.md#6-기록) · [내보내기](docs/guide.md#내보내기) |
+| | 응답 통계 · 자가진단 | AI별 완료율 · 응답 시간 · 사용 한도 감지, 질문 종류별 추천 조합(v0.27.0), 사이트 화면이 바뀌면 알림 → 자가진단 창(셀렉터 지금 확인 · 진단 정보 복사) | [응답 통계](docs/guide.md#응답-통계) · [추천](docs/guide.md#질문-종류별-추천-조합-v0270) · [자가진단](docs/guide.md#셀렉터-자가진단) |
 | **코드 작업** | 프로젝트 모드 | 폴더 구조 · 고른 파일 업로드(3단계 제외 규칙 · 비밀 정보 검사), `NEED_FILES` 요청 처리 | [프로젝트 모드](docs/project-mode.md#프로젝트-모드) |
 | | 수정안 적용 | 패널 아래 변경 바로 바로 적용, AI별 비교 · 덩어리 단위 적용 · 되돌리기 | [단계](docs/project-mode.md#프로젝트-모드) |
 | | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기(자동 가능), 계획 먼저 · 파일별로 받기(바로 시작 가능), 보낼 양 토큰 어림 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
@@ -170,11 +170,11 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.27.0** | 기록 **필터**(기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석 · 태그) · **태그 · ★ 즐겨찾기** · 여러 기록을 **한 문서로** 저장 · **대화 줄기**로 묶어 보기 · 질문 종류별 **추천 조합**(사실 숫자만, 대상은 눌러야 바뀜) |
 | **v0.26.0** | AI끼리 **넘기기**(검토 · 반박 · 이어서) · **토론**(2~3개 AI · 1~3라운드 · 판정) · 실패하면 한 번 다시 보내기 · 한도면 다른 AI 제안 · 이견 → 관련 문단 강조 · 다시 분석 나란히 비교 |
 | **v0.25.0** | 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝 **OS 알림** · **보내기 전 미리보기**(Shift+클릭) · 셀렉터 한국어/영어 짝 · `npm run selectors:probe` |
 | **v0.24.0** | 기록을 기록별로 저장 · **기록 최대 개수** 설정 · 화면 코드 나누기 · 다국어 틀 · 커밋 전 확장 폴더 검사 |
 | **v0.23.1** | 원격 셀렉터 **서명 검사 켬** — 서명이 맞는 `selectors.json`만 적용 |
-| **v0.23.0** | 바뀐 파일만 보내기 · 적용 실패 시 자동 되돌림 · 답변 `[+1]`/`[-1]` 만족도 · 원격 셀렉터 서명 · 버그 9건과 보안 · 성능 보강 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

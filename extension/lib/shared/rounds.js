@@ -9,10 +9,10 @@
 // 패널을 실제로 다루는 방법(adapter, 아래 a)은 Windows 앱과 크롬 확장이 각자 넘겨줍니다.
 (function (root, factory) {
   const M = root.MLA || {};
-  const api = factory(M.synth, M.services, M.sendPlan, M.chain, M.retry, M.debate, M.i18n);
+  const api = factory(M.synth, M.services, M.sendPlan, M.chain, M.retry, M.debate, M.i18n, M.recommend);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.MLA = root.MLA || {}).rounds = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services, sendPlan, chainLib, retryLib, debateLib, i18n) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services, sendPlan, chainLib, retryLib, debateLib, i18n, recommendLib) {
   'use strict';
 
   const { buildSynthPrompt, analysisNames } = synth || require('./synth');
@@ -22,6 +22,7 @@
   const { retryDecision } = retryLib || require('./retry');
   const { createDebate } = debateLib || require('./debate');
   const t = (i18n || require('./i18n')).t;
+  const { classifyQuestion } = recommendLib || require('./recommend');
   const FINISHED = new Set(['done', 'timeout', 'no-answer']);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,6 +51,8 @@
     let round = null; // { question, targets: [id], finished: Map(id -> 상태), synthDone, historyId, analyses }
     // 패널마다 마지막으로 보낸 것 { text, files, fallbackText, onFinish } — [다시 보내기] · 다른 AI로 보내기 (v0.26.0, 메모리에만)
     const lastSent = new Map();
+    // 대화 줄기 (v0.27.0): 패널 id → 그 패널이 마지막으로 받은 라운드의 threadId. 새 대화 · 처음 주소 · 패널 닫기(resetPanel)면 지운다.
+    const threadOf = new Map();
 
     const nameOf = (id) => a.services.find((s) => s.id === id)?.name || id;
     const openIds = () => a.services.map((s) => s.id).filter((id) => a.hasPanel(id));
@@ -58,6 +61,26 @@
     function cancelWatch(id) {
       tokens.set(id, (tokens.get(id) || 0) + 1);
     }
+
+    /**
+     * 패널의 대화가 새로 시작됨 (v0.27.0): 새 대화 · 처음 주소 · 로컬 LLM 대화 지우기 · 패널 닫기.
+     * 이 패널은 더 이상 지난 대화 줄기를 이어 가지 않는다. id '*'이면 모든 패널.
+     */
+    function resetPanel(id) {
+      if (id === '*') threadOf.clear();
+      else threadOf.delete(id);
+    }
+
+    /**
+     * 새 라운드의 대화 줄기: 지난 라운드의 줄기를 받은 뒤 새로 시작하지 않은 패널이 ids 중 하나라도 있으면 그 줄기를 잇고,
+     * 아니면 새 줄기. → threadId
+     */
+    function pickThread(ids) {
+      const prev = round?.threadId;
+      if (prev && ids.some((id) => threadOf.get(id) === prev)) return prev;
+      return newThreadId();
+    }
+    const newThreadId = () => `t${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
     /**
      * 첨부 결과를 화면용으로 정리한다. → { state: 'ok' | 'partial' | 'failed' | 'fallback' | 'skipped', error? } (첨부가 없으면 undefined)
@@ -105,6 +128,7 @@
       const sendFiles = files.filter((f) => accept.includes(fileKind(f.type)));
       const skipped = files.filter((f) => !sendFiles.includes(f));
       lastSent.set(id, { text, files, fallbackText, onFinish });
+      if (round?.threadId) threadOf.set(id, round.threadId); // 이 패널은 이제 지금 라운드의 대화를 안다 (넘기기 · 종합 · 토론 포함)
       a.sendPanel(id, { send: 'sending', attaching: sendFiles.length || undefined });
       let before = await a.snapshot(id);
       const trySend = async () => {
@@ -206,13 +230,19 @@
      * opts.fallbackText: 첨부에 실패한 패널에 대신 보낼 글 (프로젝트 파일 업로드의 내부 예비 경로)
      * opts.prefixById: 서비스별로 글 앞에 붙일 것 { id: 글 } (스킬 지침)
      * opts.plainIds · opts.userFileCount: 프로젝트 파일을 보내지 않을 서비스와, files 중 앞쪽의 사용자가 직접 올린 파일 수
+     * opts.project: { name } 프로젝트 맥락을 붙여 보냈다 (v0.27.0 — 기록 표시 · 질문 종류)
      */
     function sendAll(text, targets, files = [], opts = {}) {
       const ids = targets.filter((id) => a.hasPanel(id));
       const meta = files.map(({ name, size, type }) => ({ name, size, type }));
       const question = typeof opts.question === 'string' && opts.question ? opts.question : text;
-      const historyId = a.history.add({ question, targets: ids, files: meta });
-      const r = (round = { question, targets: ids, finished: new Map(), synthDone: false, historyId });
+      const project = opts.project && typeof opts.project.name === 'string' && opts.project.name ? { name: opts.project.name.slice(0, 120) } : undefined;
+      // v0.27.0: 대화 줄기 · 질문 종류 (사용자가 직접 올린 파일만 첨부 수로 센다)
+      const threadId = pickThread(ids);
+      const userFiles = Number.isInteger(opts.userFileCount) ? meta.slice(0, opts.userFileCount) : meta;
+      const kind = classifyQuestion({ text: project ? text : question, files: userFiles, project });
+      const historyId = a.history.add({ question, targets: ids, files: meta, threadId, kind, ...(project ? { project } : {}) });
+      const r = (round = { question, targets: ids, finished: new Map(), synthDone: false, historyId, threadId });
       // 패널마다 넣을 글 · 파일 · 예비 글은 shared/send-plan.js가 계산한다 (화면의 보내기 전 미리보기와 같은 계산)
       //   prefixById(스킬 지침)는 글과 예비 글 앞에, plainIds는 사용자가 직접 올린 파일만 · 예비 글 없음
       return Promise.all(
@@ -439,6 +469,8 @@
       answers,
       answer,
       cancelWatch,
+      resetPanel,
+      threadId: () => round?.threadId || null,
       handoff,
       resend,
       sendElsewhere,

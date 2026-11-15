@@ -115,6 +115,7 @@ let prefs = {
   notify: { ...notifyCore.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
   sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
   retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
+  autoRecommend: false, // 추천 조합 제안 (v0.27.0, 기본 끔): 질문 종류의 추천 조합이 지금 대상과 다르면 [추천 조합으로 바꾸기]만 띄운다
 };
 
 /**
@@ -137,6 +138,7 @@ function loadPrefs() {
   prefs.notify = notifyCore.normalizePrefs(prefs.notify);
   prefs.sendPreview = prefs.sendPreview === true;
   prefs.retryOnce = prefs.retryOnce !== false;
+  prefs.autoRecommend = prefs.autoRecommend === true;
 }
 
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
@@ -166,6 +168,7 @@ function openLocalPanel() {
 function closeLocalPanel() {
   localChat?.stop();
   localChat = null;
+  rounds.resetPanel(L.LOCAL_ID); // 대화 줄기 (v0.27.0): 닫은 패널은 지난 대화를 잇지 않는다
 }
 
 // 설정 · 라이브러리 저장: 0.3초 모았다가 비동기로 쓴다 (v0.23). 앱을 끌 때 will-quit에서 flush()로 동기로 마저 쓴다.
@@ -370,6 +373,7 @@ function probePanel(id) {
 function showLogin() {
   for (const { view } of panels.values()) destroyView(view);
   panels.clear();
+  rounds.resetPanel('*');
   mode = 'login';
 
   loginView = newView();
@@ -423,6 +427,7 @@ function showChat(selected) {
       destroyView(p.view);
       panels.delete(id);
       barIds.delete(id);
+      rounds.resetPanel(id);
     }
   }
   for (const svc of SERVICES) {
@@ -444,6 +449,7 @@ async function logout() {
   loginView = null;
   for (const { view } of panels.values()) destroyView(view);
   panels.clear();
+  rounds.resetPanel('*');
   const s = ses();
   await s.clearStorageData();
   await s.clearCache();
@@ -529,6 +535,7 @@ function pushState() {
     notify: { ...prefs.notify },
     sendPreview: prefs.sendPreview,
     retryOnce: prefs.retryOnce,
+    autoRecommend: prefs.autoRecommend,
     update: updater?.status() || null,
     storage: { encrypted: secure.store().available() }, // 로컬 데이터 암호화 (v0.22.1)
     rects: rects.panels,
@@ -755,6 +762,8 @@ function sendOpts(opts) {
   if (Array.isArray(opts.plainIds)) out.plainIds = SERVICES.map((s) => s.id).filter((id) => opts.plainIds.includes(id));
   if (Number.isInteger(opts.userFileCount) && opts.userFileCount >= 0) out.userFileCount = opts.userFileCount;
   if (opts.noHistory === true) out.noHistory = true;
+  // 프로젝트 맥락을 붙여 보냄 (v0.27.0): 이름만 기록에 남긴다
+  if (opts.project && typeof opts.project === 'object' && typeof opts.project.name === 'string' && opts.project.name.trim()) out.project = { name: opts.project.name.trim().slice(0, 120) };
   return out;
 }
 
@@ -787,6 +796,7 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
     if (action === 'stop') localChat.stop();
     else {
       localChat.reset();
+      rounds.resetPanel(L.LOCAL_ID);
       sendPanel(L.LOCAL_ID, { answer: 'clear' });
     }
   }
@@ -797,6 +807,7 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
     else if (action === 'home') {
       // 처음 주소는 새 대화로 열린다: 답변 감시를 멈추고, 화면에도 새 대화라고 알린다 (스킬·프로젝트 파일을 다시 보내게)
       rounds.cancelWatch(pid);
+      rounds.resetPanel(pid);
       sendPanel(pid, { answer: 'clear' });
       wc.loadURL(SERVICES.find((s) => s.id === pid).url);
     }
@@ -805,6 +816,7 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
     else if (action === 'login') p.login.retry();
     else if (action === 'newchat') {
       rounds.cancelWatch(pid);
+      rounds.resetPanel(pid);
       sendPanel(pid, { answer: 'clear' });
       wc.loadURL(SERVICES.find((s) => s.id === pid).newChatUrl);
     }

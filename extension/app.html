@@ -50,6 +50,8 @@
         <h1>사용할 모델을 고르세요</h1>
         <p class="muted" id="pickNote"></p>
       </div>
+      <!-- 질문 종류별 추천 조합 (v0.27.0, recommend-ui.js) — 기록이 모자라면 비어 있다 -->
+      <div id="pickRecommend" class="pick-recommend" hidden></div>
       <div class="feature-grid">
         <article class="feature">
           <span class="feature-step">01</span>
@@ -376,7 +378,60 @@
   <section id="history" class="only-history">
     <aside class="history-side">
       <input id="historySearch" type="search" placeholder="질문·답변에서 찾기" />
+      <!-- v0.27.0: 묶는 방식 · 거르기 (history-view.js) -->
+      <div class="history-tools">
+        <div id="historyGroup" class="seg">
+          <button data-group="records" data-i18n="history.group.records"></button>
+          <button data-group="threads" data-i18n="history.group.threads"></button>
+        </div>
+        <button id="historyFilterBtn" class="hf-btn" data-i18n="history.filters"></button>
+      </div>
+      <div id="historyFilters" class="history-filters" hidden>
+        <label class="hf-row"><span data-i18n="history.period"></span>
+          <select id="hfPeriod">
+            <option value="all" data-i18n="history.period.all"></option>
+            <option value="today" data-i18n="history.period.today"></option>
+            <option value="7d" data-i18n="history.period.7d"></option>
+            <option value="30d" data-i18n="history.period.30d"></option>
+            <option value="range" data-i18n="history.period.range"></option>
+          </select>
+        </label>
+        <div id="hfRange" class="hf-row" hidden>
+          <input type="date" id="hfFrom" data-i18n-aria="history.fromAria" /> <span>~</span> <input type="date" id="hfTo" data-i18n-aria="history.toAria" />
+        </div>
+        <label class="hf-row"><span data-i18n="history.rating"></span>
+          <select id="hfRating">
+            <option value="" data-i18n="history.rating.any"></option>
+            <option value="good" data-i18n="history.rating.good"></option>
+            <option value="bad" data-i18n="history.rating.bad"></option>
+            <option value="none" data-i18n="history.rating.none"></option>
+          </select>
+        </label>
+        <label id="hfSourceRow" class="hf-row"><span data-i18n="history.source"></span>
+          <select id="hfSource">
+            <option value="" data-i18n="history.source.any"></option>
+            <option value="app" data-i18n="history.source.app"></option>
+            <option value="side" data-i18n="history.source.side"></option>
+          </select>
+        </label>
+        <label class="hf-row"><span data-i18n="history.tag"></span><select id="hfTag"></select></label>
+        <div class="hf-row hf-wrap"><span data-i18n="history.services"></span><div id="hfServices" class="hf-chips"></div></div>
+        <div class="hf-row hf-wrap hf-checks">
+          <label class="check-label"><input type="checkbox" data-hf="star" /> <span data-i18n="history.hasStar"></span></label>
+          <label class="check-label"><input type="checkbox" data-hf="project" /> <span data-i18n="history.hasProject"></span></label>
+          <label class="check-label"><input type="checkbox" data-hf="synth" /> <span data-i18n="history.hasSynth"></span></label>
+          <label class="check-label"><input type="checkbox" data-hf="analysis" /> <span data-i18n="history.hasAnalysis"></span></label>
+          <label class="check-label"><input type="checkbox" data-hf="chain" /> <span data-i18n="history.hasChain"></span></label>
+        </div>
+        <button id="hfReset" data-i18n="history.filtersReset"></button>
+      </div>
       <div id="historyList" class="history-list"></div>
+      <div id="historyPicked" class="history-picked" hidden>
+        <span id="historyPickedCount" class="muted-label"></span>
+        <button id="historyPickMd" data-i18n="history.exportSelectedMd" data-i18n-title="history.exportSelectedTitle"></button>
+        <button id="historyPickHtml" data-i18n="history.exportSelectedHtml" data-i18n-title="history.exportSelectedTitle"></button>
+        <button id="historyPickClear" data-i18n="history.selectClear"></button>
+      </div>
       <div class="history-side-foot">
         <button id="historyClear" class="danger">기록 전체 삭제</button>
         <button id="historyClose">패널로 돌아가기</button>
@@ -407,6 +462,10 @@
         <label class="check-label"><input type="checkbox" id="retryOnceToggle" /> <span data-i18n="settings.retryOnce"></span></label>
       </div>
       <p class="muted small" data-i18n="settings.retryOnceNote"></p>
+      <div class="setting-row">
+        <label class="check-label"><input type="checkbox" id="autoRecommendToggle" /> <span data-i18n="settings.autoRecommend"></span></label>
+      </div>
+      <p class="muted small" data-i18n="settings.autoRecommendNote"></p>
       <h2 data-i18n="settings.notifyTitle"></h2>
       <div class="setting-row notify-row">
         <label class="check-label"><input type="checkbox" data-notify="round" /> <span data-i18n="settings.notifyRound"></span></label>
@@ -455,6 +514,9 @@
       <p class="muted small">공통 입력창으로 보낸 질문의 기록에서 셉니다: 답변 완료 비율, 시간 초과 · 답변 없음, 보내기 실패, 사용 한도에 걸린 횟수, 첫 응답과 완료까지 걸린 시간(중앙값), 평균 글자 수, 만족도(답변이 끝난 패널 머리줄의 <b>[+1]</b> 좋았음 · <b>[-1]</b> 별로였음). 프로젝트가 열려 있으면 이 프로젝트에서 AI별로 수정안을 적용 · 되돌린 수도 보여 줍니다.</p>
       <div class="stats-wrap"><table id="statsTable" class="diag-table stats-table"></table></div>
       <p class="muted small" id="statsNote"></p>
+      <h3 data-i18n="recommend.table"></h3>
+      <p class="muted small" id="recommendNote"></p>
+      <div id="recommendTable" class="recommend-table"></div>
       <h2>단축키</h2>
       <p class="muted">서비스 패널 안에 커서가 있어도 동작합니다.</p>
       <table id="helpTable"></table>
@@ -467,6 +529,7 @@
     <div class="targets">
       <span class="muted-label">보낼 대상</span>
       <div id="targetChips"></div>
+      <button id="recommendChip" class="recommend-chip" hidden></button>
       <span class="hint" id="sendHint">Enter 보내기 · Shift+Enter 줄바꿈</span>
       <div class="synth" title="다른 AI들의 답변을 모아 한 AI에게 비교·정리를 부탁합니다">
         <span class="muted-label">종합</span>
@@ -519,6 +582,8 @@
   <script src="lib/shared/retry.js"></script>
   <script src="lib/shared/diag.js"></script>
   <script src="lib/shared/export.js"></script>
+  <script src="lib/shared/history-search.js"></script>
+  <script src="lib/shared/recommend.js"></script>
   <script src="lib/shared/web-ask.js"></script>
   <script src="lib/shared/send-plan.js"></script>
   <script src="lib/shared/prompt-lib.js"></script>
@@ -540,6 +605,8 @@
   <script src="lib/renderer/renderer.js"></script>
   <script src="lib/renderer/renderer-views.js"></script>
   <script src="lib/renderer/chain-views.js"></script>
+  <script src="lib/renderer/history-view.js"></script>
+  <script src="lib/renderer/recommend-ui.js"></script>
   <script src="lib/renderer/renderer-compose.js"></script>
   <script src="lib/renderer/send-preview.js"></script>
   <script src="lib/renderer/panel-offers.js"></script>

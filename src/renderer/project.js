@@ -681,6 +681,7 @@
         opts: {
           ...payload.opts,
           question: `${payload.text || '(첨부 파일만)'}\n\n[프로젝트 ${project.info.name} · 파일 ${files.length}개 내용 포함]`,
+          project: { name: project.info.name }, // 기록에 "프로젝트 맥락 포함" 표시 · 질문 종류 (v0.27.0)
           textById,
           fallbackText: pack.inlineText,
           plainIds,
@@ -731,6 +732,7 @@
       opts: {
         ...payload.opts,
         question: `${payload.text || '(첨부 파일만)'}\n\n[프로젝트 ${project.info.name} · ${what}]`,
+        project: { name: project.info.name }, // v0.27.0
         textById,
         fallbackText: base.inlineText,
         plainIds: [...plainIds, ...quiet],

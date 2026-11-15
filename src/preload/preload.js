@@ -33,9 +33,15 @@ contextBridge.exposeInMainWorld('host', {
   getAnswers: () => ipcRenderer.invoke('answers:get'),
   getAnswer: (id) => ipcRenderer.invoke('answer:get', id),
   history: {
-    list: (query) => ipcRenderer.invoke('history:list', query),
+    list: (query, filters) => ipcRenderer.invoke('history:list', query, filters),
     get: (id) => ipcRenderer.invoke('history:get', id),
     stats: () => ipcRenderer.invoke('history:stats'),
+    // 태그 · 즐겨찾기 · 대화 줄기 · 종류별 추천 (v0.27.0)
+    setTags: (id, tags) => ipcRenderer.invoke('history:setTags', id, tags),
+    setStar: (id, on) => ipcRenderer.invoke('history:setStar', id, on),
+    thread: (threadId) => ipcRenderer.invoke('history:thread', threadId),
+    tags: () => ipcRenderer.invoke('history:tags'),
+    recommend: () => ipcRenderer.invoke('history:recommend'),
     // 답변 평가: 지금 라운드 기록의 그 AI 답변에 1 · -1 · 0(지우기) → 남긴 값 | null
     feedback: (svcId, value) => ipcRenderer.invoke('history:feedback', svcId, value),
     remove: (id) => ipcRenderer.invoke('history:delete', id),

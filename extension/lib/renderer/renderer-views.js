@@ -377,44 +377,10 @@ $('#compareClose').addEventListener('click', () => host.setView('panels'));
 $('#compareRefresh').addEventListener('click', renderCompare);
 
 // ---------- 질문·답변 기록 ----------
-
-const ANSWER_STATE_TEXT = { timeout: '시간 초과', 'no-answer': '답변 없음', error: '보내기 실패' };
-let historySelected = null;
+// 기록 화면(목록 · 거르기 · 대화 줄기 · 상세)은 history-view.js (v0.27.0). 여기에는 비교 화면과 같이 쓰는 것만 둔다.
 
 const fmtTime = (ms) =>
   new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-/** 기록 화면 왼쪽: 보낸 질문 목록 (검색어가 있으면 걸러서) */
-async function renderHistoryList() {
-  const query = $('#historySearch').value;
-  const items = await host.history.list(query);
-  const list = $('#historyList');
-  if (!items.length) {
-    list.replaceChildren(span('history-empty', query ? '찾는 기록이 없습니다' : '아직 기록이 없습니다'));
-    $('#historyDetail').replaceChildren();
-    return;
-  }
-  if (!items.some((it) => it.id === historySelected)) historySelected = items[0].id;
-  list.replaceChildren(
-    ...items.map((it) => {
-      const row = document.createElement('button');
-      row.className = 'history-item';
-      row.classList.toggle('active', it.id === historySelected);
-      const meta =
-        `${fmtTime(it.at)} · 답변 ${it.answered}/${it.targets}` +
-        `${it.files ? ` · 첨부 ${it.files}` : ''}${it.synth ? ` · 종합 ${it.synth}` : ''}${it.analysis ? ` · 분석 ${it.analysis}` : ''}` +
-        `${it.chain ? ` · ${t('history.chainCount', { n: it.chain })}` : ''}${it.debate ? ` · ${t('history.debateCount', { n: it.debate })}` : ''}` +
-        `${it.source === 'side' ? ' · side' : ''}`; // 사이드탭에서 보낸 질문 (v0.21.0)
-      row.append(span('history-q', it.question || NO_TEXT), span('history-meta', meta));
-      row.addEventListener('click', () => {
-        historySelected = it.id;
-        renderHistoryList();
-      });
-      return row;
-    }),
-  );
-  renderHistoryDetail();
-}
 
 const NO_TEXT = '(글 없이 첨부 파일만 보냄)';
 const filesLine = (files) => files.map((f) => `${f.name} (${fmtSize(f.size)})`).join(' · ');
@@ -430,94 +396,6 @@ async function exportDoc(doc, kind, el) {
   if (r?.ok) flash(el, `저장했습니다: ${String(r.path).split(/[\\/]/).pop()}`);
   else if (!r?.cancelled) flash(el, r?.error || '저장하지 못했습니다');
 }
-
-/** 기록 화면 오른쪽: 고른 기록의 질문과 답변 전체 */
-async function renderHistoryDetail() {
-  const rec = await host.history.get(historySelected);
-  const box = $('#historyDetail');
-  if (!rec) return box.replaceChildren();
-
-  const head = document.createElement('div');
-  head.className = 'history-detail-head';
-  const time = span('muted-label', fmtTime(rec.at));
-  head.append(
-    time,
-    button('질문 다시 쓰기', '이 질문을 입력창에 넣습니다', () => {
-      $('#prompt').value = rec.question;
-      host.setView('panels');
-      $('#prompt').focus();
-    }),
-    button('Markdown 복사', '질문과 답변을 Markdown으로 복사', async () => {
-      await host.copyText(recordToMarkdown(rec));
-      flash(time, '복사했습니다');
-    }),
-    button('MD 저장', '이 기록(질문 · 답변 · 종합 · 분석)을 Markdown 파일로 저장합니다', () => exportDoc(EX.docFromRecord(rec), 'md', time)),
-    button('HTML 저장', '이 기록을 밝은 문서 모양 HTML 파일로 저장합니다 (브라우저에서 인쇄하면 PDF)', () => exportDoc(EX.docFromRecord(rec), 'html', time)),
-    button('삭제', '이 기록을 지웁니다', async () => {
-      await host.history.remove(rec.id);
-      historySelected = null;
-      renderHistoryList();
-    }),
-  );
-
-  const question = document.createElement('div');
-  question.className = 'history-question';
-  question.textContent = rec.question || NO_TEXT;
-  if (rec.files?.length) question.append(document.createElement('br'), span('history-files', `[+] ${filesLine(rec.files)}`));
-
-  const cols = document.createElement('div');
-  cols.className = 'compare-cols';
-  const columns = rec.targets.map((id) => {
-    const a = rec.answers[id];
-    const svc = state.services.find((s) => s.id === id);
-    return {
-      name: a?.name || svc?.name || id,
-      color: svc?.color || 'var(--muted)',
-      text: a?.text || '',
-      md: a?.md,
-      note: a ? ANSWER_STATE_TEXT[a.state] : '기다리는 중',
-      emptyText: a ? '저장된 답변이 없습니다.' : '답변을 기다리는 중이거나, 앱이 닫혀 저장되지 않았습니다.',
-    };
-  });
-  for (const sy of rec.synth) {
-    if (sy.mode === 'debate') columns.push({ name: t('chain.debateResultCol', { judge: sy.judge }), color: 'var(--ok)', text: sy.text, md: sy.md });
-    else if (sy.mode !== 'analysis') columns.push({ name: `종합 · ${sy.judge}`, color: 'var(--accent)', text: sy.text, md: sy.md });
-  }
-  cols.style.gridTemplateColumns = `repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))`;
-  cols.replaceChildren(...columns.map(answerColumn));
-  // 분석 결과(최신 것)는 답변 칸 위에 표로. AI 이름을 누르면 그 답변 칸으로 이동
-  const analyses = rec.synth.filter((sy) => sy.mode === 'analysis');
-  const jump = (name, query) => {
-    const idx = columns.findIndex((c) => c.name === name);
-    const col = cols.children[idx];
-    if (col) flashColumn(col, columns[idx].text, query);
-  };
-  // 분석이 2개 이상이면 둘을 골라 나란히 비교 (v0.26.0)
-  const extra = analyses.length >= 2 ? [analysisCompareBlock(analyses, { onJump: jump })] : analyses.length ? [analysisBlock(analyses[0], { onJump: jump })] : [];
-  // 이어 묻기 · 토론 (v0.26.0): 답변 칸 아래에 일어난 순서대로
-  const chain = Array.isArray(rec.chain) ? rec.chain : [];
-  // 답변 칸을 가리지 않게 접어 둔다 — 누르면 펼침
-  const after = [];
-  if (chain.length) {
-    const det = document.createElement('details');
-    det.className = 'history-chain';
-    det.append(Object.assign(document.createElement('summary'), { textContent: t('compare.chainTabCount', { n: chain.length }) }), chainBlock(chain, []));
-    after.push(det);
-  }
-  box.replaceChildren(head, question, ...extra, cols, ...after);
-}
-
-let searchTimer = null;
-$('#historySearch').addEventListener('input', () => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(renderHistoryList, 200);
-});
-$('#historyClose').addEventListener('click', () => host.setView('panels'));
-$('#historyClear').addEventListener('click', async () => {
-  if (!confirm('저장된 질문·답변 기록을 모두 지울까요? 되돌릴 수 없습니다.')) return;
-  await host.history.clear();
-  renderHistoryList();
-});
 
 // ---------- 단축키 ----------
 
@@ -547,6 +425,7 @@ $('#historyMaxSelect').addEventListener('change', async (e) => {
 
 $('#sendPreviewToggle').addEventListener('change', (e) => host.setSettings({ sendPreview: e.target.checked }));
 $('#retryOnceToggle').addEventListener('change', (e) => host.setSettings({ retryOnce: e.target.checked })); // v0.26.0
+$('#autoRecommendToggle').addEventListener('change', (e) => host.setSettings({ autoRecommend: e.target.checked })); // v0.27.0
 for (const box of document.querySelectorAll('[data-notify]')) {
   box.addEventListener('change', () => host.setSettings({ notify: { [box.dataset.notify]: box.checked } }));
 }
@@ -685,6 +564,8 @@ function renderSettings() {
   // 보내기 전 미리보기 · OS 알림 종류별 켜기 (v0.25.0)
   $('#sendPreviewToggle').checked = !!state.sendPreview;
   $('#retryOnceToggle').checked = state.retryOnce !== false;
+  $('#autoRecommendToggle').checked = !!state.autoRecommend; // v0.27.0
+  renderRecommendTable(); // 질문 종류별 추천 (v0.27.0, recommend-ui.js)
   for (const box of document.querySelectorAll('[data-notify]')) box.checked = state.notify?.[box.dataset.notify] !== false;
 }
 

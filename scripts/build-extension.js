@@ -44,6 +44,8 @@ const RENDERER_FILES = [
   'renderer.js',
   'renderer-views.js',
   'chain-views.js',
+  'history-view.js',
+  'recommend-ui.js',
   'renderer-compose.js',
   'send-preview.js',
   'panel-offers.js',

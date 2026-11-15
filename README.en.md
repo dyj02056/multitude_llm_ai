@@ -3,7 +3,7 @@
 [한국어](README.md) · **English**
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.26.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.27.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-not%20needed-3fb950)
@@ -44,8 +44,8 @@
 | **Answers** | Synthesis | Collects the other answers and asks one AI for errors, gaps and a final answer |
 | | Compare & analysis | Answers in columns, highlight sentences that differ, agreements / disagreement table / weak claims / final answer |
 | | Hand-offs & debate | Hand one AI's answer to another for review, counter-argument or continuation; let 2–3 AIs debate and a judge AI conclude (v0.26.0) |
-| | History & export | Saves the last 500 questions with answers (100–2000 in settings); search; export MD / HTML |
-| | Stats & self-check | Completion rate, response time, usage-limit detection and satisfaction per AI; warns when a site's layout changes |
+| | History & export | Saves the last 500 questions with answers (100–2000 in settings); search with filters (period, AI, rating, tags, star), group by conversation thread, export MD / HTML, several records in one document (v0.27.0) |
+| | Stats & self-check | Completion rate, response time, usage-limit detection and satisfaction per AI; suggested AIs per question kind (v0.27.0); warns when a site's layout changes |
 | **Code** | Project mode | Sends folder structure and chosen files (3-level ignore rules, secret scan); handles `NEED_FILES` requests |
 | | Apply changes | Apply from the bar under each panel, compare across AIs, apply by hunk, undo; a failed multi-file apply rolls back |
 | | Cut-off protection | Blocks truncated or abbreviated code, find/replace blocks for long files, continue automatically, plan-first mode |

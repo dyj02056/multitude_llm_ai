@@ -87,21 +87,54 @@
     };
   }
 
+  // ---------- 여러 기록 · 대화 줄기 (v0.27.0) ----------
+
+  /**
+   * 기록 여러 개 → 문서 하나 { multi: true, title, at, items: [기록 문서] } (받은 순서 그대로 — 대화 줄기는 오래된 것부터 넘긴다)
+   * title이 없으면 "기록 N개 모음"
+   */
+  function docFromRecords(recs, { title } = {}) {
+    const items = (Array.isArray(recs) ? recs : []).filter((r) => r && typeof r === 'object').map(docFromRecord);
+    const ats = items.map((d) => d.at).filter(Number.isFinite);
+    return {
+      multi: true,
+      title: String(title || t('export.multiTitle', { n: items.length })).split('\n')[0].slice(0, 120),
+      at: ats.length ? Math.min(...ats) : Date.now(),
+      items,
+    };
+  }
+
+  /** 대화 줄기 → 문서 (오래된 질문부터, 제목은 첫 질문) */
+  function docFromThread(recs) {
+    const list = (Array.isArray(recs) ? recs : []).filter((r) => r && typeof r === 'object').sort((a, b) => (a.at || 0) - (b.at || 0));
+    const first = list[0] ? (list[0].question || NO_TEXT).split('\n')[0].slice(0, 80) : '';
+    return docFromRecords(list, { title: t('export.threadTitle', { q: first, n: list.length }) });
+  }
+
   // ---------- Markdown ----------
 
-  /** 문서 → Markdown 글 */
-  function toMarkdown(doc) {
-    const parts = [`# ${doc.title}`, '', `> ${fmtTime(doc.at)} · Multitude LLM`, '', '## 질문', '', doc.question];
+  /** 기록 문서 하나의 Markdown 줄들. depth: 머리글을 몇 단계 내릴지 (여러 기록 문서 안에서는 1), prefix: 제목 앞 번호 */
+  function recordMd(doc, depth = 0, prefix = '') {
+    const h = (n) => '#'.repeat(Math.min(6, n + depth));
+    const parts = [`${h(1)} ${prefix}${doc.title}`, '', `> ${fmtTime(doc.at)} · Multitude LLM`, '', `${h(2)} 질문`, '', doc.question];
     if (doc.files.length) parts.push('', `첨부: ${doc.files.map((f) => `${f.name} (${fmtSize(f.size || 0)})`).join(' · ')}`);
-    if (doc.analysis) parts.push('', `## 분석 (판정 ${doc.analysis.judge})`, '', doc.analysis.md);
-    for (const a of doc.answers) parts.push('', `## ${a.name}`, '', a.text);
-    for (const s of doc.synth) parts.push('', `## ${synthTitle(s)} (${s.judge})`, '', s.text);
+    if (doc.analysis) parts.push('', `${h(2)} 분석 (판정 ${doc.analysis.judge})`, '', doc.analysis.md);
+    for (const a of doc.answers) parts.push('', `${h(2)} ${a.name}`, '', a.text);
+    for (const s of doc.synth) parts.push('', `${h(2)} ${synthTitle(s)} (${s.judge})`, '', s.text);
     const chain = doc.chain || [];
-    if (chain.length) parts.push('', `## ${t('chain.section')}`);
+    if (chain.length) parts.push('', `${h(2)} ${t('chain.section')}`);
     for (const c of chain) {
-      parts.push('', `### ${c.title}`);
-      for (const p of c.parts) parts.push('', ...(c.parts.length > 1 ? [`#### ${p.name}`, ''] : []), p.text);
+      parts.push('', `${h(3)} ${c.title}`);
+      for (const p of c.parts) parts.push('', ...(c.parts.length > 1 ? [`${h(4)} ${p.name}`, ''] : []), p.text);
     }
+    return parts;
+  }
+
+  /** 문서 → Markdown 글 (여러 기록 문서면 기록마다 번호를 붙여 차례로) */
+  function toMarkdown(doc) {
+    if (!doc.multi) return `${recordMd(doc).join('\n')}\n`;
+    const parts = [`# ${doc.title}`, '', `> ${fmtTime(doc.at)} · Multitude LLM · ${t('export.multiCount', { n: doc.items.length })}`];
+    doc.items.forEach((item, i) => parts.push('', '---', '', ...recordMd(item, 1, `${i + 1}. `)));
     return `${parts.join('\n')}\n`;
   }
 
@@ -175,9 +208,11 @@
   }
 
   /** 분석 결과 → HTML (형식이 맞으면 이견 표 · 공통 의견 · 근거 부족 · 최종 답변, 깨졌으면 글 그대로) */
-  function analysisHtml(an) {
+  function analysisHtml(an, depth = 0) {
     const res = AN.parseAnalysis(an.md, { names: an.names || [] });
-    const head = `<h2>분석 <small>판정 ${esc(an.judge)}${an.at ? ` · ${esc(fmtTime(an.at))}` : ''}</small></h2>`;
+    const h2 = `h${2 + depth}`;
+    const h3 = `h${3 + depth}`;
+    const head = `<${h2}>분석 <small>판정 ${esc(an.judge)}${an.at ? ` · ${esc(fmtTime(an.at))}` : ''}</small></${h2}>`;
     if (!res.ok) return `${head}\n<p class="note">정해진 형식이 아니라서 글 그대로 넣었습니다 (${esc(res.reason)})</p>\n<div class="answer">${mdToHtml(res.raw)}</div>`;
     const list = (items, render) => (items.length ? `<ul>${items.map((x) => `<li>${render(x)}</li>`).join('')}</ul>` : '<p class="muted">없음</p>');
     let dis = '<p class="muted">이견이 없습니다 — 답변들이 같은 방향입니다</p>';
@@ -198,13 +233,13 @@
     }
     return [
       head,
-      `<h3>이견 <span class="count">${res.disagreements.length}</span></h3>`,
+      `<${h3}>이견 <span class="count">${res.disagreements.length}</span></${h3}>`,
       dis,
-      `<h3>공통 의견 <span class="count">${res.common.length}</span></h3>`,
+      `<${h3}>공통 의견 <span class="count">${res.common.length}</span></${h3}>`,
       list(res.common, esc),
-      `<h3>근거 부족 <span class="count">${res.unsupported.length}</span></h3>`,
+      `<${h3}>근거 부족 <span class="count">${res.unsupported.length}</span></${h3}>`,
       list(res.unsupported, (u) => `${u.name ? `<b>[${esc(u.name)}]</b> ` : ''}${esc(u.text)}`),
-      '<h3>최종 답변</h3>',
+      `<${h3}>최종 답변</${h3}>`,
       `<div class="answer final">${mdToHtml(res.final)}</div>`,
     ].join('\n');
   }
@@ -237,31 +272,52 @@ td.verdict { color: #0f7a55; }
 .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: #eef0f5; color: #4b5366; font-size: 12px; text-align: center; }
 .muted { color: #8a91a2; }
 .note { background: #fff7e0; border: 1px solid #f3dd9b; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+section.rec { margin-top: 34px; padding-top: 6px; border-top: 2px solid #e3e6ec; }
+section.rec:first-of-type { margin-top: 10px; border-top: none; }
+h2.rec-title { font-size: 21px; border-top: none; margin-top: 8px; }
 footer { margin-top: 30px; color: #9aa1b1; font-size: 12px; text-align: center; }
 @media print { body { background: #fff; } main { margin: 0; border: none; box-shadow: none; padding: 0; } h2 { break-after: avoid; } pre, table { break-inside: avoid; } }
 `;
 
-  /** 문서 → HTML 파일 한 개 (밝은 문서 모양, 바깥 파일 없음, 스크립트 없음) */
-  function toHtml(doc) {
+  /** 기록 문서 하나의 본문 HTML 조각들 (머리말 제외). depth: 머리글을 몇 단계 내릴지 (여러 기록 문서 안에서는 1) */
+  function recordHtml(doc, depth = 0) {
+    const tag = (n, inner) => `<h${Math.min(6, n + depth)}>${inner}</h${Math.min(6, n + depth)}>`;
     const files = doc.files.length ? `<div class="files">첨부: ${doc.files.map((f) => `${esc(f.name)} (${esc(fmtSize(f.size || 0))})`).join(' · ')}</div>` : '';
+    return [
+      tag(2, '질문'),
+      `<div class="question">${esc(doc.question)}</div>`,
+      files,
+      doc.analysis ? analysisHtml(doc.analysis, depth) : '',
+      ...doc.answers.map((a) => `${tag(2, esc(a.name))}\n<div class="answer">${mdToHtml(a.text)}</div>`),
+      ...doc.synth.map((s) => `${tag(2, `${esc(synthTitle(s))} <small>${esc(s.judge)}</small>`)}\n<div class="answer">${mdToHtml(s.text)}</div>`),
+      (doc.chain || []).length ? tag(2, esc(t('chain.section'))) : '',
+      ...(doc.chain || []).map(
+        (c) =>
+          `${tag(3, esc(c.title))}\n` +
+          c.parts.map((p) => `${c.parts.length > 1 ? `${tag(4, esc(p.name))}\n` : ''}<div class="answer">${mdToHtml(p.text)}</div>`).join('\n'),
+      ),
+    ];
+  }
+
+  /** 여러 기록 문서의 본문: 기록마다 번호 붙인 제목 + 시각 + 그 기록의 본문 (머리글 한 단계 내림) */
+  function multiHtml(doc) {
+    return doc.items.map(
+      (item, i) =>
+        `<section class="rec">\n<h2 class="rec-title">${i + 1}. ${esc(item.title)} <small>${esc(fmtTime(item.at))}</small></h2>\n` +
+        `${recordHtml(item, 1).filter(Boolean).join('\n')}\n</section>`,
+    );
+  }
+
+  /** 문서 → HTML 파일 한 개 (밝은 문서 모양, 바깥 파일 없음, 스크립트 없음). 여러 기록 문서도 같은 모양 */
+  function toHtml(doc) {
+    const meta = doc.multi ? t('export.multiCount', { n: doc.items.length }) : `AI 답변 ${doc.answers.length}개${doc.analysis ? ' · 분석 포함' : ''}`;
     const body = [
       '<header>',
       '<div class="brand">Multitude LLM</div>',
       `<h1>${esc(doc.title)}</h1>`,
-      `<div class="meta">${esc(fmtTime(doc.at))} · AI 답변 ${doc.answers.length}개${doc.analysis ? ' · 분석 포함' : ''}</div>`,
+      `<div class="meta">${esc(fmtTime(doc.at))} · ${esc(meta)}</div>`,
       '</header>',
-      '<h2>질문</h2>',
-      `<div class="question">${esc(doc.question)}</div>`,
-      files,
-      doc.analysis ? analysisHtml(doc.analysis) : '',
-      ...doc.answers.map((a) => `<h2>${esc(a.name)}</h2>\n<div class="answer">${mdToHtml(a.text)}</div>`),
-      ...doc.synth.map((s) => `<h2>${esc(synthTitle(s))} <small>${esc(s.judge)}</small></h2>\n<div class="answer">${mdToHtml(s.text)}</div>`),
-      (doc.chain || []).length ? `<h2>${esc(t('chain.section'))}</h2>` : '',
-      ...(doc.chain || []).map(
-        (c) =>
-          `<h3>${esc(c.title)}</h3>\n` +
-          c.parts.map((p) => `${c.parts.length > 1 ? `<h4>${esc(p.name)}</h4>\n` : ''}<div class="answer">${mdToHtml(p.text)}</div>`).join('\n'),
-      ),
+      ...(doc.multi ? multiHtml(doc) : recordHtml(doc)),
       `<footer>Multitude LLM에서 내보냄 · ${esc(fmtTime(Date.now()))}</footer>`,
     ]
       .filter(Boolean)
@@ -284,5 +340,5 @@ footer { margin-top: 30px; color: #9aa1b1; font-size: 12px; text-align: center; 
     return `${day} ${title}.${ext}`;
   }
 
-  return { docFromRecord, docFromCompare, toMarkdown, toHtml, mdToHtml, esc, fileName };
+  return { docFromRecord, docFromCompare, docFromRecords, docFromThread, toMarkdown, toHtml, mdToHtml, esc, fileName };
 });

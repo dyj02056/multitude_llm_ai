@@ -11,12 +11,20 @@
 // 저장 (v0.24.0): save(records, info)의 info = { dirty: [바뀐 기록 id], order: 목록(추가 · 지우기 · 순서)이 바뀌었는가 }.
 // 기록 하나마다 따로 저장하는 쪽(색인 + 기록별 파일)은 planWrites로 "쓸 기록 · 지울 id · 새 색인"만 골라 쓴다.
 // 예전처럼 배열 전체를 저장하는 쪽은 info를 무시하면 된다.
+//
+// v0.27.0: 기록에 threadId(같은 대화 줄기) · kind(질문 종류, shared/recommend.js) · project({ name }, 프로젝트 맥락을 붙여 보냄) ·
+// tags(태그, 10개 · 30자까지) · star(즐겨찾기)를 더했다. 없는 예전 기록은 "없음"으로 본다 (옮기는 작업 없음).
+// 찾기 · 거르기는 shared/history-search.js, 종류별 추천은 shared/recommend.js (화면에서는 이 파일보다 먼저 읽는다).
 (function (root, factory) {
-  const api = factory();
+  const M = root.MLA || {};
+  const api = factory(M.historySearch, M.recommend);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.MLA = root.MLA || {}).historyCore = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (searchLib, recommendLib) {
   'use strict';
+
+  const HS = searchLib || require('./history-search');
+  const RC = recommendLib || require('./recommend');
 
   const MAX_RECORDS = 500; // 기본 최대 개수 (설정에서 바꿈)
   const MAX_CHOICES = [100, 500, 1000, 2000];
@@ -105,8 +113,13 @@
 
   /** 기록의 chain (없거나 깨졌으면 빈 목록) */
   const chainOf = (rec) => (rec && Array.isArray(rec.chain) ? rec.chain.filter((c) => c && typeof c === 'object') : []);
-  /** chain 한 줄의 글들 (검색용) */
-  const chainTexts = (c) => (c.kind === 'debate' ? (Array.isArray(c.answers) ? c.answers.map((x) => (x && x.text) || '') : []) : [c.text || '']);
+
+  /** 프로젝트 표시 (v0.27.0): { name } 만 남긴다 (이름 120자까지). 아니면 null */
+  function cleanProject(p) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const name = str(p.name, 120).trim();
+    return name ? { name } : null;
+  }
 
   /**
    * save(records, info): 바뀐 기록을 저장한다. 답변이 끝날 때마다 바뀌므로 잠깐 모았다가 한 번에 부른다.
@@ -159,7 +172,8 @@
       return over;
     }
 
-    function add({ question, targets, files = [], source, page }) {
+    function add({ question, targets, files = [], source, page, threadId, kind, project }) {
+      const proj = cleanProject(project);
       const rec = {
         id: newId(),
         at: Date.now(),
@@ -170,6 +184,9 @@
         synth: [],
         ...(source ? { source } : {}), // 'side' = 사이드탭에서 보낸 질문 (v0.21.0)
         ...(page ? { page } : {}), // 사이드탭: 함께 보낸 페이지 { title, url }
+        ...(okRecordId(threadId) ? { threadId } : {}), // 같은 대화 줄기 (v0.27.0, rounds.js가 정함)
+        ...(RC.KINDS.includes(kind) ? { kind } : {}), // 질문 종류 (v0.27.0)
+        ...(proj ? { project: proj } : {}), // 프로젝트 맥락을 붙여 보냄 (v0.27.0) — 이름만
       };
       records.unshift(rec);
       if (records.length > limit) records.length = limit;
@@ -229,34 +246,75 @@
       return true;
     }
 
-    /** 목록용 요약. query가 있으면 질문·답변 글에서 찾는다 (대소문자 무시). */
-    function list(query = '') {
-      const q = query.trim().toLowerCase();
-      const hit = (r) =>
-        !q ||
-        r.question.toLowerCase().includes(q) ||
-        (r.files || []).some((f) => f.name.toLowerCase().includes(q)) ||
-        Object.values(r.answers).some((a) => (a.text || '').toLowerCase().includes(q)) ||
-        r.synth.some((s) => (s.text || '').toLowerCase().includes(q)) ||
-        chainOf(r).some((c) => chainTexts(c).some((x) => x.toLowerCase().includes(q)));
-      return records.filter(hit).map((r) => ({
+    /**
+     * 목록용 요약. query가 있으면 질문 · 답변 · 종합 · 이어 묻기 · 태그 글에서 찾는다 (대소문자 무시).
+     * filters (v0.27.0): shared/history-search.js cleanFilters 모양 — 기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석/이어 묻기 · 태그 · 즐겨찾기
+     */
+    function list(query = '', filters) {
+      return HS.filterRecords(records, query, filters).map(summary);
+    }
+
+    /** 기록 하나 → 목록 한 줄 (글은 앞부분만) */
+    function summary(r) {
+      const synth = Array.isArray(r.synth) ? r.synth : [];
+      const answers = r.answers && typeof r.answers === 'object' ? Object.values(r.answers) : [];
+      const tags = HS.tagsOf(r);
+      return {
         id: r.id,
         at: r.at,
-        question: r.question.slice(0, 200),
-        answered: Object.values(r.answers).filter((a) => a.text).length,
-        targets: r.targets.length,
-        synth: r.synth.filter((s) => s.mode !== 'analysis' && s.mode !== 'debate').length,
-        analysis: r.synth.filter((s) => s.mode === 'analysis').length,
-        debate: r.synth.filter((s) => s.mode === 'debate').length,
+        question: String(r.question || '').slice(0, 200),
+        answered: answers.filter((a) => a && a.text).length,
+        targets: Array.isArray(r.targets) ? r.targets.length : 0,
+        synth: synth.filter((s) => s.mode !== 'analysis' && s.mode !== 'debate').length,
+        analysis: synth.filter((s) => s.mode === 'analysis').length,
+        debate: synth.filter((s) => s.mode === 'debate').length,
         chain: chainOf(r).length,
         files: (r.files || []).length,
         ...(r.source ? { source: r.source } : {}),
-      }));
+        ...(typeof r.threadId === 'string' ? { threadId: r.threadId } : {}),
+        kind: RC.kindOf(r),
+        ...(r.project && typeof r.project.name === 'string' ? { project: r.project.name } : {}),
+        ...(r.star === true ? { star: true } : {}),
+        ...(tags.length ? { tags } : {}),
+      };
     }
 
     function get(id) {
       return find(id) || null;
     }
+
+    /** 태그를 바꾼다 (shared/history-search.js cleanTags로 다듬음, 빈 목록이면 지움) → 남긴 태그 | null (기록 없음) */
+    function setTags(id, tags) {
+      const rec = find(id);
+      if (!rec) return null;
+      const clean = HS.cleanTags(tags);
+      if (clean.length) rec.tags = clean;
+      else delete rec.tags;
+      changed(id);
+      return clean;
+    }
+
+    /** 즐겨찾기 켜기 · 끄기 → 남긴 값(true · false) | null (기록 없음 · 값이 true/false가 아님) */
+    function setStar(id, on) {
+      const rec = find(id);
+      if (!rec || typeof on !== 'boolean') return null;
+      if (on) rec.star = true;
+      else delete rec.star;
+      changed(id);
+      return on;
+    }
+
+    /** 같은 대화 줄기의 기록 전부 (오래된 것부터 — 대화 순서) */
+    function thread(threadId) {
+      if (!okRecordId(threadId)) return [];
+      return records.filter((r) => r && r.threadId === threadId).reverse().sort((a, b) => (a.at || 0) - (b.at || 0)); // 목록은 최근 것부터라 뒤집고, 같은 시각이면 그 순서
+    }
+
+    /** 붙은 태그와 개수 [{ tag, n }] (거르기 고르기용) */
+    const tags = () => HS.tagCounts(records);
+
+    /** 질문 종류별 추천 조합 (shared/recommend.js) — 남은 기록으로만 센다 */
+    const recommend = () => RC.recommend(records);
 
     /** 지금 기록 전체 (사이드탭 기록을 앱 탭과 맞출 때) */
     const all = () => records;
@@ -322,7 +380,7 @@
       changed();
     }
 
-    return { load, add, setAnswer, setFeedback, addSynth, addChain, list, get, stats, remove, clear, all, flush, setMax, max: () => limit };
+    return { load, add, setAnswer, setFeedback, addSynth, addChain, list, get, setTags, setStar, thread, tags, recommend, stats, remove, clear, all, flush, setMax, max: () => limit };
   }
 
   /**
@@ -399,6 +457,7 @@
     feedbackOf,
     cleanChain,
     chainOf,
+    cleanProject,
     MAX_CHAIN,
     planWrites,
     okRecordId,
