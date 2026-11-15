@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.23.1-58a6ff)
+![version](https://img.shields.io/badge/version-0.24.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -124,7 +124,7 @@ npm start            # Windows 앱 (Google 계정으로 로그인 → 모델 고
 
 ```bash
 npm test             # 단위 테스트 (공통 로직 · 확장 background 규칙 · 매니페스트 권한)
-npm run build:ext    # src/ → extension/ 다시 만들기 (src/를 고쳤으면 함께 커밋)
+npm run build:ext    # src/ → extension/ 다시 만들기 (src/를 고쳤으면 함께 커밋 — 잊으면 커밋 전 훅이 멈춤)
 npm run check:ext    # extension/이 src/와 맞는지 확인 (릴리스 워크플로도 검사)
 ```
 
@@ -169,6 +169,7 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.24.0** | 기록을 기록별로 저장 · **기록 최대 개수** 설정 · 화면 코드 나누기 · 다국어 틀 · 커밋 전 확장 폴더 검사 |
 | **v0.23.1** | 원격 셀렉터 **서명 검사 켬** — 서명이 맞는 `selectors.json`만 적용 |
 | **v0.23.0** | 바뀐 파일만 보내기 · 적용 실패 시 자동 되돌림 · 답변 `[+1]`/`[-1]` 만족도 · 원격 셀렉터 서명 · 버그 9건과 보안 · 성능 보강 |
 | **v0.22.1** | Windows 앱 **로컬 데이터 암호화**(DPAPI) — 기록 · 설정 · 라이브러리 · 프로젝트 상태 |

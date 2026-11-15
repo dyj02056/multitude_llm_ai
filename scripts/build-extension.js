@@ -10,7 +10,7 @@
 //   extension/manifest.json        서비스 목록(src/shared/services.js)과 package.json 버전으로 생성
 //   extension/app.html             src/renderer/index.html에서 생성
 //   extension/lib/shared/*.js      src/shared/*.js 복사 (vendor/ 안의 외부 라이브러리·라이선스 포함)
-//   extension/lib/renderer/*       src/renderer/renderer.js · templates.js · project.js · library.js · styles.css 복사
+//   extension/lib/renderer/*       src/renderer/의 화면 스크립트(RENDERER_FILES) · styles.css 복사
 //   extension/icons/icon-*.png     scripts/make-icon.js로 생성
 //
 // 생성 결과도 저장소에 커밋해 둔다. 그래야 받은 그대로 "압축해제된 확장 프로그램을 로드"할 수 있다.
@@ -37,6 +37,18 @@ const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'histor
 // 서비스 페이지(content script)가 읽는 공통 모듈
 const CONTENT_SHARED = ['page', 'markdown', 'shortcuts'];
 const ICON_SIZES = [16, 32, 48, 128];
+// 화면 스크립트 (src/renderer/ → extension/lib/renderer/). PAGE_SCRIPTS는 index.html에 적힌 순서 그대로 app.html에도 들어간다.
+const RENDERER_FILES = [
+  'templates.js',
+  'renderer.js',
+  'renderer-views.js',
+  'renderer-compose.js',
+  'project.js',
+  'project-changes.js',
+  'project-editor.js',
+  'library.js',
+];
+const PAGE_SCRIPTS = RENDERER_FILES.filter((n) => n !== 'templates.js');
 
 /** 만들 파일 목록: { 경로(extension/ 기준): 내용(문자열 | Buffer) } */
 // 만들 파일 목록 전체를 계산합니다 (공통 모듈 복사, 화면 파일 복사, app.html, manifest.json, 아이콘).
@@ -51,7 +63,7 @@ function buildFiles() {
     const body = read(`src/shared/vendor/${name}`);
     files[`lib/shared/vendor/${name}`] = name.endsWith('.js') ? `// ${GENERATED} (원본: src/shared/vendor/${name})\n${body}` : body;
   }
-  for (const name of ['renderer.js', 'templates.js', 'project.js', 'library.js']) {
+  for (const name of RENDERER_FILES) {
     files[`lib/renderer/${name}`] = `// ${GENERATED} (원본: src/renderer/${name})\n${read(`src/renderer/${name}`)}`;
   }
   files['lib/renderer/styles.css'] = `/* ${GENERATED} (원본: src/renderer/styles.css) */\n${read('src/renderer/styles.css')}`;
@@ -100,11 +112,10 @@ function buildAppHtml(html) {
     '  <script src="host.js"></script>',
     '  <script src="lib/renderer/templates.js"></script>',
   ].join('\n'));
-  replace('  <script src="renderer.js"></script>\n  <script src="project.js"></script>\n  <script src="library.js"></script>', [
-    '  <script src="lib/renderer/renderer.js"></script>',
-    '  <script src="lib/renderer/project.js"></script>',
-    '  <script src="lib/renderer/library.js"></script>',
-  ].join('\n'));
+  replace(
+    PAGE_SCRIPTS.map((n) => `  <script src="${n}"></script>`).join('\n'),
+    PAGE_SCRIPTS.map((n) => `  <script src="lib/renderer/${n}"></script>`).join('\n'),
+  );
   replace('<!doctype html>\n', `<!doctype html>\n<!-- ${GENERATED} (원본: src/renderer/index.html) -->\n`);
   return html;
 }

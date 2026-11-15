@@ -12,7 +12,7 @@ Multitude LLM has **no server of its own** and **collects nothing**. It does not
 
 | Data | Where it goes | Stored where |
 |---|---|---|
-| Questions you type, files you attach, and project files you choose to send | Only to the AI chat websites you opened in panels (e.g. gemini.google.com, chatgpt.com, claude.ai), through those websites' own pages | Question text, answers and attached **file names** are kept in your local history (last 500). File contents are not stored in history |
+| Questions you type, files you attach, and project files you choose to send | Only to the AI chat websites you opened in panels (e.g. gemini.google.com, chatgpt.com, claude.ai), through those websites' own pages | Question text, answers and attached **file names** are kept in your local history (last 500 by default; 100–2000 in settings). File contents are not stored in history |
 | Text of a web page you are reading (only when you use right-click › "Ask Multitude LLM", the side-panel shortcut, or turn on side-panel auto-read) | Only to the AI chat panels in that side panel / app tab | Temporarily in Chrome session storage until the app tab picks it up, then deleted |
 | Settings, library (templates/skills), project state (including originals kept for undo) | Nowhere | Your browser's extension storage (Chrome) or the app data folder (Windows, encrypted with Windows DPAPI) |
 | Cookies of the supported AI sites | Never leave your browser. The extension attaches them to those sites' own WebSocket connections inside the app tab, and for Qwen / Z.ai copies the sign-in token into that site's own frame inside the app tab, so you stay signed in there | In memory / Chrome's session rules only |
@@ -55,7 +55,7 @@ Multitude LLM은 **자체 서버가 없고 아무것도 수집하지 않습니�
 
 | 정보 | 가는 곳 | 저장 위치 |
 |---|---|---|
-| 입력한 질문 · 첨부 파일 · 보내기로 고른 프로젝트 파일 | 패널로 연 AI 채팅 사이트(gemini.google.com, chatgpt.com, claude.ai 등)에만, 그 사이트 화면을 통해 | 질문 · 답변 · 첨부 **파일 이름**은 이 PC의 기록(최근 500개)에. 파일 내용은 기록에 남기지 않음 |
+| 입력한 질문 · 첨부 파일 · 보내기로 고른 프로젝트 파일 | 패널로 연 AI 채팅 사이트(gemini.google.com, chatgpt.com, claude.ai 등)에만, 그 사이트 화면을 통해 | 질문 · 답변 · 첨부 **파일 이름**은 이 PC의 기록(기본 최근 500개, 설정에서 100~2000개)에. 파일 내용은 기록에 남기지 않음 |
 | 보고 있는 웹페이지 글 (오른쪽 클릭 메뉴 · 사이드탭 단축키 · 사이드탭 자동 읽기를 쓸 때만) | 그 사이드탭 / 앱 탭의 AI 패널에만 | 앱 탭이 가져갈 때까지 크롬 세션 저장소에 잠깐, 가져가면 지움 |
 | 설정 · 라이브러리(템플릿 · 스킬) · 프로젝트 상태(되돌리기용 원본 포함) | 어디로도 보내지 않음 | 브라우저의 확장 저장소(크롬) 또는 앱 데이터 폴더(Windows, DPAPI 암호화) |
 | 지원하는 AI 사이트의 쿠키 | 브라우저 밖으로 나가지 않음. 앱 탭 안 그 사이트의 WebSocket 연결에 붙이고, Qwen · Z.ai는 로그인 토큰을 앱 탭 안 그 사이트 프레임에만 넣어 로그인을 유지 | 메모리 · 크롬 세션 규칙에만 |

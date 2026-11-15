@@ -1,0 +1,25 @@
+#!/bin/sh
+# 커밋 전에 크롬 확장 폴더(extension/)가 src/와 맞는지 확인한다 (v0.24.0).
+# src/ · package.json을 고치고 npm run build:ext를 잊으면 커밋을 멈춘다.
+# 설치: npm install(또는 npm ci)의 prepare 단계가 git config core.hooksPath scripts/hooks 를 해 둔다.
+# 급할 때 건너뛰기: git commit --no-verify (CI의 check:ext가 다시 잡는다)
+
+staged=$(git diff --cached --name-only --diff-filter=ACMRD)
+case "$staged" in
+  *src/*|*package.json*|*extension/*|*scripts/build-extension.js*|*scripts/make-icon.js*) ;;
+  *) exit 0 ;;
+esac
+
+if ! node scripts/build-extension.js --check; then
+  echo ""
+  echo "[pre-commit] extension/ 이 src/와 맞지 않습니다. npm run build:ext 를 실행하고 바뀐 extension/ 파일도 함께 커밋하세요."
+  exit 1
+fi
+
+# 확장 폴더는 맞지만 그 변경을 스테이지하지 않았으면 커밋에 빠진다
+if ! git diff --quiet -- extension/; then
+  echo ""
+  echo "[pre-commit] extension/ 에 스테이지하지 않은 변경이 있습니다. git add extension/ 후 다시 커밋하세요."
+  exit 1
+fi
+exit 0

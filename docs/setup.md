@@ -64,12 +64,13 @@ npm start
 |---|---|
 | `src/shared/` | Windows 앱과 확장 프로그램이 **같이 쓰는** 코드: 서비스 목록·셀렉터(`services.js`), 패널 배치(`layout.js`), 템플릿 변수·스킬(`prompt-lib.js`), 질문 보내기·종합(`rounds.js` · `synth.js`), 답변 감시(`watch.js`), 페이지 주입 함수(`page.js` · `markdown.js`), 기록(`history-core.js`), 셀렉터 원격 갱신(`remote-core.js`), 단축키(`shortcuts.js`), 분석 · 차이 강조(`analysis.js`), 셀렉터 자가진단(`diag.js`), 내보내기(`export.js`), 로컬 LLM(`local-llm.js`), 웹페이지로 질문(`web-ask.js`), 사이드탭 계산(`side-panel.js`), 프로젝트 모드(`project-ignore.js` 제외 규칙, `secret-scan.js`, `project-context.js`, `project-upload.js` 업로드 파일 만들기, `patch.js`) |
 | `src/shared/vendor/` | 포함한 외부 라이브러리: [ignore](https://github.com/kaelzhang/node-ignore) 7.0.12 (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) 9.0.0 (BSD-3-Clause) — 라이선스 파일 함께 |
-| `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`project.js`: 프로젝트 폴더 읽기·쓰기, `git-rules.js`·`gitconsole.js`: git 콘솔 명령 검사·실행) |
-| `src/renderer/` | 화면 (두 쪽이 같은 파일을 씀) |
+| `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`project.js`: 프로젝트 폴더 읽기·쓰기, `git-rules.js`·`gitconsole.js`: git 콘솔 명령 검사·실행, `history.js`: 기록 저장(색인 + 기록별 파일), `ipc/`: 화면 요청 처리 — 기록 · 프로젝트 · 설정) |
+| `src/renderer/` | 화면 (두 쪽이 같은 파일을 씀). 읽는 순서: `templates.js` → `renderer.js`(도우미 · 패널) → `renderer-views.js`(비교 · 기록 · 설정) → `renderer-compose.js`(보내기 · 상태) → `project.js` → `project-changes.js` → `project-editor.js` → `library.js` |
+| `src/shared/i18n*.js` | 화면 문구 다국어 틀 (v0.24.0): `t('키', { 이름: 값 })`, 사전 `i18n-ko.js` · `i18n-en.js`(키 짝은 테스트가 검사). 새 화면 글은 여기에 넣는다 |
 | `test/` | 공통 모듈 단위 테스트 (`npm test`) |
 | `extension/` | 크롬 확장 프로그램. 직접 고치는 파일은 `host.js`·`project-fs.js`·`content.js`·`cookie-shim.js`·`cookie-bridge.js`·`background.js`·`ext.css`와 사이드탭 `sidepanel.html`·`sidepanel.js`·`sidepanel.css`뿐이고, 나머지(`manifest.json`, `app.html`, `lib/`, `icons/`)는 생성 파일 |
 
-`src/shared/`나 `src/renderer/`를 고친 뒤에는 확장 프로그램 폴더를 다시 만들어 함께 커밋합니다.
+`src/shared/`나 `src/renderer/`를 고친 뒤에는 확장 프로그램 폴더를 다시 만들어 함께 커밋합니다. `npm install` 때 커밋 전 훅(`scripts/hooks/pre-commit`)이 연결되어, 잊으면 커밋을 멈춥니다.
 
 ```bash
 npm run build:ext   # extension/ 다시 만들기

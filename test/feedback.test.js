@@ -131,7 +131,8 @@ test('평가: Windows 앱(IPC)과 크롬 확장(host.js)에 같은 이름으로 
   const fs = require('fs');
   const path = require('path');
   const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-  assert.match(read('src/main/main.js'), /ipcMain\.handle\('history:feedback'/);
+  assert.match(read('src/main/ipc/history.js'), /ipcMain\.handle\('history:feedback'/); // v0.24.0: main.js에서 옮김
+  assert.match(read('src/main/main.js'), /require\('\.\/ipc\/history'\)\.register\(/);
   assert.match(read('src/main/main.js'), /history: roundHistory/);
   assert.match(read('src/preload/preload.js'), /feedback: \(svcId, value\) => ipcRenderer\.invoke\('history:feedback'/);
   const host = read('extension/host.js');

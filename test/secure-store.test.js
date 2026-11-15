@@ -76,7 +76,7 @@ test('암호화를 쓸 수 없는 환경이면 예전처럼 평문으로 저장 
 
 test('본체가 기록 · 설정 · 라이브러리 · 프로젝트 상태 · 테스트 복구 파일을 이 저장소로 쓴다', () => {
   const src = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'main', f), 'utf8');
-  assert.match(src('history.js'), /store\(\)\.writeJson\(file, records\)/);
+  assert.match(src('history.js'), /sec\(\)\.writeJson\(recFile\(id\), d\)/);
   assert.match(src('main.js'), /secure\.store\(\)\.writeJson\(prefsFile\(\), prefs\)/);
   assert.match(src('main.js'), /secure\.store\(\)\.writeJson\(libraryFile\(\)/);
   assert.match(src('project.js'), /writeJsonAsync\(stateFile\(id\), data\)/);

@@ -21,12 +21,10 @@
 
 // ---------- 필요한 도구(모듈) 불러오기 ----------
 // require는 다른 파일이나 라이브러리의 기능을 가져오는 명령입니다.
-const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard, dialog, net } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl, limitTextOf } = require('../shared/services');
 const { LAYOUTS, normalizeLayout, placeCells } = require('../shared/layout');
-const { normalizeLibrary } = require('../shared/prompt-lib');
 const autologin = require('./autologin');
 const { sendPrompt, cleanupTemp } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
@@ -37,6 +35,7 @@ const L = require('../shared/local-llm');
 const watchCore = require('../shared/watch');
 const { pageProbe, pageLimitCheck } = require('../shared/page');
 const history = require('./history');
+const { normalizeMax, MAX_CHOICES } = require('../shared/history-core');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
 const project = require('./project');
@@ -108,6 +107,7 @@ let prefs = {
   projectRoot: null, // 마지막으로 연 프로젝트 폴더
   local: { enabled: false, baseUrl: L.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
   autoUpdate: true, // 새 버전 자동 확인 (알리기만, v0.20.0)
+  historyMax: 500, // 기록 최대 개수 (v0.24.0, 100 · 500 · 1000 · 2000)
 };
 
 /**
@@ -126,6 +126,7 @@ function loadPrefs() {
   if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(L.LOCAL_ID);
   prefs.layout = normalizeLayout(prefs.layout);
   if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
+  prefs.historyMax = normalizeMax(prefs.historyMax);
 }
 
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
@@ -506,6 +507,8 @@ function pushState() {
     synthTarget: prefs.synthTarget,
     autoSynth: prefs.autoSynth,
     answerTimeoutMin: prefs.answerTimeoutMin,
+    historyMax: prefs.historyMax,
+    historyMaxChoices: MAX_CHOICES,
     timeoutChoices: TIMEOUT_CHOICES,
     remoteSelectors: prefs.remoteSelectors,
     remote: remote.getStatus(),
@@ -738,102 +741,7 @@ ipcMain.handle('prompt:followup', async (_e, { id, text, files, opts }) => {
 
 // ---------- 프로젝트 모드 (로컬 폴더 읽기·쓰기는 project.js, 처리는 화면 쪽 공통 모듈) ----------
 
-// 프로젝트 사이드바가 열리고 닫힐 때: 패널 자리를 사이드바 폭만큼 비우거나 되돌립니다.
-ipcMain.on('layout:sidebar', (_e, open) => {
-  sidebarOpen = !!open;
-  pushState();
-});
-
-/** 마지막으로 연 프로젝트 폴더를 설정에 기억합니다 (다음에 앱을 켜면 자동으로 다시 열기 위해). */
-async function rememberProject(p) {
-  prefs.projectRoot = p ? p.id : null;
-  savePrefs();
-  return withRecovery(p);
-}
-
-/** 프로젝트를 열 때: 지난번 "테스트 실행" 도중 앱이 꺼져 남은 임시 적용이 있으면 원래 파일로 되돌리고 몇 개인지 알린다 */
-async function withRecovery(p) {
-  if (!p || !devTest) return p;
-  const recovered = await devTest.recover().catch(() => 0);
-  return recovered ? { ...p, recovered } : p;
-}
-
-// 프로젝트 관련 요청을 감싸는 도우미: 성공하면 { ok: true, value }, 오류가 나면 { ok: false, error }로 돌려줍니다.
-// 이렇게 하면 오류가 나도 앱이 멈추지 않고, 화면이 이유를 보여 줄 수 있습니다.
-const projectCall = (fn) => async (_e, ...args) => {
-  try {
-    return { ok: true, value: await fn(...args) };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-};
-
-// 테스트 실행이 수정안을 잠깐 써 둔 동안에는 화면에서 오는 쓰기·지우기와 프로젝트 바꾸기·닫기를 받지 않는다 (끝나면 원래 파일로 되돌리므로)
-const notDuringTest = () => {
-  if (devTest?.isBusy()) throw new Error('테스트 실행 중에는 파일을 바꿀 수 없습니다 (끝나거나 중지한 뒤 다시 하세요)');
-};
-
-ipcMain.handle('project:pick', projectCall(async () => {
-  notDuringTest();
-  const picked = await project.pick(win);
-  if (!picked) return null; // 폴더 고르기를 취소하면 지금 기억해 둔 프로젝트를 지우지 않는다
-  gitConsole?.stop();
-  return rememberProject(picked);
-}));
-// Windows 앱은 접근 허용을 다시 받을 필요가 없어 restore·reconnect가 같다.
-const restoreProject = async () => {
-  if (!prefs.projectRoot) return null;
-  try {
-    return await withRecovery(await project.open(prefs.projectRoot));
-  } catch {
-    return rememberProject(null); // 폴더가 없어졌으면 잊는다
-  }
-};
-ipcMain.handle('project:restore', projectCall(restoreProject));
-ipcMain.handle('project:reconnect', projectCall(restoreProject));
-ipcMain.handle('project:close', projectCall(async () => {
-  notDuringTest();
-  gitConsole?.stop(); // 실행 중인 git 명령은 그 폴더와 함께 멈춘다
-  project.close();
-  await rememberProject(null);
-  return true;
-}));
-ipcMain.handle('project:readDir', projectCall((rel) => project.readDir(String(rel))));
-// 읽기 한도(maxBytes)는 앱 쪽 최대값(project.READ_MAX_BYTES)을 넘지 못하게 자르고, 그 밖의 옵션은 버린다
-ipcMain.handle('project:readFile', projectCall((rel, opts) => project.readFile(String(rel), guard.readFileOpts(opts, project.READ_MAX_BYTES))));
-ipcMain.handle('project:writeFile', projectCall((rel, text) => (notDuringTest(), project.writeFile(String(rel), text))));
-ipcMain.handle('project:deleteFile', projectCall((rel) => (notDuringTest(), project.deleteFile(String(rel)))));
-ipcMain.handle('project:globalExclude', projectCall(() => project.globalExclude()));
-ipcMain.handle('project:loadState', projectCall(() => (project.info() ? project.loadState(project.info().id) : null)));
-ipcMain.handle('project:saveState', projectCall((data) => (project.info() ? project.saveState(project.info().id, data) : false)));
-
-// 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 사이트 셀렉터 자동 갱신 켜기/끄기
-ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate }) => {
-  if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
-  if (typeof autoUpdate === 'boolean') prefs.autoUpdate = autoUpdate;
-  if (typeof remoteSelectors === 'boolean' && remoteSelectors !== prefs.remoteSelectors) {
-    prefs.remoteSelectors = remoteSelectors;
-    if (remoteSelectors) refreshRemote();
-    else remote.reset();
-  }
-  savePrefs();
-  pushState();
-});
-
-// 종합 담당 AI와 "완료 후 자동 종합" 켜기/끄기 저장
-ipcMain.on('synth:set', (_e, { target, auto }) => {
-  if (typeof target === 'string' && allServices().some((s) => s.id === target)) prefs.synthTarget = target;
-  if (typeof auto === 'boolean') prefs.autoSynth = auto;
-  savePrefs();
-  pushState();
-});
-
-// 최신 답변을 Markdown으로 복사. id가 '*'이면 열린 패널 전부를 "## 이름" 머리말로 묶는다.
-ipcMain.handle('answer:copy', async (_e, id) => {
-  const { text, copied, total } = await rounds.collectMarkdown(id);
-  if (copied) clipboard.writeText(text);
-  return { copied, total };
-});
+// 화면 요청 처리는 main/ipc/project.js (아래 "화면 요청(IPC) 연결"에서 연결)
 
 // 채팅 안의 화면 바꾸기 (패널 / 창 띄우기 / 비교 / 변경 제안 / 편집기 …). 목록에 있는 이름만 받습니다.
 ipcMain.on('view:set', (_e, value) => {
@@ -842,41 +750,6 @@ ipcMain.on('view:set', (_e, value) => {
     pushState();
   }
 });
-
-// 질문·답변 기록
-ipcMain.handle('history:list', (_e, query) => history.list(typeof query === 'string' ? query : ''));
-ipcMain.handle('history:get', (_e, id) => history.get(id));
-ipcMain.handle('history:stats', () => history.stats());
-// 답변 평가: 지금 라운드 기록의 그 AI 답변에 1(좋았음) · -1(별로였음) · 0(지우기) → 남긴 값 | null
-ipcMain.handle('history:feedback', (_e, svcId, value) =>
-  roundHistoryId && typeof svcId === 'string' && [1, -1, 0].includes(value) ? history.setFeedback(roundHistoryId, svcId, value) : null,
-);
-ipcMain.handle('history:delete', (_e, id) => history.remove(id));
-ipcMain.handle('history:clear', () => history.clear());
-ipcMain.handle('clipboard:write', (_e, text) => {
-  if (typeof text === 'string') clipboard.writeText(text);
-});
-
-// 내보내기 (v0.14.0): 저장 창에서 고른 곳에 Markdown · HTML 글을 씁니다. 이름은 화면이 정한 기본값, 종류는 md · html만.
-const SAVE_KINDS = { md: { name: 'Markdown', ext: 'md' }, html: { name: 'HTML 문서', ext: 'html' } };
-ipcMain.handle('file:save', async (_e, { name, text, kind } = {}) => {
-  const k = SAVE_KINDS[kind];
-  if (!k || typeof text !== 'string' || text.length > 20 * 1024 * 1024) return { ok: false, error: '저장할 내용이 올바르지 않습니다' };
-  const base = (typeof name === 'string' ? name : '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 120) || `답변.${k.ext}`;
-  const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: '내보내기',
-    defaultPath: path.join(app.getPath('downloads'), base.endsWith(`.${k.ext}`) ? base : `${base}.${k.ext}`),
-    filters: [{ name: k.name, extensions: [k.ext] }],
-  });
-  if (canceled || !filePath) return { ok: false, cancelled: true };
-  await fs.promises.writeFile(filePath, text, 'utf8');
-  return { ok: true, path: filePath };
-});
-
-// 답변 비교 화면용: 열린 패널마다 최신 답변 글과 마지막 공통 질문
-ipcMain.handle('answers:get', () => rounds.answers());
-// 패널 하나의 최신 답변 (답변이 끝난 패널만 읽을 때: 파일 모아보기 버튼, NEED_FILES 확인)
-ipcMain.handle('answer:get', (_e, id) => (typeof id === 'string' ? rounds.answer(id) : null));
 
 // 패널 머리줄 버튼: 새로고침 · 처음 주소 · 뒤로 · 개발자 도구 · 로그인 다시 시도 · 새 대화
 // id가 '*'이면 열린 패널 전부에 같은 동작을 합니다 (모두 새 대화 등).
@@ -911,45 +784,6 @@ ipcMain.on('panel:action', (_e, { id, action }) => {
   }
 });
 
-// ---------- 로컬 LLM 설정 (설정 화면) ----------
-// 켜기 · 끄기, 주소(localhost만), 모델. 끄면 열린 로컬 패널을 닫고 고른 목록에서도 뺀다.
-ipcMain.handle('local:setPrefs', (_e, next = {}) => {
-  const cur = prefs.local;
-  const baseUrl = next.baseUrl === undefined ? cur.baseUrl : L.normalizeBaseUrl(next.baseUrl);
-  if (!baseUrl) return { ok: false, error: '주소는 이 PC(localhost · 127.0.0.1 · [::1])의 http(s) 주소만 쓸 수 있습니다' };
-  prefs.local = {
-    enabled: typeof next.enabled === 'boolean' ? next.enabled : cur.enabled,
-    baseUrl,
-    model: next.model === undefined ? cur.model : L.cleanModel(next.model),
-  };
-  if (!prefs.local.enabled) {
-    prefs.selected = prefs.selected.filter((x) => !isLocal(x));
-    if (isLocal(prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
-    if (localChat) {
-      closeLocalPanel();
-      if (focusId && isLocal(focusId)) focusId = null;
-    }
-  }
-  savePrefs();
-  pushState();
-  return { ok: true, local: { ...prefs.local } };
-});
-// 연결 확인: 그 주소의 모델 목록 (/v1/models)
-ipcMain.handle('local:models', async (_e, baseUrl) => {
-  // 화면이 준 주소도 이 PC 주소인지 앱 쪽에서 다시 본다 (아니면 요청을 보내지 않는다)
-  const base = baseUrl === undefined || baseUrl === null ? prefs.local.baseUrl : guard.localBaseUrl(baseUrl);
-  if (!base) return { ok: false, error: '주소는 이 PC(localhost · 127.0.0.1 · [::1])의 http(s) 주소만 쓸 수 있습니다' };
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 5000);
-  try {
-    return { ok: true, models: await L.listModels((u, o) => net.fetch(u, o), base, { signal: ctrl.signal }) };
-  } catch (err) {
-    return { ok: false, error: err.name === 'AbortError' ? '5초 안에 답이 없습니다 (서버가 켜져 있는지 확인하세요)' : err.message };
-  } finally {
-    clearTimeout(timer);
-  }
-});
-
 // ---------- 사이트 셀렉터 원격 갱신 ----------
 
 // 서비스 사이트의 화면 구조가 바뀌면 입력창·답변을 못 찾게 됩니다.
@@ -972,38 +806,59 @@ async function refreshRemote() {
   return st;
 }
 
-ipcMain.handle('remote:refresh', () => refreshRemote());
-
 // ---------- 앱 업데이트 (v0.20.0) ----------
 // 확인은 자동(켜 두었을 때) 또는 설정 화면의 [지금 확인]. 받기 · 설치는 사용자가 누를 때만.
 let updater = null;
-ipcMain.handle('update:check', () => updater?.check());
-ipcMain.handle('update:download', () => updater?.download());
-ipcMain.handle('update:install', () => updater?.install() || false);
-ipcMain.on('update:openReleases', () => shell.openExternal(require('../shared/update-core').RELEASES_URL));
+
+// ---------- 화면 요청(IPC) 연결 (v0.24.0) ----------
+// 기록 · 프로젝트 · 설정 요청은 main/ipc/ 아래 파일이 처리한다. 바뀌는 값(창 · 설정 · 패널 상태)은 함수로 넘긴다.
+require('./ipc/history').register({
+  ipcMain,
+  history,
+  clipboard,
+  dialog,
+  app,
+  rounds: () => rounds,
+  roundHistoryId: () => roundHistoryId,
+  win: () => win,
+});
+require('./ipc/project').register({
+  ipcMain,
+  project,
+  guard,
+  prefs: () => prefs,
+  savePrefs,
+  pushState,
+  win: () => win,
+  devTest: () => devTest,
+  gitConsole: () => gitConsole,
+  setSidebarOpen: (open) => (sidebarOpen = open),
+});
+require('./ipc/settings').register({
+  ipcMain,
+  history,
+  remote,
+  guard,
+  net,
+  shell,
+  TIMEOUT_CHOICES,
+  MAX_CHOICES,
+  prefs: () => prefs,
+  savePrefs,
+  pushState,
+  allServices,
+  refreshRemote,
+  localChat: () => localChat,
+  closeLocalPanel,
+  focusId: () => focusId,
+  setFocusId: (id) => (focusId = id),
+  updater: () => updater,
+  shortcutList,
+  librarySaver,
+  readLibrary: () => secure.store().readJson(libraryFile(), {}),
+});
 
 // ---------- 단축키 ----------
-
-ipcMain.handle('shortcuts:list', () => shortcutList());
-
-// 프롬프트 라이브러리·스킬: 모양을 검사하고 길이를 잘라서 이 PC에만 저장한다 (shared/prompt-lib.js)
-ipcMain.handle('library:load', () => {
-  try {
-    const pending = librarySaver.current(); // 아직 파일에 안 들어갔을 수도 있는 마지막 저장본이 먼저
-    return normalizeLibrary(pending !== undefined ? pending : secure.store().readJson(libraryFile(), {}));
-  } catch {
-    return normalizeLibrary({});
-  }
-});
-ipcMain.handle('library:save', (_e, data) => {
-  try {
-    librarySaver.save(normalizeLibrary(data)); // 쓰기 실패는 librarySaver가 터미널에 남긴다
-    return true;
-  } catch (err) {
-    console.error('[library] 저장하지 못했습니다:', err.message);
-    return false;
-  }
-});
 
 /** 단축키 동작을 실행한다. 처리했으면 true (그 키는 페이지로 넘기지 않는다). */
 function runShortcut(action) {
@@ -1061,7 +916,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     cleanupTemp(); // 지난번에 남은 첨부 임시 파일
     loadPrefs();
-    history.init(app.getPath('userData'));
+    history.init(app.getPath('userData'), { max: prefs.historyMax });
     remote.init(app.getPath('userData'), SERVICES, { remoteUrl: dev.remoteUrl });
     if (prefs.remoteSelectors) {
       refreshRemote();

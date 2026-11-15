@@ -16,7 +16,8 @@ const ROOT = path.join(__dirname, '..', '..');
 // --store: 크롬 웹 스토어용 1280×800 스크린샷을 store/screenshots에 (문서용 docs/screenshots는 그대로)
 //   npm run screenshots -- --store 02-ask-all 13-analysis 11-patch-preview 19-local-llm 24-side-panel
 const STORE = process.argv.includes('--store');
-const OUT = path.join(ROOT, ...(STORE ? ['store', 'screenshots'] : ['docs', 'screenshots']));
+// MLA_SHOT_OUT=폴더: 다른 곳에 저장 (화면 코드를 고친 뒤 docs 그림을 바꾸지 않고 장면만 띄워 볼 때, v0.24.0)
+const OUT = process.env.MLA_SHOT_OUT || path.join(ROOT, ...(STORE ? ['store', 'screenshots'] : ['docs', 'screenshots']));
 
 // 앱 화면: 1400×860, 사이드탭: 420×860 (크롬 사이드 패널 폭)
 const SCENES = [
@@ -99,6 +100,10 @@ app.whenReady().then(async () => {
     let last = null;
     win.webContents.on('paint', (_e, _dirty, image) => (last = image));
     win.webContents.setFrameRate(10);
+    // 화면 스크립트 오류는 장면 이름과 함께 알린다 (그림은 찍혀도 기능이 깨졌을 수 있다)
+    win.webContents.on('console-message', (e) => {
+      if (e.level === 'error') console.error(`[${scene.name}] console error:`, e.message);
+    });
     const ready = new Promise((resolve) => win.webContents.ipc.once('shot:ready', resolve));
     const url = scene.page === 'side' ? 'shot://repo/extension/sidepanel.html' : 'shot://repo/src/renderer/index.html';
     await win.loadURL(`${url}?scene=${scene.name}`).catch((err) => console.warn(scene.name, 'load:', err.message));

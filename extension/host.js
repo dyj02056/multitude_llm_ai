@@ -20,7 +20,7 @@
   const { watchAnswer } = MLA.watch;
   const { createRounds } = MLA.rounds;
   const { createDiag } = MLA.diag;
-  const { createHistory } = MLA.historyCore;
+  const { createHistory, planWrites, okRecordId, normalizeMax, MAX_CHOICES } = MLA.historyCore;
   const remoteCore = MLA.remoteCore;
   const { shortcutList, shortcutFor } = MLA.shortcuts;
 
@@ -70,6 +70,7 @@
     remoteSelectors: true, // 사이트 셀렉터 원격 갱신
     local: { enabled: false, baseUrl: MLA.localLLM.DEFAULT_BASE, model: '' }, // 로컬 LLM 패널 (선택 기능, v0.16.0)
     autoUpdate: true, // 새 버전 알림 (v0.20.0)
+    historyMax: 500, // 기록 최대 개수 (v0.24.0)
   };
   const savePrefs = () => store('prefs', prefs);
 
@@ -99,7 +100,48 @@
     localChat = null;
   }
 
-  const history = createHistory((records) => store('history', records));
+  // 기록별 저장 (v0.24.0): 'history:index' = { v: 2, ids }, 'history:r:<id>' = 기록 하나. 바뀐 기록만 쓴다.
+  // 예전 'history' 칸(배열 전체)은 처음 읽을 때 옮기고 지운다 (loadHistory).
+  const HIST_INDEX = 'history:index';
+  const histKey = (id) => `history:r:${id}`;
+  let histKnown = new Set();
+  function saveHistory(records, info) {
+    const plan = planWrites(records, info, histKnown);
+    const set = {};
+    for (const r of plan.write) set[histKey(r.id)] = r;
+    if (plan.index) {
+      set[HIST_INDEX] = { v: 2, ids: plan.index };
+      histKnown = new Set(plan.index);
+    }
+    const fail = (err) => console.error('[storage] 기록 저장 실패:', err.message);
+    if (Object.keys(set).length) chrome.storage.local.set(set).catch(fail);
+    if (plan.remove.length) chrome.storage.local.remove(plan.remove.map(histKey)).catch(fail);
+  }
+  async function loadHistory() {
+    const idx = await load(HIST_INDEX, null);
+    if (idx && Array.isArray(idx.ids)) {
+      const ids = idx.ids.filter(okRecordId);
+      const got = ids.length ? await chrome.storage.local.get(ids.map(histKey)).catch(() => ({})) : {};
+      const records = ids.map((id) => got[histKey(id)]).filter((r) => r && typeof r === 'object' && okRecordId(r.id));
+      histKnown = new Set(records.map((r) => r.id));
+      return records;
+    }
+    const legacy = await load('history', null);
+    if (!Array.isArray(legacy)) return [];
+    const seen = new Set();
+    const records = legacy.filter((r) => r && typeof r === 'object' && okRecordId(r.id) && !seen.has(r.id) && seen.add(r.id));
+    const set = { [HIST_INDEX]: { v: 2, ids: records.map((r) => r.id) } };
+    for (const r of records) set[histKey(r.id)] = r;
+    try {
+      await chrome.storage.local.set(set);
+      await chrome.storage.local.remove('history');
+    } catch (err) {
+      console.error('[storage] 기록 옮기기 실패:', err.message);
+    }
+    histKnown = new Set(records.map((r) => r.id));
+    return records;
+  }
+  const history = createHistory(saveHistory);
   // 사이드탭 기록 (v0.21.0): 사이드탭이 'history:side'에 쓰고, 앱 탭 기록 화면이 함께 보여 준다.
   // 같은 칸을 두 화면이 함께 쓰면 서로 덮어쓸 수 있어서 칸을 나눴다. 앱 탭은 지우기만 한다.
   const sideHistory = createHistory((records) => store('history:side', records));
@@ -396,6 +438,8 @@
       autoSynth: prefs.autoSynth,
       answerTimeoutMin: prefs.answerTimeoutMin,
       timeoutChoices: TIMEOUT_CHOICES,
+      historyMax: prefs.historyMax,
+      historyMaxChoices: MAX_CHOICES,
       remoteSelectors: prefs.remoteSelectors,
       remote: remoteStatus,
       diag: diag.all(SERVICES.map((s) => s.id)),
@@ -816,8 +860,12 @@
       savePrefs();
       pushState();
     },
-    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate }) => {
+    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax }) => {
       if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
+      if (MAX_CHOICES.includes(historyMax)) {
+        prefs.historyMax = historyMax;
+        history.setMax(historyMax);
+      }
       if (typeof autoUpdate === 'boolean') prefs.autoUpdate = autoUpdate;
       if (typeof remoteSelectors === 'boolean' && remoteSelectors !== prefs.remoteSelectors) {
         prefs.remoteSelectors = remoteSelectors;
@@ -895,7 +943,9 @@
     prefs.selected = normalizeSelected(prefs.selected);
     if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(LL.LOCAL_ID);
     if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
-    history.load(await load('history', []));
+    prefs.historyMax = normalizeMax(prefs.historyMax);
+    history.load(await loadHistory());
+    history.setMax(prefs.historyMax);
     sideHistory.load(await load('history:side', []));
     // 마지막으로 받은 원격 셀렉터를 먼저 적용한다 (새로 받아 오는 것은 아래에서).
     await loadRemoteCache();

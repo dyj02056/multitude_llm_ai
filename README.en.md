@@ -3,7 +3,7 @@
 [한국어](README.md) · **English**
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.23.1-58a6ff)
+![version](https://img.shields.io/badge/version-0.24.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-not%20needed-3fb950)
@@ -43,7 +43,7 @@
 | | Templates & skills | `{{variable}}` templates, up to 3 SKILL.md skills, AI-assisted compression |
 | **Answers** | Synthesis | Collects the other answers and asks one AI for errors, gaps and a final answer |
 | | Compare & analysis | Answers in columns, highlight sentences that differ, agreements / disagreement table / weak claims / final answer |
-| | History & export | Saves the last 500 questions with answers; search; export MD / HTML |
+| | History & export | Saves the last 500 questions with answers (100–2000 in settings); search; export MD / HTML |
 | | Stats & self-check | Completion rate, response time, usage-limit detection and satisfaction per AI; warns when a site's layout changes |
 | **Code** | Project mode | Sends folder structure and chosen files (3-level ignore rules, secret scan); handles `NEED_FILES` requests |
 | | Apply changes | Apply from the bar under each panel, compare across AIs, apply by hunk, undo; a failed multi-file apply rolls back |

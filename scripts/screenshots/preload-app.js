@@ -84,7 +84,7 @@ function push() {
   emit('state', {
     mode, chatView, layout, selected, maxSelected: 6,
     attachLimits: { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 },
-    synthTarget: 'gemini', autoSynth: false, answerTimeoutMin: 20, timeoutChoices: [5, 10, 20, 30, 60],
+    synthTarget: 'gemini', autoSynth: false, answerTimeoutMin: 20, timeoutChoices: [5, 10, 20, 30, 60], historyMax: 500, historyMaxChoices: [100, 500, 1000, 2000],
     remoteSelectors: true, remote: { source: 'remote', version: 12, updated: '2026-11-08', checkedAt: now - 3600e3 }, diag: ['15-screen-status', '25-diag'].includes(scene) ? DIAG : {},
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b' },

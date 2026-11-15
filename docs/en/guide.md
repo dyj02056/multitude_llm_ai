@@ -63,7 +63,7 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 
 ## 6. History and export
 
-**hist** (`Ctrl+H`) keeps the last 500 questions with every answer, synthesis and analysis (file names only, not file contents). Search, copy as Markdown, reuse a question, or save as **MD 저장** (Markdown) / **HTML 저장** (a self-contained report; print it to PDF).
+**hist** (`Ctrl+H`) keeps the last 500 questions (change it in `?` › History size: 100–2000) with every answer, synthesis and analysis (file names only, not file contents). Search, copy as Markdown, reuse a question, or save as **MD 저장** (Markdown) / **HTML 저장** (a self-contained report; print it to PDF).
 
 History stays on this PC. Questions sent from the extension's side panel appear with a `side` tag.
 

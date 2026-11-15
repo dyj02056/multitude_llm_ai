@@ -1,5 +1,6 @@
 # 멀티 LLM 동시 질문 앱 — 계획 초안 (v0.1)
 
+> **v0.24.0 (2026-11-15) 변경:** 고도화 1단계(기반 정리) — history-core save(records, info{dirty, order}) · planWrites · setMax(MAX_CHOICES 100/500/1000/2000, prefs.historyMax), main/history.js createRecordStore(history/index.json {v:2, ids} + history/<id>.json, 색인 밖 파일 정리) · loadOrMigrate(예전 history.json → 옮기고 다시 읽어 개수 같으면 지움), 확장 history:index · history:r:<id>(loadHistory가 예전 history 칸 옮김). renderer.js → renderer · renderer-views · renderer-compose (감싸지 않은 스크립트라 이름 공유), project.js → project · project-changes · project-editor (MLA.projectUI = P로 주고받음, 지난 프로젝트 다시 열기는 DOMContentLoaded). main.js IPC 일부 → main/ipc/history · project · settings (register(ctx), 바뀌는 값은 함수로). shared/i18n.js(t · setLang · detectLang · apply · checkKeys) + i18n-ko/en.js, 아직 ko 고정. scripts/hooks/pre-commit(check:ext + extension/ 스테이지 확인) + prepare(install-hooks.js).
 > **v0.2 (2026-10-18) 변경:** Groq를 Grok(grok.com)으로 바꾸고 Perplexity · Qwen · Poe · Duck.ai를 더해 8개 서비스 중 최대 4개를 고르게 했다
 > (처음 값: Gemini · ChatGPT · DeepSeek · Perplexity). 크롬 확장 프로그램(`extension/`)을 추가하고, 두 쪽이 같이 쓰는 코드를 `src/shared/`로 옮겼다.
 > **v0.3 (2026-10-18) 변경:** Mistral(chat.mistral.ai/work)을 더해 9개 서비스가 됐고, 공통 입력창에 파일 첨부(끌어다 놓기 · Ctrl+V · 📎)를 넣었다.

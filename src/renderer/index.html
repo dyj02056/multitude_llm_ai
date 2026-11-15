@@ -358,6 +358,11 @@
       </div>
       <p class="muted small">이 시간이 지나면 "시간 초과"로 표시하지만, 그 뒤에도 1시간 동안 계속 지켜보다가 끝나면 "완료"로 바꿉니다.</p>
       <div class="setting-row">
+        <label for="historyMaxSelect" data-i18n="settings.historyMax">기록 최대 개수</label>
+        <select id="historyMaxSelect"></select>
+      </div>
+      <p class="muted small" data-i18n="settings.historyMaxNote"></p>
+      <div class="setting-row">
         <label class="check-label"><input type="checkbox" id="remoteToggle" /> 사이트 셀렉터 자동 갱신</label>
         <button id="remoteRefresh">지금 확인</button>
       </div>
@@ -443,7 +448,10 @@
       <button id="sendBtn" class="primary">보내기</button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → project.js → library.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → renderer-compose.js → project.js → project-changes.js → project-editor.js → library.js (뒤의 것이 앞의 것을 씀) -->
+  <script src="../shared/i18n-ko.js"></script>
+  <script src="../shared/i18n-en.js"></script>
+  <script src="../shared/i18n.js"></script>
   <script src="../shared/vendor/ignore.js"></script>
   <script src="../shared/vendor/diff.js"></script>
   <script src="../shared/project-ignore.js"></script>
@@ -459,7 +467,11 @@
   <script src="../shared/update-core.js"></script>
   <script src="templates.js"></script>
   <script src="renderer.js"></script>
+  <script src="renderer-views.js"></script>
+  <script src="renderer-compose.js"></script>
   <script src="project.js"></script>
+  <script src="project-changes.js"></script>
+  <script src="project-editor.js"></script>
   <script src="library.js"></script>
 </body>
 </html>

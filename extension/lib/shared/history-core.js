@@ -5,8 +5,12 @@
 //     synth: [{ judge, at, text, md, mode?: 'analysis', names? }], feedback?: { [svcId]: 1 | -1 } }  (mode 'analysis' = 답변 일치·이견 분석, names = 비교한 AI 이름)   (첨부 파일은 이름·크기·종류만 남기고 내용은 저장하지 않는다)
 // Electron 앱(require)과 크롬 확장 프로그램(전역 MLA.historyCore)이 같이 쓴다.
 //
-// [쉽게 말하면] 질문·답변 기록장(최근 500개)을 다루는 공통 부품입니다: 새 기록 추가, 답변 채우기, 검색, 지우기.
+// [쉽게 말하면] 질문·답변 기록장(기본 최근 500개)을 다루는 공통 부품입니다: 새 기록 추가, 답변 채우기, 검색, 지우기.
 // 실제 저장 장소는 Windows 앱(파일)과 크롬 확장(확장 저장소)이 각자 정해 save 함수로 넘겨줍니다.
+//
+// 저장 (v0.24.0): save(records, info)의 info = { dirty: [바뀐 기록 id], order: 목록(추가 · 지우기 · 순서)이 바뀌었는가 }.
+// 기록 하나마다 따로 저장하는 쪽(색인 + 기록별 파일)은 planWrites로 "쓸 기록 · 지울 id · 새 색인"만 골라 쓴다.
+// 예전처럼 배열 전체를 저장하는 쪽은 info를 무시하면 된다.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -14,8 +18,31 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const MAX_RECORDS = 500;
+  const MAX_RECORDS = 500; // 기본 최대 개수 (설정에서 바꿈)
+  const MAX_CHOICES = [100, 500, 1000, 2000];
   const SAVE_DELAY_MS = 500;
+
+  /** 설정의 최대 개수 → 고를 수 있는 값 중 하나 (모르는 값은 기본 500) */
+  const normalizeMax = (n) => (MAX_CHOICES.includes(Number(n)) ? Number(n) : MAX_RECORDS);
+
+  /** 기록 id가 파일 이름 · 저장소 키로 써도 안전한가 (영문 · 숫자 · - 만, 40자까지) */
+  const okRecordId = (id) => typeof id === 'string' && /^[A-Za-z0-9-]{1,40}$/.test(id);
+  const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+  /**
+   * 기록별 저장: 지금 기록(records) · 바뀐 정보(info) · 저장소에 있는 id(known: Set) →
+   * { write: [쓸 기록], remove: [지울 id], index: [새 색인 id 순서] | null (안 바뀜) }
+   * info.order가 없으면 색인과 지울 것은 보지 않는다 (답변 채우기처럼 기록 하나만 바뀐 경우).
+   */
+  function planWrites(records, info = {}, known = new Set()) {
+    const ids = records.map((r) => r.id);
+    const now = new Set(ids);
+    const dirty = new Set(info.dirty || []);
+    const write = records.filter((r) => dirty.has(r.id) || (info.order && !known.has(r.id)));
+    if (!info.order) return { write, remove: [], index: null };
+    const remove = [...known].filter((id) => !now.has(id));
+    return { write, remove, index: ids };
+  }
 
   // 답변 평가 (v0.23): 패널 머리줄의 [+1] / [-1]. 1 = 좋았음, -1 = 별로였음, 0 = 지우기
   const FEEDBACK_VALUES = new Set([1, -1, 0]);
@@ -32,16 +59,32 @@
     return out;
   }
 
-  /** save(records): 바뀐 기록 전체를 저장한다. 답변이 끝날 때마다 바뀌므로 잠깐 모았다가 한 번에 부른다. */
-  function createHistory(save) {
+  /**
+   * save(records, info): 바뀐 기록을 저장한다. 답변이 끝날 때마다 바뀌므로 잠깐 모았다가 한 번에 부른다.
+   * info = { dirty: [바뀐 기록 id], order: 목록이 바뀌었는가 } (맨 위 설명 참고). max: 최대 개수 (setMax로 바꿈)
+   */
+  function createHistory(save, { max = MAX_RECORDS } = {}) {
     let records = [];
     let saveTimer = null;
+    let limit = normalizeMax(max);
+    let dirty = new Set();
+    let order = false;
 
-    function changed() {
+    function emit() {
+      const info = { dirty: [...dirty], order };
+      dirty = new Set();
+      order = false;
+      save(records, info);
+    }
+
+    /** id: 내용이 바뀐 기록 (없으면 목록 자체가 바뀜 — 추가 · 지우기 · 비우기) */
+    function changed(id) {
+      if (id) dirty.add(id);
+      else order = true;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = null;
-        save(records);
+        emit();
       }, SAVE_DELAY_MS);
     }
 
@@ -50,16 +93,26 @@
       if (!saveTimer) return;
       clearTimeout(saveTimer);
       saveTimer = null;
-      save(records);
+      emit();
     }
 
     function load(data) {
       records = Array.isArray(data) ? data : [];
     }
 
+    /** 최대 개수를 바꾼다. 줄이면 오래된 기록부터 지운다 → 지운 개수 */
+    function setMax(n) {
+      limit = normalizeMax(n);
+      const over = records.length - limit;
+      if (over <= 0) return 0;
+      records.length = limit;
+      changed();
+      return over;
+    }
+
     function add({ question, targets, files = [], source, page }) {
       const rec = {
-        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        id: newId(),
         at: Date.now(),
         question,
         targets,
@@ -70,7 +123,8 @@
         ...(page ? { page } : {}), // 사이드탭: 함께 보낸 페이지 { title, url }
       };
       records.unshift(rec);
-      if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
+      if (records.length > limit) records.length = limit;
+      changed(rec.id);
       changed();
       return rec.id;
     }
@@ -81,7 +135,7 @@
       const rec = find(id);
       if (!rec) return;
       rec.answers[svcId] = answer;
-      changed();
+      changed(id);
     }
 
     /**
@@ -101,7 +155,7 @@
       else delete fb[svcId];
       if (Object.keys(fb).length) rec.feedback = { ...fb };
       else delete rec.feedback;
-      changed();
+      changed(id);
       return value;
     }
 
@@ -109,7 +163,7 @@
       const rec = find(id);
       if (!rec) return;
       rec.synth.push(synth);
-      changed();
+      changed(id);
     }
 
     /** 목록용 요약. query가 있으면 질문·답변 글에서 찾는다 (대소문자 무시). */
@@ -202,8 +256,8 @@
       changed();
     }
 
-    return { load, add, setAnswer, setFeedback, addSynth, list, get, stats, remove, clear, all, flush };
+    return { load, add, setAnswer, setFeedback, addSynth, list, get, stats, remove, clear, all, flush, setMax, max: () => limit };
   }
 
-  return { createHistory, feedbackOf };
+  return { createHistory, feedbackOf, planWrites, okRecordId, newId, normalizeMax, MAX_RECORDS, MAX_CHOICES };
 });
