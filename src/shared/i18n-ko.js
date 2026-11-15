@@ -2,7 +2,10 @@
 // 새 문구를 넣을 때는 i18n-en.js에도 같은 키를 넣는다 (test/i18n.test.js가 짝을 검사).
 (function (root, dict) {
   if (typeof module === 'object' && module.exports) module.exports = dict;
-  else ((root.MLA = root.MLA || {}).i18nStrings = root.MLA.i18nStrings || {}).ko = dict;
+  else {
+    const s = ((root.MLA = root.MLA || {}).i18nStrings = root.MLA.i18nStrings || {});
+    s.ko = Object.assign(s.ko || {}, dict); // 영역별 사전(i18n-ko-*.js)과 합친다 (v0.30.0)
+  }
 })(typeof globalThis !== 'undefined' ? globalThis : this, {
   'settings.historyMax': '기록 최대 개수',
   'settings.historyMaxOption': '{n}개',

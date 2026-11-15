@@ -1,7 +1,10 @@
 // UI strings — English (v0.24.0). Keys mirror i18n-ko.js; {name} is replaced by t() vars.
 (function (root, dict) {
   if (typeof module === 'object' && module.exports) module.exports = dict;
-  else ((root.MLA = root.MLA || {}).i18nStrings = root.MLA.i18nStrings || {}).en = dict;
+  else {
+    const s = ((root.MLA = root.MLA || {}).i18nStrings = root.MLA.i18nStrings || {});
+    s.en = Object.assign(s.en || {}, dict); // 영역별 사전(i18n-en-*.js)과 합친다 (v0.30.0)
+  }
 })(typeof globalThis !== 'undefined' ? globalThis : this, {
   'settings.historyMax': 'History size',
   'settings.historyMaxOption': '{n} records',

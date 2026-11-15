@@ -15,6 +15,21 @@ test('한국어 · 영어 사전의 키가 짝이 맞고, 글이 비어 있지 �
   }
 });
 
+test('영역별 사전(v0.30.0): 키는 그 영역 이름으로 시작하고, 어떤 키도 두 파일에 겹치지 않는다', () => {
+  const dir = path.join(__dirname, '../src/shared');
+  for (const lang of i18n.LANGS) {
+    const seen = new Map();
+    for (const f of fs.readdirSync(dir).filter((n) => new RegExp(`^i18n-${lang}(-[a-z]+)?\\.js$`).test(n))) {
+      const area = (new RegExp(`^i18n-${lang}-([a-z]+)\\.js$`).exec(f) || [])[1];
+      for (const k of Object.keys(require(path.join(dir, f)))) {
+        assert.ok(!seen.has(k), `${k}: ${seen.get(k)} · ${f}`);
+        seen.set(k, f);
+        if (area) assert.ok(k.startsWith(`${area}.`), `${f}: ${k}`);
+      }
+    }
+  }
+});
+
 test('두 언어에서 {이름} 자리가 같다', () => {
   const holes = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
   for (const [k, ko] of Object.entries(i18n.strings.ko)) assert.deepEqual(holes(i18n.strings.en[k]), holes(ko), k);

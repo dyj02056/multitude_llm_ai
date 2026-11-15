@@ -9,9 +9,10 @@
 // 그때까지는 화면이 한국어와 영어로 섞이지 않게 언어를 한국어로 둡니다 (setLang을 부르지 않음).
 (function (root, factory) {
   const isNode = typeof module === 'object' && module.exports;
-  const strings = isNode
-    ? { ko: require('./i18n-ko'), en: require('./i18n-en') }
-    : (root.MLA && root.MLA.i18nStrings) || {};
+  // 사전: 공통(i18n-ko.js · i18n-en.js) + 영역별(i18n-<언어>-<영역>.js, v0.30.0). 화면은 <script>로 먼저 읽어 합쳐 둔다.
+  const AREAS = ['ui', 'project', 'library', 'ext', 'main'];
+  const load = (lang) => Object.assign({}, require(`./i18n-${lang}`), ...AREAS.map((a) => require(`./i18n-${lang}-${a}`)));
+  const strings = isNode ? { ko: load('ko'), en: load('en') } : (root.MLA && root.MLA.i18nStrings) || {};
   const api = factory(strings);
   if (isNode) module.exports = api;
   else (root.MLA = root.MLA || {}).i18n = api;
