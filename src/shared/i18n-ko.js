@@ -457,4 +457,13 @@
   'transfer.key.autoRecommend': '추천 조합 제안',
   'transfer.key.commitOffer': '적용 후 커밋 제안',
   'transfer.key.local': '로컬 LLM',
+  'settings.lang': '언어 (Language)',
+  'settings.lang.auto': '자동 (Windows · 브라우저 언어)',
+  'settings.langNote': '화면 글의 언어입니다. 자동은 Windows(확장은 크롬) 언어가 한국어면 한국어, 아니면 영어로 보입니다. 바꾸면 바로 적용되고, 패널 상태 글 등 일부는 다음에 바뀔 때 새 언어로 나옵니다. AI에게 보내는 종합 · 분석 · 토론 요청 글은 아직 한국어라 답이 한국어로 올 수 있습니다.',
+  'transfer.key.lang': '언어',
+  'page.err.no-input': '입력창을 찾지 못했습니다',
+  'page.err.attach-rejected': '사이트가 파일을 받지 않았습니다',
+  'page.err.no-files': '첨부 파일을 받지 못했습니다',
+  'page.err.attach-empty': '첨부하지 못해 보낼 내용이 없습니다 ({error})',
+  'page.err.no-text': '입력창에 글을 넣지 못했습니다',
 });

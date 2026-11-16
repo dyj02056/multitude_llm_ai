@@ -26,7 +26,7 @@
   const MAX_FILE_CHARS = 5 * 1024 * 1024;
   const MIN_PASSWORD = 8;
   // 옮기는 설정 (이 순서로 보여 준다)
-  const KEYS = ['selected', 'layout', 'synthTarget', 'autoSynth', 'answerTimeoutMin', 'historyMax', 'notify', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer', 'local'];
+  const KEYS = ['selected', 'layout', 'synthTarget', 'autoSynth', 'answerTimeoutMin', 'historyMax', 'notify', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer', 'lang', 'local'];
   const BOOL_KEYS = ['autoSynth', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer'];
   const ID = /^[a-z0-9-]{1,40}$/;
 
@@ -49,6 +49,7 @@
     if (typeof r.layout === 'string' && /^[a-z]{1,20}$/.test(r.layout)) out.layout = r.layout;
     if (typeof r.synthTarget === 'string' && ID.test(r.synthTarget)) out.synthTarget = r.synthTarget;
     for (const k of BOOL_KEYS) if (typeof r[k] === 'boolean') out[k] = r[k];
+    if (['auto', 'ko', 'en'].includes(r.lang)) out.lang = r.lang; // 화면 언어 (v0.30.0)
     for (const k of ['answerTimeoutMin', 'historyMax']) if (Number.isInteger(r[k]) && r[k] > 0 && r[k] <= 100000) out[k] = r[k];
     if (r.notify && typeof r.notify === 'object' && !Array.isArray(r.notify)) {
       const n = Object.entries(r.notify).filter(([k, v]) => /^[a-z]{1,20}$/.test(k) && typeof v === 'boolean').slice(0, 10);

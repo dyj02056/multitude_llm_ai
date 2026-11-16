@@ -134,7 +134,7 @@
       const files = await takeFiles(upload.nonce);
       attach = files
         ? await pageAttachFiles({ input: cfg.input, upload: upload.cfg }, files).catch((err) => ({ ok: false, error: err.message }))
-        : { ok: false, error: '첨부 파일을 받지 못했습니다' };
+        : { ok: false, error: '첨부 파일을 받지 못했습니다', code: 'no-files' };
       pageRefocusInput(cfg); // 첨부하면서 포커스가 옮겨 갔을 수 있다
       el = findInput(cfg) || el;
       // 첨부에 실패하면 예비 글(프로젝트 파일 내용을 본문에 넣은 글)을 대신 보낸다
@@ -142,13 +142,14 @@
         text = fallbackText;
         attach = { ...attach, fallback: true };
       }
-      if (!text && !attach.ok) return { ok: false, error: `첨부하지 못해 보낼 내용이 없습니다 (${attach.error})` };
+      // 화면에 보이는 글은 code로 고른다 (이 파일은 사전 없이 돌아서 — host.js · 사이드탭의 MLA.i18n.pageError, v0.30.0)
+      if (!text && !attach.ok) return { ok: false, error: `첨부하지 못해 보낼 내용이 없습니다 (${attach.error})`, code: 'attach-empty', detail: attach.error, detailCode: attach.code };
     }
 
     if (text) {
       await insertText(el, text);
       await sleep(100);
-      if (!hasText(el, text)) return { ok: false, error: '입력창에 글을 넣지 못했습니다' };
+      if (!hasText(el, text)) return { ok: false, error: '입력창에 글을 넣지 못했습니다', code: 'no-text' };
     }
     const done = (via) => ({ ok: true, via, attach });
 

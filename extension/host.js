@@ -46,6 +46,26 @@
   })();
   const log = (tag, ...args) => debug && console.log(`[${tag}]`, ...args);
 
+  // ---------- 화면 언어 (v0.30.0) ----------
+  // 설정(prefs.lang: 'auto' · 'ko' · 'en')은 chrome.storage에 있어 읽는 데 시간이 걸린다. 첫 글자부터 맞는 언어로 그리려고
+  // 마지막 값을 localStorage('mla.lang', 앱 탭 · 사이드탭이 같이 봄)에도 적어 두고 시작할 때 바로 읽는다.
+  // 'auto'면 크롬 표시 언어를 본다 (한국어면 한국어, 아니면 영어).
+  const LANG_KEY = 'mla.lang';
+  const uiLangOf = (pref) => MLA.i18n.detectLang(pref, chrome.i18n?.getUILanguage?.() || navigator.language);
+  function applyLang(pref) {
+    try {
+      localStorage.setItem(LANG_KEY, pref);
+    } catch {}
+    return MLA.i18n.setLang(uiLangOf(pref));
+  }
+  const startLang = (() => {
+    let cached = null;
+    try {
+      cached = localStorage.getItem(LANG_KEY);
+    } catch {}
+    return MLA.i18n.setLang(uiLangOf(MLA.i18n.normalizeLangPref(cached)));
+  })();
+
   // ---------- 저장 (chrome.storage.local) ----------
 
   // 크롬 확장 저장소에서 값 읽기 (없으면 fallback)
@@ -76,6 +96,7 @@
     sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
     retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
     autoRecommend: false, // 추천 조합 제안 (v0.27.0, 기본 끔): 질문 종류의 추천 조합이 지금 대상과 다르면 [추천 조합으로 바꾸기]만 띄운다
+    lang: 'auto', // 화면 언어 (v0.30.0)
   };
   const savePrefs = () => store('prefs', prefs);
 
@@ -271,7 +292,8 @@
   async function callFrame(id, msg) {
     const p = panels.get(id);
     if (!p || p.frameId === null) throw new Error(MLA.i18n.t('ext.side.notLinked'));
-    return chrome.tabs.sendMessage(tabId, msg, { frameId: p.frameId });
+    // content.js는 사전이 없어 실패 이유를 code로 준다 → 지금 언어의 글로 (v0.30.0)
+    return MLA.i18n.pageError(await chrome.tabs.sendMessage(tabId, msg, { frameId: p.frameId }));
   }
 
   function scheduleLoginCheck(id) {
@@ -422,6 +444,8 @@
       sendPreview: prefs.sendPreview,
       retryOnce: prefs.retryOnce,
       autoRecommend: prefs.autoRecommend,
+      lang: prefs.lang, // 언어 설정 (v0.30.0) · uiLang = 지금 쓰는 언어
+      uiLang: MLA.i18n.getLang(),
       update: updateStatus,
       storage: { encrypted: false, extension: true }, // 크롬 확장은 OS 열쇠 보관소가 없어 암호화하지 않는다 (v0.22.1)
       rects,
@@ -777,13 +801,15 @@
   // ---------- window.host (renderer.js가 쓰는 API — Electron preload.js와 같은 모양) ----------
 
   window.host = {
+    lang: startLang, // 화면이 첫 글자를 그릴 언어 (v0.30.0, Windows 앱 preload.js와 같은 이름)
     ui: {
+      // 글은 getter로 둔다: 언어를 바꾸면 화면이 다시 읽어 새 언어로 그린다 (v0.30.0)
       hints: {
-        pick: MLA.i18n.t('ext.host.hintPick'),
-        chat: MLA.i18n.t('ext.host.hintChat'),
+        get pick() { return MLA.i18n.t('ext.host.hintPick'); },
+        get chat() { return MLA.i18n.t('ext.host.hintChat'); },
       },
-      pickNote: MLA.i18n.t('ext.host.pickNote'),
-      loginButton: { label: MLA.i18n.t('ext.side.loginTab'), title: MLA.i18n.t('ext.side.loginTabTitle') },
+      get pickNote() { return MLA.i18n.t('ext.host.pickNote'); },
+      get loginButton() { return { label: MLA.i18n.t('ext.side.loginTab'), title: MLA.i18n.t('ext.side.loginTabTitle') }; },
       devtools: false, // 패널 페이지는 F12 개발자 도구의 프레임 선택으로 본다
     },
     openModels: (ids) => Array.isArray(ids) && showChat(ids.filter((id) => typeof id === 'string')),
@@ -926,7 +952,12 @@
       savePrefs();
       pushState();
     },
-    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend } = {}) => {
+    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, lang } = {}) => {
+      // 화면 언어 (v0.30.0): 'auto' · 'ko' · 'en'만. 화면은 state.uiLang을 보고 다시 그리고, background · 사이드탭은 저장소 변화를 듣는다
+      if (MLA.i18n.LANG_PREFS.includes(lang)) {
+        prefs.lang = lang;
+        applyLang(lang);
+      }
       if (typeof autoRecommend === 'boolean') prefs.autoRecommend = autoRecommend; // 추천 조합 제안 (v0.27.0)
       if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
       // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0) — 아는 종류의 true/false만
@@ -1022,6 +1053,8 @@
     prefs.sendPreview = prefs.sendPreview === true;
     prefs.retryOnce = prefs.retryOnce !== false;
     prefs.autoRecommend = prefs.autoRecommend === true;
+    prefs.lang = MLA.i18n.normalizeLangPref(prefs.lang);
+    applyLang(prefs.lang); // 적어 둔 값과 달랐으면 첫 state의 uiLang을 보고 화면이 다시 그린다
     history.load(await historyStore.load());
     history.setMax(prefs.historyMax);
     sideHistory.load(await load('history:side', []));
@@ -1049,7 +1082,10 @@
   // 크롬이 페이지에 넘겨주지 않는 키는 바꿔 썼으므로 버튼 안내도 맞춘다 (shared/shortcuts.js의 browserKeys).
   function fixButtonTitles() {
     const newChat = document.getElementById('newChatAll');
-    if (newChat) newChat.title = MLA.i18n.t('ext.host.newChatAll');
+    if (newChat) {
+      newChat.dataset.i18nTitle = 'ext.host.newChatAll'; // 언어를 바꿔 apply()가 다시 써도 이 안내가 남게 (v0.30.0)
+      newChat.title = MLA.i18n.t('ext.host.newChatAll');
+    }
     // 사이드탭 (v0.19.0): 크롬 확장에서만 있는 버튼. 누른 그 순간에 열어야 해서 기다리는 일 없이 바로 연다.
     const side = document.getElementById('sideBtn');
     if (side && chrome.sidePanel) {

@@ -22,7 +22,7 @@
     const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
     // 같은 셀렉터에 숨은 요소가 먼저 걸리는 사이트가 있어 보이는 것을 고른다.
     const input = cfg.input.flatMap((s) => [...document.querySelectorAll(s)]).find(visible);
-    if (!input) return { ok: false, error: '입력창을 찾지 못했습니다' };
+    if (!input) return { ok: false, error: '입력창을 찾지 못했습니다', code: 'no-input' }; // 화면에는 code로 고른 글이 나온다 (i18n pageError)
     input.focus();
     // 이미 적혀 있던 내용은 지우고 새로 쓴다.
     document.execCommand('selectAll');
@@ -61,7 +61,7 @@
     const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
     const up = cfg.upload;
     const input = cfg.input.flatMap((s) => [...document.querySelectorAll(s)]).find(visible);
-    if (!input) return { ok: false, error: '입력창을 찾지 못했습니다' };
+    if (!input) return { ok: false, error: '입력창을 찾지 못했습니다', code: 'no-input' };
 
     const transfer = () => {
       const dt = new DataTransfer();
@@ -145,7 +145,7 @@
         break;
       }
     }
-    if (!attachedVia) return { ok: false, error: '사이트가 파일을 받지 않았습니다' };
+    if (!attachedVia) return { ok: false, error: '사이트가 파일을 받지 않았습니다', code: 'attach-rejected' };
 
     // 업로드 중 표시가 사라질 때까지 기다린다 (최대 60초). 보내기 버튼이 다시 켜지는 것은 보낼 때 따로 기다린다.
     const busy = () => up.busy.some((s) => [...document.querySelectorAll(s)].some(visible));

@@ -168,7 +168,7 @@
   'main.update.availableApp': "Version v{v} is available — press [Download] to get it",
   'main.update.availableExt': "Version v{v} is available — git pull the repository and press ↻ on chrome://extensions",
   'main.update.downloading': "Downloading v{v}… {percent}%",
-  'main.update.downloaded': "v{v} has been downloaded — press [Restart to install], or it installs when you close the app",
+  'main.update.downloaded': "v{v} has been downloaded — press [Restart and install], or it installs when you close the app",
   'main.update.error': "Check failed: {error}",
   'main.update.unknownError': "Unknown error",
   'main.update.current': "Current version v{v}",

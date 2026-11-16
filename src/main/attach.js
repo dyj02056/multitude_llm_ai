@@ -19,7 +19,7 @@ const path = require('path');
 const { pageAttachFiles } = require('../shared/page');
 const { uploadOf, isServiceUrl } = require('../shared/services');
 const { log } = require('./dev');
-const { t } = require('../shared/i18n');
+const { t, pageError } = require('../shared/i18n');
 
 const WORLD = 1001; // 첨부용 격리 공간 번호 (사이트 스크립트와 분리)
 const CHUNK = 2 * 1024 * 1024; // 한 번에 옮기는 base64 글자 수
@@ -143,6 +143,7 @@ async function attachFiles(wc, svc, files) {
     // 성공·실패·중간 오류와 상관없이 페이지에 옮겨 둔 조각과 파일을 항상 지운다
     await clearTransfer(wc, key);
   }
+  res = pageError(res); // 페이지 안 코드의 실패 code → 지금 언어의 글 (v0.30.0)
   log('attach', svc.id, JSON.stringify(res));
   if (res?.ok || !cfg.upload.methods.includes('input')) return res || { ok: false, error: t('main.attachFailed') };
 

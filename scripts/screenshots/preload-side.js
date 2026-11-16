@@ -15,7 +15,8 @@ const page = {
   text: '이번 분기 AI 반도체 수출이 지난해 같은 기간보다 30% 늘었다. '.repeat(40),
 };
 const scene = new URLSearchParams(location.search).get('scene') || '24-side-panel';
-const store = { sidePrefs: { selected: ['gemini', 'claude'], ratio: 0.55, ctxOn: true } };
+// MLA_SHOT_LANG=en: 영어 화면 (v0.30.0, 기본 한국어) — 사이드탭은 저장된 앱 설정(prefs.lang)을 읽는다
+const store = { sidePrefs: { selected: ['gemini', 'claude'], ratio: 0.55, ctxOn: true }, prefs: { lang: process.env.MLA_SHOT_LANG === 'en' ? 'en' : 'ko' } };
 // v0.29.0: 이 페이지에서 전에 물어본 것 (주소 뒤 utm_* · #은 달라도 같은 페이지)
 if (scene === '41-side-recall') {
   const at = Date.now();

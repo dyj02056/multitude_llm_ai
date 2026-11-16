@@ -30,7 +30,7 @@
 
 importScripts('lib/shared/services.js');
 // 화면 문구 사전 (v0.30.0): 오른쪽 클릭 메뉴 이름 · 사이드탭에 넘기는 오류 글. 사전 → i18n.js 순서로 읽는다.
-// 언어는 앱 탭 · 사이드탭과 같이 아직 한국어로 둔다 (setLang을 부르지 않음).
+// 언어 (v0.30.0): 앱 탭 설정 › 언어(prefs.lang)를 따른다. 'auto'면 크롬 표시 언어 (한국어 아니면 영어).
 importScripts('lib/shared/i18n-ko.js', 'lib/shared/i18n-ko-ext.js', 'lib/shared/i18n-en.js', 'lib/shared/i18n-en-ext.js', 'lib/shared/i18n.js');
 
 const APP_URL = chrome.runtime.getURL('app.html');
@@ -72,7 +72,21 @@ const ASK_MENUS = [
   { id: 'mla-ask-page', key: 'ext.menu.askPage', contexts: ['page', 'selection'] },
   { id: 'mla-side-page', key: 'ext.menu.sidePage', contexts: ['page', 'selection'] },
 ];
-function setupAskMenus() {
+// 화면 언어 (v0.30.0): 서비스 워커는 localStorage가 없어 저장소에서 읽는다. 메뉴를 만들기 전에 끝나기를 기다린다.
+const uiLangOf = (pref) => MLA.i18n.detectLang(MLA.i18n.normalizeLangPref(pref), chrome.i18n?.getUILanguage?.() || '');
+const langReady = chrome.storage.local
+  .get('prefs')
+  .then((r) => MLA.i18n.setLang(uiLangOf(r?.prefs?.lang)))
+  .catch(() => MLA.i18n.setLang(uiLangOf('auto')));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.prefs) return;
+  const next = uiLangOf(changes.prefs.newValue?.lang);
+  if (next === MLA.i18n.getLang()) return;
+  MLA.i18n.setLang(next);
+  setupAskMenus(); // 오른쪽 클릭 메뉴 이름을 새 언어로
+});
+async function setupAskMenus() {
+  await langReady;
   chrome.contextMenus.removeAll(() => {
     for (const { key, ...m } of ASK_MENUS) chrome.contextMenus.create({ ...m, title: MLA.i18n.t(key), documentUrlPatterns: ['http://*/*', 'https://*/*'] }, () => void chrome.runtime.lastError);
   });

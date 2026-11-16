@@ -20,7 +20,9 @@
 
 const $ = (sel) => document.querySelector(sel);
 // 화면 문구 사전 (v0.24.0, shared/i18n.js). 새로 만드는 화면 글은 t('키')로 쓴다.
+// 언어 (v0.30.0): 본체가 미리 알려 준 지금 언어(host.lang)로 첫 글자부터 그린다. 설정에서 바꾸면 state.uiLang → relocalize()
 const { t } = MLA.i18n;
+let shownLang = MLA.i18n.setLang(host.lang || 'ko'); // 지금 화면에 그려 둔 언어
 MLA.i18n.apply(document);
 const panelsEl = $('#panels');
 const panels = new Map(); // id -> { el, dot, url, status }
@@ -36,8 +38,9 @@ const UI = {
   get pickNote() { return t('ui.pick.note'); },
   get loginButton() { return { label: t('ui.loginButton'), title: t('ui.loginButtonTitle') }; },
   devtools: true, // 패널 머리줄의 개발자 도구 버튼
-  ...(host.ui || {}),
 };
+// host.ui의 getter를 그대로 옮긴다 (펼치기(...)는 값을 한 번 읽어 굳혀서, 언어를 바꿔도 옛 글이 남는다 — v0.30.0)
+Object.defineProperties(UI, Object.getOwnPropertyDescriptors(host.ui || {}));
 
 const LOGIN_TEXT = {
   get 'needs-login'() { return t('ui.login.needed'); },
@@ -52,7 +55,35 @@ function button(label, title, onClick) {
   const b = document.createElement('button');
   b.textContent = label;
   b.title = title;
+  // 글이 기호뿐인 버튼(★ · ✕ · ↻ …)은 설명을 화면 읽기 이름으로도 단다 (v0.30.0 접근성)
+  if (title && label && !/[\p{L}\p{N}]/u.test(label)) b.setAttribute('aria-label', title);
   b.addEventListener('click', onClick);
+  return b;
+}
+
+// 버튼이 아닌 요소(목록의 줄 · 파일 이름 · 표의 칸)를 키보드로도 누를 수 있게 (v0.30.0 접근성):
+// Tab으로 닿고(tabindex), 그 요소에서 Enter · Space를 누르면 클릭과 같은 일을 한다. role은 화면 읽기 프로그램에 알릴 역할.
+function keyClick(el, onClick, role) {
+  el.tabIndex = 0;
+  if (role) el.setAttribute('role', role);
+  el.addEventListener('keydown', (e) => {
+    if (e.target !== el || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    onClick(e);
+  });
+  return el;
+}
+
+// 서비스 이름을 화면에 보일 때 (v0.30.0): 로컬 LLM만 지금 언어의 이름으로 바꿔 보여 준다 (모델 고르기 · 패널 머리줄 · 보낼 대상).
+// 서비스의 name 자체('로컬 LLM')는 그대로다 — 기록 · 통계 · AI에게 보내는 글이 그 이름으로 저장되고 서로 찾기 때문.
+const svcLabel = (svc) => (svc?.kind === 'local' ? t('ui.local.name') : svc?.name || '');
+
+// 기호만 있는 버튼 (v0.30.0): 설명(title)과 화면 읽기 이름(aria-label)을 사전 키로 달아 언어를 바꾸면 apply()가 다시 쓴다
+function tbutton(label, key, onClick) {
+  const b = button(label, t(key), onClick);
+  b.dataset.i18nTitle = key;
+  b.dataset.i18nAria = key;
+  b.setAttribute('aria-label', t(key));
   return b;
 }
 
@@ -82,7 +113,7 @@ function renderPick() {
     box.value = svc.id;
     box.checked = state.selected.includes(svc.id);
     box.addEventListener('change', updatePickLimit);
-    label.append(box, span('swatch'), span('name', svc.name), span('url', new URL(svc.url).hostname));
+    label.append(box, span('swatch'), span('name', svcLabel(svc)), span('url', new URL(svc.url).hostname));
     list.append(label);
   }
   updatePickLimit();
@@ -128,7 +159,10 @@ function syncPanels() {
     p.el.hidden = !!r.hidden;
     p.el.classList.toggle('focused', !!r.focused);
     p.focusBtn.textContent = r.focused ? '⤡' : '⤢';
-    p.focusBtn.title = r.focused ? t('ui.panel.unfocus') : t('ui.panel.focus');
+    const focusKey = r.focused ? 'ui.panel.unfocus' : 'ui.panel.focus';
+    p.focusBtn.title = t(focusKey);
+    p.focusBtn.setAttribute('aria-label', t(focusKey));
+    p.focusBtn.dataset.i18nTitle = p.focusBtn.dataset.i18nAria = focusKey;
     Object.assign(p.el.style, {
       left: `${r.frame.x}px`,
       top: `${r.frame.y}px`,
@@ -170,13 +204,13 @@ function createPanel(svc) {
   const loginBtn = button(UI.loginButton.label, UI.loginButton.title, () => host.panelAction(svc.id, 'login'));
   loginBtn.className = 'login-btn';
   loginBtn.hidden = true;
-  const focusBtn = button('⤢', t('ui.panel.focus'), () => host.setFocus(svc.id));
+  const focusBtn = tbutton('⤢', 'ui.panel.focus', () => host.setFocus(svc.id));
   // 넘기기 (v0.26.0): 이 패널의 최신 답변을 다른 패널에 보내 검토 · 반박 · 이어서 쓰기 (panel-offers.js가 패널 아래 바를 띄움)
-  const handoffBtn = button('→', t('handoff.btnTitle'), () => window.onHandoffClick?.(svc.id));
+  const handoffBtn = tbutton('→', 'handoff.btnTitle', () => window.onHandoffClick?.(svc.id));
   handoffBtn.className = 'handoff-btn';
   // 답변 평가 (v0.23): 공통 입력창 질문의 답변이 끝나면 띄운다. 같은 것을 다시 누르면 지운다.
-  const goodBtn = button('[+1]', t('ui.panel.good'), () => setFeedback(svc.id, 1));
-  const badBtn = button('[-1]', t('ui.panel.bad'), () => setFeedback(svc.id, -1));
+  const goodBtn = tbutton('[+1]', 'ui.panel.good', () => setFeedback(svc.id, 1));
+  const badBtn = tbutton('[-1]', 'ui.panel.bad', () => setFeedback(svc.id, -1));
   for (const b of [goodBtn, badBtn]) {
     b.classList.add('fb-btn');
     b.setAttribute('aria-pressed', 'false');
@@ -187,7 +221,7 @@ function createPanel(svc) {
 
   head.append(
     dot,
-    span('name', svc.name),
+    span('name', svcLabel(svc)),
     url,
     status,
     goodBtn,
@@ -197,24 +231,24 @@ function createPanel(svc) {
     collectBtn,
     needBtn,
     loginBtn,
-    button('copy', t('ui.panel.copyLatest'), async () => {
+    tbutton('copy', 'ui.panel.copyLatest', async () => {
       const r = await host.copyAnswer(svc.id);
       flash(status, r.copied ? t('ui.panel.answerCopied') : t('ui.copyAnswers.none'));
     }),
     handoffBtn,
     focusBtn,
-    button('+', t('ui.panel.newChat'), () => host.panelAction(svc.id, 'newchat')),
+    tbutton('+', 'ui.panel.newChat', () => host.panelAction(svc.id, 'newchat')),
   );
   // 웹페이지 패널에만: 뒤로 · 처음 주소 · 새로고침 · 개발자 도구. 로컬 LLM 패널은 대신 ■ 답 그만 받기.
   const isLocalPanel = svc.kind === 'local';
-  if (isLocalPanel) head.append(button('■', t('ui.panel.stop'), () => host.panelAction(svc.id, 'stop')));
+  if (isLocalPanel) head.append(tbutton('■', 'ui.panel.stop', () => host.panelAction(svc.id, 'stop')));
   else {
     head.append(
-      button('←', t('ui.panel.back'), () => host.panelAction(svc.id, 'back')),
-      button('⌂', t('ui.panel.home'), () => host.panelAction(svc.id, 'home')),
-      button('↻', t('ui.panel.reload'), () => host.panelAction(svc.id, 'reload')),
+      tbutton('←', 'ui.panel.back', () => host.panelAction(svc.id, 'back')),
+      tbutton('⌂', 'ui.panel.home', () => host.panelAction(svc.id, 'home')),
+      tbutton('↻', 'ui.panel.reload', () => host.panelAction(svc.id, 'reload')),
     );
-    if (UI.devtools) head.append(button('{ }', t('ui.panel.devtools'), () => host.panelAction(svc.id, 'devtools')));
+    if (UI.devtools) head.append(tbutton('{ }', 'ui.panel.devtools', () => host.panelAction(svc.id, 'devtools')));
   }
   // 프로젝트 모드: 답변에 수정안이 있으면 project.js가 패널 아래에 이 바를 채워 띄운다 (setChangeBar)
   const changeBar = document.createElement('div');
@@ -368,7 +402,7 @@ function diagReportText() {
     status: diagById[diagOpen.id],
     remote: state.remote,
     app: state.update?.current || '',
-    where: host.takeWebAsk ? '크롬 확장' : 'Windows 앱',
+    where: t(host.takeWebAsk ? 'ui.diag.where.ext' : 'ui.diag.where.app'),
     host: host_,
   });
 }
@@ -824,7 +858,7 @@ function renderTargets() {
   box.replaceChildren();
   for (const id of open) {
     const svc = state.services.find((s) => s.id === id);
-    const chip = button(svc.name, t('ui.target.toggle'), () => {
+    const chip = button(svcLabel(svc), t('ui.target.toggle'), () => {
       targets.has(id) ? targets.delete(id) : targets.add(id);
       renderTargets();
     });

@@ -19,7 +19,7 @@
   /* 글자: 본문 · 흐린 설명 · 아주 흐린 보조 */
   --text: #c9d1d9;
   --text-2: #8b949e;
-  --muted: #6e7681;
+  --muted: #848d97; /* v0.30.0: #6e7681은 바탕과의 대비가 4.1:1이라 WCAG AA(4.5:1)에 못 미쳐 밝혔다 (가장 밝은 바탕 #1c2128에서도 4.8:1) */
   --bright: #f0f6fc;
   /* 강조색은 하나(파랑)만 */
   --accent: #58a6ff;
@@ -112,7 +112,7 @@ button {
 }
 button:hover { background: var(--field-hover); border-color: var(--border-strong); color: var(--bright); }
 button:active { background: #22272e; }
-button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button:disabled, button:disabled:hover { opacity: .45; cursor: default; background: transparent; border-color: var(--border); color: var(--text); }
 button.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
 button.ghost:hover { background: var(--field-hover); border-color: var(--border); color: var(--text); }
@@ -278,6 +278,7 @@ input[type="checkbox"] { accent-color: var(--text-2); }
 }
 #prompt::placeholder { color: var(--muted); }
 #prompt:focus { border-color: var(--border-strong) !important; background: var(--bg); }
+#prompt:focus-visible { border-color: var(--accent) !important; } /* 키보드 포커스가 보이게 (v0.30.0) */
 #sendBtn { align-self: stretch; min-width: 92px; font-size: 13px; }
 #sendBtn::after { content: " ⏎"; font-weight: 400; }
 #sendBtn:disabled { opacity: .5; cursor: default; }
@@ -757,6 +758,7 @@ body.project-open[data-mode="chat"][data-view="editor"] .project-side { display:
   padding: 8px 10px; font: 12.5px/1.5 var(--mono); white-space: pre; overflow: auto;
 }
 .ed-text:focus { outline: none; }
+.ed-text:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); } /* 키보드 포커스가 보이게 (v0.30.0) */
 .ps-row.file .nm { cursor: pointer; }
 .ps-row.file .nm:hover { text-decoration: underline; }
 .ps-row.editing .nm { color: var(--bright); font-weight: 700; }
@@ -1108,3 +1110,14 @@ body[data-view="compress"] #panels { display: none !important; }
 .rec-kind tr.rec-few td { color: var(--muted); }
 .recommend-chip { font-size: 11.5px; padding: 1px 9px; border-color: rgba(88, 166, 255, .55); color: var(--accent-text); background: var(--accent-soft); }
 .recommend-chip[hidden] { display: none; }
+
+/* ---------- 접근성 (v0.30.0) ---------- */
+/* 키보드로 옮겨 간 요소는 파란 테두리로 보인다 (마우스로 누를 때는 생기지 않는다). 버튼 · 입력칸은 위쪽 규칙이 맡고,
+   여기서는 나머지 — 체크 상자 · 접는 줄(summary) · 링크 · Tab으로 닿게 한 줄/칸(tabindex) · 창 상자 — 를 맡는다. */
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, summary:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lib-row:focus-visible, .ps-row .nm:focus-visible, .an-jump:focus-visible, .history-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.modal-box:focus { outline: none; } /* 창을 열 때 잠깐 포커스를 받는 상자 (a11y.js) — 테두리는 그리지 않는다 */
+/* 화면에는 안 보이고 화면 읽기 프로그램만 읽는 글 (표 머리줄 등) */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* 움직임을 줄이도록 설정한 사용자에게는 깜빡임 · 전환을 끈다 */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

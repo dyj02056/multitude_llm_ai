@@ -3,7 +3,7 @@
 [한국어](README.md) · **English**
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.29.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.30.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-not%20needed-3fb950)
@@ -12,9 +12,9 @@
 
 **[Install](#quick-start)** · **[Features](#features)** · **[User guide](docs/en/guide.md)** · **[Privacy](PRIVACY.md)**
 
-<img src="docs/screenshots/02-ask-all.png" width="100%" alt="Four AI chats answering the same question side by side">
+<img src="docs/screenshots/en/02-ask-all.png" width="100%" alt="Four AI chats answering the same question side by side">
 
-> **Interface language:** the app's screens are currently in **Korean**. This page and the [English user guide](docs/en/guide.md) explain every button. An English interface is planned.
+> **Interface language (v0.30.0):** the app's screens are available in **English and Korean**. It follows your Windows (or Chrome) language automatically — Korean on a Korean system, English otherwise — and you can switch any time in **?** (Settings) › **Language**. The prompts the app writes for synthesis, analysis and debate are still in Korean, so those answers may come back in Korean.
 
 ## At a glance
 
@@ -62,7 +62,7 @@
 
 - From the Chrome Web Store: *(link will be added after review)*
 - Or load it yourself: download this repository (**Code → Download ZIP**) → open `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → choose the `extension` folder.
-- Pin **Multitude LLM** in the toolbar and click it to open the app tab. For services that are not signed in, click **로그인 탭** (login tab) in the panel header, sign in, then press ↻.
+- Pin **Multitude LLM** in the toolbar and click it to open the app tab. For services that are not signed in, click **Login tab** in the panel header, sign in, then press ↻.
 - Side panel: `Alt+Shift+S`.
 
 **Windows app** — run `MultitudeLLM-Setup-<version>.exe` from [Releases](https://github.com/dyj02056/multitude_llm_ai/releases). The installer is not code-signed yet, so SmartScreen may warn: choose **More info → Run anyway**. The app tells you when a new version is out.
@@ -82,7 +82,8 @@ npm run build:ext  # rebuild extension/ from src/
 
 - **When a site changes its layout**, typing or reading answers can break. The panel shows `⚠`; selectors are fixed remotely through a signed `remote/selectors.json` without a new release.
 - Each service's **own usage limits and terms** apply. When a limit is hit the panel shows `[limit]`.
-- The **interface is Korean** for now.
+- The interface is English or Korean (v0.30.0), but the **prompts sent to the AIs for synthesis, analysis, debate and project mode are still Korean**, so those answers may come back in Korean. Sample text in screenshots is Korean.
+- Accessibility: keyboard focus, dialog focus handling, labels and text contrast were reviewed against WCAG AA (v0.30.0), but not tested with a real screen reader — see [docs/accessibility.md](docs/accessibility.md) (Korean).
 - The extension must be re-granted folder access each time the app tab opens a project, and has no git console or test run.
 - History and settings stay **on this PC only**. The Windows app encrypts them with Windows DPAPI; the extension stores them unencrypted in Chrome's extension storage.
 

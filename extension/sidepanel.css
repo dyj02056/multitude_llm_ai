@@ -59,6 +59,7 @@ body.sp-dragging .sp-frame { pointer-events: none; }
 }
 #spPrompt::placeholder { color: var(--muted); }
 #spPrompt:focus { border-color: var(--border-strong) !important; }
+#spPrompt:focus-visible { border-color: var(--accent) !important; } /* 키보드 포커스가 보이게 (v0.30.0) */
 .sp-foot { display: flex; align-items: center; gap: 6px; min-width: 0; }
 #spHint { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* 템플릿 · 스킬 고르기 (v0.21.0) */

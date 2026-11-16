@@ -19,6 +19,20 @@
   const remoteCore = MLA.remoteCore;
   const PL = MLA.promptLib;
   const { t } = MLA.i18n; // 새 문구 (v0.29.0)
+  // 화면 언어 (v0.30.0): 앱 탭 설정 › 언어를 따른다. 앱 탭(host.js)이 localStorage 'mla.lang'에 적어 둔 값으로 바로 그리고,
+  // 저장소의 설정(prefs.lang)을 읽거나 바뀌면 setUiLang이 다시 그린다. 'auto'면 크롬 표시 언어 (한국어 아니면 영어).
+  const uiLangOf = (pref) => MLA.i18n.detectLang(MLA.i18n.normalizeLangPref(pref), chrome.i18n?.getUILanguage?.() || navigator.language);
+  MLA.i18n.setLang(
+    uiLangOf(
+      (() => {
+        try {
+          return localStorage.getItem('mla.lang');
+        } catch {
+          return null;
+        }
+      })(),
+    ),
+  );
   MLA.i18n.apply(document);
 
   const NONCE = crypto.randomUUID(); // 이 사이드 패널 화면의 번호 — 다른 창의 사이드 패널과 연결선이 섞이지 않게
@@ -59,6 +73,8 @@
     const b = document.createElement('button');
     b.textContent = label;
     b.title = title;
+    // 글이 기호뿐인 버튼(+ · ↻ · ✕ …)은 설명을 화면 읽기 이름으로도 단다 (v0.30.0 접근성)
+    if (title && label && !/[\p{L}\p{N}]/u.test(label)) b.setAttribute('aria-label', title);
     b.addEventListener('click', onClick);
     return b;
   };
@@ -287,7 +303,7 @@
         const job = p.pending.get(m.id);
         if (job) {
           p.pending.delete(m.id);
-          job.resolve(m.result);
+          job.resolve(MLA.i18n.pageError(m.result)); // content.js의 실패 code → 지금 언어의 글 (v0.30.0)
         }
         return;
       }
@@ -595,7 +611,7 @@
         const row = document.createElement('details');
         row.className = 'sp-recall-item';
         const sum = document.createElement('summary');
-        sum.append(span('muted-label', new Date(it.at).toLocaleString()), document.createTextNode(` ${it.question.split('\n')[0].slice(0, 120)}`));
+        sum.append(span('muted-label', new Date(it.at).toLocaleString(MLA.i18n.getLang() === 'en' ? 'en-US' : 'ko-KR')), document.createTextNode(` ${it.question.split('\n')[0].slice(0, 120)}`));
         const again = button(t('side.recall.ask'), t('side.recall.askTitle'), () => {
           $('#spPrompt').value = it.question;
           $('#spPrompt').focus();
@@ -736,6 +752,7 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'session' && windowId !== null && changes[CTX_KEY()]?.newValue) takeCtx(changes[CTX_KEY()].newValue);
+    if (area === 'local' && changes.prefs) setUiLang(changes.prefs.newValue?.lang);
     if (area === 'local' && changes.library) {
       lib = PL.normalizeLibrary(changes.library.newValue || {});
       renderLibrary();
@@ -751,11 +768,26 @@
     autoGrab();
   });
 
+  /** 언어 설정이 지금 화면과 다르면 새 언어로 다시 그린다 (v0.30.0). 패널 상태 글은 다음에 바뀔 때 새 언어가 된다 */
+  function setUiLang(pref) {
+    const next = uiLangOf(pref);
+    if (next === MLA.i18n.getLang()) return;
+    MLA.i18n.setLang(next);
+    MLA.i18n.apply(document);
+    hint(t('ext.side.hint'));
+    renderModels();
+    renderPicker();
+    renderCtx();
+    renderRecall();
+    renderLibrary();
+  }
+
   // ---------- 시작 ----------
 
   async function init() {
     windowId = (await chrome.windows.getCurrent()).id;
     const saved = (await chrome.storage.local.get(['sidePrefs', 'prefs', 'remoteSelectors', 'library', 'history:side']).catch(() => ({}))) || {};
+    setUiLang(saved.prefs?.lang);
     const sp = saved.sidePrefs || {};
     prefs = {
       selected: SP.normalizeSelected(sp.selected, SERVICES),

@@ -13,7 +13,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const state = {
   selected: ['gemini', 'chatgpt'], layout: 'grid', synthTarget: 'chatgpt', autoSynth: false, answerTimeoutMin: 20, historyMax: 500,
-  notify: { round: true, limit: false }, sendPreview: false, retryOnce: true, autoRecommend: false, commitOffer: true,
+  notify: { round: true, limit: false }, sendPreview: false, retryOnce: true, autoRecommend: false, commitOffer: true, lang: 'en',
   local: { enabled: true, baseUrl: 'http://localhost:11434', model: 'qwen', contextTokens: 8192 },
   projectRoot: 'C:\\secret', rects: [], services: [], remote: {},
 };

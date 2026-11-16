@@ -92,6 +92,7 @@ function loadBackground(cookies) {
     commands: { onCommand: ev() }, // 사이드탭 단축키 (v0.19.0)
     sidePanel: { open: async () => {} },
     tabs: { onRemoved: ev() },
+    storage: { local: { get: async () => ({}) }, onChanged: ev() }, // 화면 언어 (v0.30.0)
     declarativeNetRequest: { getSessionRules: async () => [], updateSessionRules: async () => {} },
     cookies: {
       onChanged: ev(),

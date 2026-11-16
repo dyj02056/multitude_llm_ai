@@ -66,7 +66,7 @@ npm start
 | `src/shared/vendor/` | 포함한 외부 라이브러리: [ignore](https://github.com/kaelzhang/node-ignore) 7.0.12 (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) 9.0.0 (BSD-3-Clause) — 라이선스 파일 함께 |
 | `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`project.js`: 프로젝트 폴더 읽기·쓰기, `git-rules.js`·`gitconsole.js`: git 콘솔 명령 검사·실행, `history.js`: 기록 저장(색인 + 기록별 파일), `ipc/`: 화면 요청 처리 — 기록 · 프로젝트 · 설정) |
 | `src/renderer/` | 화면 (두 쪽이 같은 파일을 씀). 읽는 순서: `templates.js` → `renderer.js`(도우미 · 패널) → `renderer-views.js`(비교 · 기록 · 설정) → `renderer-compose.js`(보내기 · 상태) → `project.js` → `project-changes.js` → `project-editor.js` → `library.js` |
-| `src/shared/i18n*.js` | 화면 문구 다국어 틀 (v0.24.0): `t('키', { 이름: 값 })`, 사전 `i18n-ko.js` · `i18n-en.js`(키 짝은 테스트가 검사). 새 화면 글은 여기에 넣는다 |
+| `src/shared/i18n*.js` | 화면 문구 다국어 (v0.24.0 틀, v0.30.0부터 설정 › 언어를 따름): `t('키', { 이름: 값 })`, 사전 `i18n-ko.js` · `i18n-en.js`(공통) + `i18n-<언어>-<영역>.js`(ui · project · library · ext · main — 키는 영역 이름으로 시작). 키 짝 · 없는 키는 테스트가 검사. 새 화면 글은 여기에 넣는다 (AI에게 보내는 글은 아직 코드에 한국어로) |
 | `test/` | 공통 모듈 단위 테스트 (`npm test`) |
 | `extension/` | 크롬 확장 프로그램. 직접 고치는 파일은 `host.js`·`project-fs.js`·`content.js`·`cookie-shim.js`·`cookie-bridge.js`·`background.js`·`ext.css`와 사이드탭 `sidepanel.html`·`sidepanel.js`·`sidepanel.css`뿐이고, 나머지(`manifest.json`, `app.html`, `lib/`, `icons/`)는 생성 파일 |
 
@@ -89,6 +89,11 @@ npm run screenshots -- 02-ask-all 24-side-panel   # 일부만
 - 패널 안은 실제 AI 사이트가 아니라 **테스트용 채팅 페이지**입니다. 실제 사이트에는 접속하지 않습니다 (서비스 주소 요청은 이 도구 안에서 가짜 페이지로 바뀜).
 - 디자인을 바꾼 뒤 다시 찍으면 문서 그림이 한 번에 맞춰집니다. 프로젝트 폴더가 필요한 장면(09 · 10 · 16 · 21~23)은 아직 없습니다.
 - `MLA_SHOT_OUT=<폴더>`를 주면 문서 그림을 바꾸지 않고 그 폴더에 찍습니다. 화면 스크립트 오류는 `console error:`로 출력됩니다.
+- `MLA_SHOT_LANG=en`을 주면 **영어 화면**으로 찍습니다 (v0.30.0, 예시 질문 · 답은 한국어 그대로). 영어 문서가 쓰는 그림은 `docs/screenshots/en/`에 있습니다 — `MLA_SHOT_LANG=en MLA_SHOT_OUT=docs/screenshots/en npm run screenshots -- 01-model-picker 02-ask-all …`.
+
+## 출시 전 확인 (v0.30.0)
+
+태그를 올리기 전에 사람이 직접 해 보는 확인(실제 로그인 팝업 · 실제 크롬 · 실제 Ollama · 셀렉터 점검 · OS 알림 · 자동 업데이트 · 예전 데이터 · 언어 바꾸기 · 키보드만으로 한 바퀴)은 **[출시 전 확인 목록](release-checklist.md)** 에 순서대로 있습니다. 접근성 기준과 알려진 모자란 점은 [접근성](accessibility.md).
 
 ## 셀렉터 점검 (v0.25.0)
 

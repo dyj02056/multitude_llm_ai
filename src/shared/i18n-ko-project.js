@@ -325,4 +325,12 @@
   'project.need.risky': '[비밀 정보가 보여 빼는 파일 {n}개]',
   'project.need.skipped': '[보내지 않는 파일 {n}개]',
   'project.need.confirm': '보낼까요? (보내지 않는 파일은 이유만 함께 알려 줍니다)',
+  'project.skipWhy.binary': '바이너리 파일',
+  'project.skipWhy.tooLarge': '1MB 초과',
+  'project.skipWhy.missing': '파일이 없습니다',
+  'project.skipWhy.unreadable': '읽지 못함',
+  'project.skipWhy.secret': '비밀 정보로 보이는 문자열이 있어 보내지 않음',
+  'project.skipWhy.badPath': '허용되지 않는 경로',
+  'project.skipWhy.notInProject': '프로젝트에 없는 파일',
+  'project.skipWhy.excluded': '제외 규칙: {rule}',
 });

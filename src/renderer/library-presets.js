@@ -29,7 +29,7 @@
   };
   const openIds = () => (state?.rects || []).map((r) => r.id);
   const nameOf = (id) => state?.services.find((s) => s.id === id)?.name || (id === 'local' ? t('local.judgeHeadless') : id);
-  const fmtDate = (at) => (at ? new Date(at).toLocaleString() : '');
+  const fmtDate = (at) => (at ? new Date(at).toLocaleString(MLA.i18n.getLang() === 'en' ? 'en-US' : 'ko-KR') : '');
   const presets = () => api().get().presets;
   const byId = (id) => presets().find((p) => p.id === id) || null;
 
@@ -179,10 +179,13 @@
     });
     use.className = 'lib-mini';
     r.append(text, use);
-    r.addEventListener('click', () => {
+    const pick = () => {
       ui.sel = p.id;
       render(ui);
-    });
+    };
+    r.addEventListener('click', pick);
+    keyClick(r, pick); // 키보드: Tab으로 줄에 닿아 Enter (v0.30.0)
+    if (active) r.setAttribute('aria-current', 'true');
     return r;
   }
 

@@ -123,7 +123,7 @@ function loadBackground() {
     commands: { onCommand: ev() },
     sidePanel: { open: async () => {} },
     tabs: { onRemoved: ev() },
-    storage: { session: { set: async () => {} } },
+    storage: { session: { set: async () => {} }, local: { get: async () => ({}) }, onChanged: ev() }, // local · onChanged: 화면 언어 (v0.30.0)
     declarativeNetRequest: {
       getSessionRules: async () => rules,
       updateSessionRules: async ({ removeRuleIds = [], addRules = [] }) => {

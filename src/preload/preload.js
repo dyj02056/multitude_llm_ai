@@ -12,7 +12,17 @@ const { contextBridge, ipcRenderer } = require('electron');
 const CHANNELS = new Set(['state', 'panel:status', 'synth:status', 'shortcut', 'git:output', 'git:done']);
 
 // 화면에서 window.host 로 쓸 수 있는 기능 목록. send는 "부탁만", invoke는 "부탁하고 결과 받기"입니다.
+// 지금 화면 언어 (v0.30.0): 화면 스크립트가 첫 글자를 그리기 전에 알아야 해서 시작할 때 한 번만 동기로 묻는다
+const uiLang = (() => {
+  try {
+    return ipcRenderer.sendSync('i18n:lang');
+  } catch {
+    return 'ko';
+  }
+})();
+
 contextBridge.exposeInMainWorld('host', {
+  lang: uiLang,
   openModels: (ids) => ipcRenderer.send('models:open', ids),
   pickModels: () => ipcRenderer.send('models:pick'),
   logout: () => ipcRenderer.send('logout'),

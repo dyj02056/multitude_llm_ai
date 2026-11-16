@@ -325,4 +325,12 @@
   'project.need.risky': '[{n} files left out because they look like they contain secrets]',
   'project.need.skipped': '[{n} files not sent]',
   'project.need.confirm': 'Send? (For files not sent, only the reason is passed along.)',
+  'project.skipWhy.binary': 'binary file',
+  'project.skipWhy.tooLarge': 'over 1 MB',
+  'project.skipWhy.missing': 'file not found',
+  'project.skipWhy.unreadable': 'could not be read',
+  'project.skipWhy.secret': 'not sent: contains what looks like a secret',
+  'project.skipWhy.badPath': 'path not allowed',
+  'project.skipWhy.notInProject': 'not in the project',
+  'project.skipWhy.excluded': 'excluded by rule: {rule}',
 });

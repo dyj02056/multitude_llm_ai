@@ -101,6 +101,7 @@
     if (typeof v === 'boolean') return t(v ? 'transfer.on' : 'transfer.off');
     if (key === 'selected') return v.map(nameOf).join(', ') || '–';
     if (key === 'synthTarget') return nameOf(v);
+    if (key === 'lang') return { auto: t('settings.lang.auto'), ko: '한국어', en: 'English' }[v] || String(v);
     if (key === 'notify') return Object.entries(v).filter(([, on]) => on).map(([k]) => k).join(', ') || t('transfer.off');
     if (key === 'local') return [v.enabled === undefined ? '' : t(v.enabled ? 'transfer.on' : 'transfer.off'), v.baseUrl, v.model, v.contextTokens ? `${v.contextTokens.toLocaleString()} tok` : ''].filter(Boolean).join(' · ');
     return String(v);
@@ -152,7 +153,7 @@
         const r = await host.local.setPrefs(s.local).catch((err) => ({ ok: false, error: err.message }));
         if (!r?.ok) notes.push(t('transfer.localFailed', { error: r?.error || '' }));
       }
-      const plain = Object.fromEntries(['answerTimeoutMin', 'historyMax', 'notify', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer'].filter((k) => s[k] !== undefined).map((k) => [k, s[k]]));
+      const plain = Object.fromEntries(['answerTimeoutMin', 'historyMax', 'notify', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer', 'lang'].filter((k) => s[k] !== undefined).map((k) => [k, s[k]]));
       if (Object.keys(plain).length) host.setSettings(plain);
       if (s.layout) host.setLayout(s.layout);
       const synth = () => host.setSynth({ ...(s.synthTarget ? { target: s.synthTarget } : {}), ...(s.autoSynth !== undefined ? { auto: s.autoSynth } : {}) });

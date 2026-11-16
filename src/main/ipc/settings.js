@@ -9,14 +9,14 @@ const L = require('../../shared/local-llm');
 const { RELEASES_URL } = require('../../shared/update-core');
 const { normalizeLibrary } = require('../../shared/prompt-lib');
 const notifyCore = require('../../shared/notify');
-const { t } = require('../../shared/i18n');
+const { t, LANG_PREFS, getLang } = require('../../shared/i18n');
 
 const ASK_MAX = 200000; // local:ask 글자 수 한도 (v0.29.0)
 
 /**
  * ctx: { ipcMain, history, remote, guard, net, shell, TIMEOUT_CHOICES, MAX_CHOICES, prefs(), savePrefs, pushState,
  *        allServices(), refreshRemote(), localChat(), closeLocalPanel(), focusId(), setFocusId(id), updater(),
- *        shortcutList(), librarySaver, readLibrary(), askLocal(text) }
+ *        shortcutList(), librarySaver, readLibrary(), askLocal(text), applyLang() }
  */
 function register(ctx) {
   const { ipcMain, history, remote, guard, net, shell } = ctx;
@@ -24,8 +24,13 @@ function register(ctx) {
 
   // 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 기록 최대 개수, 사이트 셀렉터 자동 갱신, 새 버전 자동 확인,
   // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0)
-  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, commitOffer } = {}) => {
+  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, commitOffer, lang } = {}) => {
     const prefs = ctx.prefs();
+    // 화면 언어 (v0.30.0): 'auto' · 'ko' · 'en'만. 본체 글(창 · 알림 · 오류)은 바로 바뀌고, 화면은 state.uiLang을 보고 다시 그린다
+    if (LANG_PREFS.includes(lang) && lang !== prefs.lang) {
+      prefs.lang = lang;
+      ctx.applyLang();
+    }
     const notifyPatch = notifyCore.cleanPatch(notify); // 아는 종류의 true/false만
     if (notifyPatch) prefs.notify = notifyCore.normalizePrefs({ ...prefs.notify, ...notifyPatch });
     if (typeof sendPreview === 'boolean') prefs.sendPreview = sendPreview;
@@ -112,6 +117,11 @@ function register(ctx) {
   ipcMain.on('update:openReleases', () => shell.openExternal(RELEASES_URL));
 
   ipcMain.handle('shortcuts:list', () => ctx.shortcutList());
+
+  // 화면이 시작할 때 한 번 묻는 지금 언어 (v0.30.0, preload의 동기 요청): 첫 그림부터 맞는 언어로 그리게
+  ipcMain.on('i18n:lang', (e) => {
+    e.returnValue = getLang();
+  });
 
   // 프롬프트 라이브러리·스킬: 모양을 검사하고 길이를 잘라서 이 PC에만 저장한다 (shared/prompt-lib.js)
   ipcMain.handle('library:load', () => {

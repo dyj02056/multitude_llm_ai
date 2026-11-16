@@ -328,6 +328,8 @@
     text.append(span('lib-row-name', label), span('lib-row-sub', sub));
     row.append(text, ...extra);
     row.addEventListener('click', onClick);
+    keyClick(row, onClick); // 키보드: Tab으로 줄에 닿아 Enter (v0.30.0)
+    if (active) row.setAttribute('aria-current', 'true');
     return row;
   }
 
@@ -948,6 +950,13 @@
     if (varsWait && state.chatView !== 'vars') finishVars(false);
     if (state.chatView !== 'library') draft = null;
     $('#libraryBtn').classList.toggle('active', state.chatView === 'library');
+  });
+  // 언어를 바꾸면 (v0.30.0) 고르기 목록 · 스킬 줄 · 라이브러리 화면을 새 언어로 다시 그린다 (입력한 변수 값은 그대로)
+  document.addEventListener('mla:lang', () => {
+    renderTplSelect();
+    renderSkillBar();
+    window.libPresets?.refresh();
+    if (state?.chatView === 'library') renderLibrary();
   });
 
   (async () => {

@@ -2,9 +2,15 @@
 
 [← README](../../README.en.md) · [한국어 사용 안내](../guide.md)
 
-The app's screens are in Korean for now. This guide gives the **Korean label you will see** next to each control, so you can follow along.
+**Language (v0.30.0):** the app's screens are available in English and Korean. With **Language** set to *Automatic* (the default) you get Korean on a Korean Windows / Chrome and English otherwise; change it in **?** (Settings) › **Language (언어)** — *Automatic · 한국어 · English*. The change applies on the spot (open panels and your work stay as they are; a few texts such as panel status lines switch the next time they update). In the Chrome extension the side panel and the right-click menu follow the same setting.
 
-> Screenshots show the real app screens; the chat inside each panel is a test page with sample answers.
+This guide was written when the screens were Korean only, so it still quotes the **Korean label** next to many controls — useful if you run the Korean interface; in the English interface the same control carries the English name given in brackets or a close equivalent.
+
+Still Korean in this release: the prompts the app writes for **synthesis, analysis, debate and project mode** (so those answers may come back in Korean), and the sample questions and answers in the screenshots.
+
+> Screenshots show the real app screens in English; the chat inside each panel is a test page with (Korean) sample answers.
+
+**Accessibility (v0.30.0):** every action is reachable with the keyboard, focus is shown with a blue outline, dialogs keep focus inside and close with `Esc`, icon-only buttons have spoken names, and text contrast meets WCAG AA. What was checked and what is still missing: [docs/accessibility.md](../accessibility.md) (Korean).
 
 ## 1. Pick your AIs
 
@@ -15,7 +21,7 @@ On first launch you see a checklist of 11 AIs (`[x] Gemini` …). Choose up to *
 
 Change the selection later with **models** in the toolbar.
 
-![Model picker](../screenshots/01-model-picker.png)
+![Model picker](../screenshots/en/01-model-picker.png)
 
 ## 2. Ask all at once
 
@@ -29,7 +35,7 @@ Type in the input box at the bottom (`모든 AI에게 한 번에 물어보기`) 
 | Template | `템플릿` dropdown | Wrap the question (summary, step-by-step, pros & cons, fact check, translate, code review…) |
 | Skill | `skill:` | Add up to 3 SKILL.md instruction sets |
 
-![Ask all](../screenshots/02-ask-all.png)
+![Ask all](../screenshots/en/02-ask-all.png)
 
 ### Attach files
 
@@ -39,7 +45,7 @@ Drag files onto the input box, paste a screenshot with **Ctrl+V**, or click **[+
 
 **Shift+click** **보내기** (Send) or press **Ctrl+Shift+Enter** in the input box to see, before anything is sent, exactly what each AI will get: the final text (skill instructions + project context + question), your attachments, project file uploads and the character count. File types a service does not accept, files over the service's size limit and very long text (over 100,000 characters) are flagged in yellow. **보내기** sends exactly what is shown; **취소** (Cancel) sends nothing and keeps your input. To preview every time, turn on **보내기 전 미리보기** (preview before sending) in settings (off by default).
 
-![Preview before sending](../screenshots/26-send-preview.png)
+![Preview before sending](../screenshots/en/26-send-preview.png)
 
 ### Notifications (v0.25.0)
 
@@ -53,7 +59,7 @@ When a panel finishes answering a question you sent from the input box, **`[+1]`
 
 Choose the judging AI in the `종합` dropdown and press **종합 요청** (Request synthesis). The app sends the other AIs' answers to that AI and asks for mistakes, missing points and a final answer. Tick **완료 후 자동** to request it automatically when all answers are done.
 
-![Synthesis](../screenshots/03-synthesis.png)
+![Synthesis](../screenshots/en/03-synthesis.png)
 
 ### Hand-offs and debate (v0.26.0)
 
@@ -63,11 +69,11 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 - Results appear in **Compare › Hand-offs · Debate** and in **History** (expand the hand-offs line), and are included in MD/HTML exports.
 - A debate sends one extra message per participant per round (2 rounds × 3 AIs = 6, plus 1 for the judge). Use fewer rounds on services with tight usage limits.
 
-![Hand-off bar, send again and send-to-another-AI suggestion](../screenshots/27-handoff.png)
+![Hand-off bar, send again and send-to-another-AI suggestion](../screenshots/en/27-handoff.png)
 
-![Debate setup](../screenshots/28-debate.png)
+![Debate setup](../screenshots/en/28-debate.png)
 
-![Compare › Hand-offs · Debate](../screenshots/29-debate-result.png)
+![Compare › Hand-offs · Debate](../screenshots/en/29-debate-result.png)
 
 ## 5. Compare answers
 
@@ -83,11 +89,11 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 | Weak claims | `근거 부족` | Claims without support, by AI |
 | Final answer | `최종 답변` | The merged answer, with a copy button |
 
-![Analysis](../screenshots/13-analysis.png)
+![Analysis](../screenshots/en/13-analysis.png)
 
 Run the analysis again (also with another judge) and earlier analyses are kept: with two or more, pick two to see them **side by side**; issues found by only one of them are marked `이쪽에만` (only here) (v0.26.0).
 
-![Two analyses side by side](../screenshots/30-analysis-compare.png)
+![Two analyses side by side](../screenshots/en/30-analysis-compare.png)
 
 ### Retry and fallback (v0.26.0)
 
@@ -103,11 +109,11 @@ History stays on this PC. Questions sent from the extension's side panel appear 
 
 **Filters, tags and stars (v0.27.0).** **필터** (Filters) under the search box opens: period (all · today · 7 days · 30 days · date range), rating (`+1` / `−1` / not rated), sent from (app / side panel, extension only), tag, AI (any of), and checkboxes for starred, with project, synthesis, analysis, hand-offs/debates. In the record detail, **☆** stars a record and the tag box adds tags (Enter, comma separated; up to 10 tags of 30 characters). Tick the boxes in the list to save several records as **one** MD/HTML document (**MD로 묶어 저장** / **HTML로 묶어 저장**), oldest first.
 
-![History filters](../screenshots/32-history-filters.png)
+![History filters](../screenshots/en/32-history-filters.png)
 
 **Conversation threads (v0.27.0).** Questions that continue the same conversation share a thread: if at least one target panel received the previous question and was not reset since (new chat, home, clearing the local LLM chat, closing the panel, logging out), the new question joins that thread. **대화 줄기로** (by thread) groups them; open a thread to read its questions in order and save the whole thread as one file. Starting a new chat inside the site itself is not visible to the app, and records from before v0.27.0 have no thread.
 
-![Thread view](../screenshots/33-history-thread.png)
+![Thread view](../screenshots/en/33-history-thread.png)
 
 ## 7. Settings, stats and shortcuts
 
@@ -160,7 +166,7 @@ History stays on this PC. Questions sent from the extension's side panel appear 
 
 Cut-off protection: if an answer was cut off or abbreviated (`... existing code ...`), the change is blocked or flagged. Long files are requested as find/replace blocks; `↪ 이어서 받기` (continue) asks the same AI for the rest. **큰 작업** (big task) mode asks for a plan first and then one file at a time.
 
-![Patch preview](../screenshots/11-patch-preview.png)
+![Patch preview](../screenshots/en/11-patch-preview.png)
 
 ## 10. Chrome extension extras
 

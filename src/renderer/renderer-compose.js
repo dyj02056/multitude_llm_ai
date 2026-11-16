@@ -379,14 +379,33 @@ $('#prompt').addEventListener('keydown', (e) => {
 // 본체가 "전체 상태"를 보내올 때마다 실행되는 가장 중요한 부분입니다.
 // 지금 화면(패널·비교·기록·설정 …)에 맞게 body의 data-view 값을 바꾸면, styles.css가 그에 맞는 화면만 보여 줍니다.
 // 새로 들어온 화면이면 내용을 새로 그립니다 (예: 비교 화면에 처음 들어오면 답변을 다시 읽음).
+/** 설정 › 언어를 바꿨을 때 (v0.30.0): 화면을 다시 읽지 않고 그 자리에서 새 언어로 다시 그린다.
+ *  (다시 읽으면 패널 상태 · 프로젝트 작업 · 쓰던 글이 사라지고, 크롬 확장은 AI 사이트 iframe까지 다시 열린다.)
+ *  고정 글은 apply()가, 지금 화면은 state 처리(아래)가, 라이브러리 등은 'mla:lang' 이벤트를 듣고 다시 그린다.
+ *  패널 상태 글처럼 본체 알림으로 쓰는 글은 다음 알림 때 새 언어가 된다. */
+function relocalize(lang) {
+  shownLang = MLA.i18n.setLang(lang);
+  MLA.i18n.apply(document);
+  for (const [id, p] of panels) {
+    p.loginBtn.textContent = UI.loginButton.label;
+    p.loginBtn.title = UI.loginButton.title;
+    const name = p.el.querySelector('.panel-head .name');
+    if (name) name.textContent = svcLabel(state.services.find((s) => s.id === id)) || name.textContent;
+  }
+  document.dispatchEvent(new CustomEvent('mla:lang', { detail: lang }));
+}
+
 host.on('state', (next) => {
   const modeChanged = !state || state.mode !== next.mode;
   if (modeChanged) setTimeout(checkWebAsk, 300); // 웹페이지 질문(크롬 확장): 채팅 화면에 들어오면 기다리던 요청을 넣는다
-  const enteredCompare = next.chatView === 'compare' && (modeChanged || state.chatView !== 'compare');
-  const enteredHistory = next.chatView === 'history' && (modeChanged || state.chatView !== 'history');
-  const enteredHelp = next.chatView === 'help' && (modeChanged || state.chatView !== 'help');
-  const enteredChanges = next.chatView === 'changes' && (modeChanged || state.chatView !== 'changes');
+  // 언어를 바꿨으면 (v0.30.0) 고정 글을 다시 넣고, 지금 화면을 처음 들어온 것처럼 다시 그린다
+  const langChanged = !!next.uiLang && next.uiLang !== shownLang;
+  const enteredCompare = next.chatView === 'compare' && (modeChanged || langChanged || state.chatView !== 'compare');
+  const enteredHistory = next.chatView === 'history' && (modeChanged || langChanged || state.chatView !== 'history');
+  const enteredHelp = next.chatView === 'help' && (modeChanged || langChanged || state.chatView !== 'help');
+  const enteredChanges = next.chatView === 'changes' && (modeChanged || langChanged || state.chatView !== 'changes');
   state = next;
+  if (langChanged) relocalize(next.uiLang);
   if (state.diag) {
     Object.assign(diagById, state.diag);
     for (const id of panels.keys()) renderDiagBadge(id);
@@ -410,7 +429,7 @@ host.on('state', (next) => {
   for (const b of document.querySelectorAll('[data-layout]')) {
     b.classList.toggle('active', b.dataset.layout === state.layout);
   }
-  if (state.mode === 'pick' && modeChanged) renderPick();
+  if (state.mode === 'pick' && (modeChanged || langChanged)) renderPick();
   syncPanels();
   noteRemote();
   renderStatusLine();

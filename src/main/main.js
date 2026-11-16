@@ -46,7 +46,8 @@ const { setupGitCommit } = require('./gitcommit');
 const { createUpdater } = require('./updater');
 const secure = require('./secure-store'); // 기록 · 설정 · 라이브러리 · 프로젝트 상태 암호화 (v0.22.1)
 const notifyCore = require('../shared/notify');
-const { t } = require('../shared/i18n');
+const i18n = require('../shared/i18n');
+const { t } = i18n;
 const { createOsNotifier } = require('./notifier'); // OS 알림 (v0.25.0)
 
 // ---------- 화면 크기 관련 숫자 (단위: 픽셀) ----------
@@ -119,7 +120,13 @@ let prefs = {
   retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
   commitOffer: true, // 적용 후 커밋 제안 (v0.28.0, 기본 켬): 적용이 끝나면 [커밋하기]를 보여 준다 (누를 때만 커밋)
   autoRecommend: false, // 추천 조합 제안 (v0.27.0, 기본 끔): 질문 종류의 추천 조합이 지금 대상과 다르면 [추천 조합으로 바꾸기]만 띄운다
+  lang: 'auto', // 화면 언어 (v0.30.0): 'auto'(Windows 언어가 한국어면 한국어, 아니면 영어) · 'ko' · 'en'
 };
+
+/** 언어 설정을 본체 글(창 · 알림 · 오류)에 적용한다 (v0.30.0). 'auto'면 Windows 표시 언어(app.getLocale)를 본다 */
+function applyLang() {
+  return i18n.setLang(i18n.detectLang(prefs.lang, app.getLocale()));
+}
 
 /**
  * 저장해 둔 설정 파일을 읽어 prefs에 덮어씁니다.
@@ -143,6 +150,8 @@ function loadPrefs() {
   prefs.retryOnce = prefs.retryOnce !== false;
   prefs.autoRecommend = prefs.autoRecommend === true;
   prefs.commitOffer = prefs.commitOffer !== false;
+  prefs.lang = i18n.normalizeLangPref(prefs.lang);
+  applyLang(); // 창 · 대화상자 · 알림을 만들기 전에
 }
 
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
@@ -546,6 +555,8 @@ function pushState() {
     retryOnce: prefs.retryOnce,
     autoRecommend: prefs.autoRecommend,
     commitOffer: prefs.commitOffer,
+    lang: prefs.lang, // 언어 설정 (v0.30.0) · uiLang = 지금 쓰는 언어
+    uiLang: i18n.getLang(),
     update: updater?.status() || null,
     storage: { encrypted: secure.store().available() }, // 로컬 데이터 암호화 (v0.22.1)
     rects: rects.panels,
@@ -900,6 +911,7 @@ require('./ipc/settings').register({
   prefs: () => prefs,
   savePrefs,
   pushState,
+  applyLang,
   allServices,
   refreshRemote,
   localChat: () => localChat,

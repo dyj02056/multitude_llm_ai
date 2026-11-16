@@ -16,6 +16,7 @@ const ROOT = path.join(__dirname, '..', '..');
 // --store: 크롬 웹 스토어용 1280×800 스크린샷을 store/screenshots에 (문서용 docs/screenshots는 그대로)
 //   npm run screenshots -- --store 02-ask-all 13-analysis 11-patch-preview 19-local-llm 24-side-panel
 const STORE = process.argv.includes('--store');
+// MLA_SHOT_LANG=en: 영어 화면으로 찍는다 (v0.30.0, preload-app.js · preload-side.js가 읽음). 보통 MLA_SHOT_OUT과 같이 쓴다.
 // MLA_SHOT_OUT=폴더: 다른 곳에 저장 (화면 코드를 고친 뒤 docs 그림을 바꾸지 않고 장면만 띄워 볼 때, v0.24.0)
 const OUT = process.env.MLA_SHOT_OUT || path.join(ROOT, ...(STORE ? ['store', 'screenshots'] : ['docs', 'screenshots']));
 

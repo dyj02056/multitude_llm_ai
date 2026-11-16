@@ -59,6 +59,7 @@ const RENDERER_FILES = [
   'library.js',
   'library-presets.js',
   'settings-transfer-ui.js',
+  'a11y.js', // 창 포커스 관리 (v0.30.0)
 ];
 const PAGE_SCRIPTS = RENDERER_FILES.filter((n) => n !== 'templates.js');
 

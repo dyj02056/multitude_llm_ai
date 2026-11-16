@@ -449,6 +449,7 @@
       row.className = `ps-row ${e.kind === 'dir' ? 'dir' : 'file'}${e.excluded ? ' excl' : ''}`;
       row.style.paddingLeft = `${e.depth * 14}px`;
       const twisty = span('twisty', e.kind === 'dir' ? (project.expanded.has(e.path) ? '▾' : '▸') : '');
+      twisty.setAttribute('aria-hidden', 'true'); // 같은 일을 이름(키보드로 닿는 버튼)이 한다 (v0.30.0)
       if (e.kind === 'dir') twisty.addEventListener('click', () => toggleDir(e));
       const box = document.createElement('input');
       box.type = 'checkbox';
@@ -469,6 +470,7 @@
       }
       const name = span('nm', e.kind === 'dir' ? `${e.name}/` : e.name);
       name.title = e.path;
+      box.setAttribute('aria-label', e.path); // 체크 상자가 어느 파일 것인지 (v0.30.0)
       row.append(twisty, box, name);
       if (e.excluded) {
         const tag = span(`tag ${e.excluded.layer}`, e.excluded.layer);
@@ -488,10 +490,13 @@
         row.append(tag);
       }
       if (e.kind === 'file') row.append(span('sz', fmtSize(e.size)));
-      if (e.kind === 'dir') name.addEventListener('click', () => toggleDir(e));
-      else if (e.kind === 'file' && e.excluded?.layer !== 'L1') {
+      if (e.kind === 'dir') {
+        name.addEventListener('click', () => toggleDir(e));
+        keyClick(name, () => toggleDir(e), 'button').setAttribute('aria-expanded', String(project.expanded.has(e.path)));
+      } else if (e.kind === 'file' && e.excluded?.layer !== 'L1') {
         name.title = `${e.path}\n${t('project.tree.openHint')}`;
         name.addEventListener('click', () => P.openEditor(e.path));
+        keyClick(name, () => P.openEditor(e.path), 'button');
       }
       if (e.path === ed.path) row.classList.add('editing');
       return row;
@@ -545,6 +550,20 @@
 
   /** 고른 파일들을 읽는다. 비밀 정보가 새로 보이면 확인을 받는다. → { files, skipped } | null(취소) */
   // 고른 파일들의 내용을 읽어 옵니다. 너무 크거나 바이너리·비밀 정보 파일은 빼고 이유를 남깁니다.
+  // 보내지 않은 이유 (v0.30.0): AI에게 보내는 목록의 글(reason)은 한국어 그대로 두고 (AI에게 보내는 글은 아직 한국어),
+  // 확인 창에는 지금 화면 언어(key · vars → skipText)로 보여 준다.
+  const SKIP_WHY = {
+    binary: { reason: '바이너리 파일', key: 'project.skipWhy.binary' },
+    tooLarge: { reason: '1MB 초과', key: 'project.skipWhy.tooLarge' },
+    missing: { reason: '파일이 없습니다', key: 'project.skipWhy.missing' },
+    unreadable: { reason: '읽지 못함', key: 'project.skipWhy.unreadable' },
+    secret: { reason: '비밀 정보로 보이는 문자열이 있어 보내지 않음', key: 'project.skipWhy.secret' },
+    badPath: { reason: '허용되지 않는 경로', key: 'project.skipWhy.badPath' },
+    notInProject: { reason: '프로젝트에 없는 파일', key: 'project.skipWhy.notInProject' },
+  };
+  const readSkip = (path, r) => ({ path, ...(r.binary ? SKIP_WHY.binary : r.tooLarge ? SKIP_WHY.tooLarge : r.missing ? SKIP_WHY.missing : r.error ? { reason: r.error } : SKIP_WHY.unreadable) });
+  const skipText = (f) => (f.key ? t(f.key, f.vars) : f.reason);
+
   async function readChosen(paths) {
     const files = [];
     const skipped = [];
@@ -554,7 +573,7 @@
       const r = await host.project.readFile(path).catch((err) => ({ error: err.message }));
       if (r.missing) missing.push(path);
       if (typeof r.text !== 'string') {
-        skipped.push({ path, reason: r.binary ? '바이너리 파일' : r.tooLarge ? '1MB 초과' : r.missing ? '파일이 없습니다' : r.error || '읽지 못함' });
+        skipped.push(readSkip(path, r));
         continue;
       }
       const hits = scanSecrets(r.text);
@@ -568,7 +587,7 @@
         for (const x of risky) {
           const i = files.findIndex((f) => f.path === x.path);
           if (i >= 0) files.splice(i, 1);
-          skipped.push({ path: x.path, reason: '비밀 정보로 보이는 문자열이 있어 보내지 않음' });
+          skipped.push({ path: x.path, ...SKIP_WHY.secret });
         }
       } else for (const x of risky) project.allowSecret.add(x.path);
     }
@@ -909,13 +928,14 @@
   /** 요청 경로가 보내도 되는 파일인지. 안 되면 이유 */
   function refuseReason(path) {
     const clean = PX.safeRelPath(path);
-    if (!clean) return '허용되지 않는 경로';
+    if (!clean) return SKIP_WHY.badPath;
     const e = entryOf(clean);
-    if (e?.excluded) return `제외 규칙: ${PI.describe(e.excluded)}`;
+    const excluded = (rule) => ({ reason: `제외 규칙: ${PI.describe(rule)}`, key: 'project.skipWhy.excluded', vars: { rule: PI.describe(rule) } });
+    if (e?.excluded) return excluded(e.excluded);
     // 훑지 않은(제외된 폴더 안) 경로도 규칙으로 다시 본다.
     const r = project.scan.matcher.classify(clean, false);
-    if (r) return `제외 규칙: ${PI.describe(r)}`;
-    if (!e) return '프로젝트에 없는 파일';
+    if (r) return excluded(r);
+    if (!e) return SKIP_WHY.notInProject;
     return null;
   }
 
@@ -937,13 +957,13 @@
     for (const path of wanted) {
       const why = refuseReason(path);
       if (why) {
-        skipped.push({ path, reason: why });
+        skipped.push({ path, ...why });
         continue;
       }
       const clean = PX.safeRelPath(path);
       const r = await host.project.readFile(clean).catch((err) => ({ error: err.message }));
       if (typeof r.text !== 'string') {
-        skipped.push({ path: clean, reason: r.binary ? '바이너리 파일' : r.tooLarge ? '1MB 초과' : r.missing ? '파일이 없습니다' : r.error || '읽지 못함' });
+        skipped.push(readSkip(clean, r));
         continue;
       }
       const hits = scanSecrets(r.text);
@@ -958,7 +978,7 @@
       files.length ? listLines(files, (f) => `- ${f.path}`) : t('project.need.noneParen'),
     ];
     if (risky.length) summary.push('', t('project.need.risky', { n: risky.length }), listLines(risky, (f) => `- ${f.path}: ${describeSecrets(f.hits)}`));
-    if (skipped.length) summary.push('', t('project.need.skipped', { n: skipped.length }), listLines(skipped, (f) => `- ${f.path}: ${f.reason}`));
+    if (skipped.length) summary.push('', t('project.need.skipped', { n: skipped.length }), listLines(skipped, (f) => `- ${f.path}: ${skipText(f)}`));
     summary.push('', t('project.need.confirm'));
     if (!confirm(summary.join('\n'))) return;
     if (risky.length) {
@@ -968,7 +988,7 @@
           files.push({ path: f.path, text: f.text });
           project.allowSecret.add(f.path);
         }
-      } else for (const f of risky) skipped.push({ path: f.path, reason: '비밀 정보로 보이는 문자열이 있어 보내지 않음' });
+      } else for (const f of risky) skipped.push({ path: f.path, ...SKIP_WHY.secret });
     }
     const p = panels.get(id);
     p.needBtn.hidden = true;

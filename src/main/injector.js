@@ -11,7 +11,7 @@ const { dev } = require('./dev');
 const { pageFocusInput, pageRefocusInput, pageClickSend } = require('../shared/page');
 const { attachFiles, cleanupTemp } = require('./attach');
 const { isServiceUrl } = require('../shared/services');
-const { t } = require('../shared/i18n');
+const { t, pageError } = require('../shared/i18n');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -42,7 +42,7 @@ async function sendPrompt(wc, svc, text, files = [], { fallbackText } = {}) {
   const OFF_HOST = { ok: false, error: t('main.inject.offHost', { name: svc.name }) };
   if (offHost()) return OFF_HOST;
 
-  const focus = await run(wc, pageFocusInput, cfg);
+  const focus = pageError(await run(wc, pageFocusInput, cfg)); // 페이지 안 코드의 실패 code → 지금 언어의 글 (v0.30.0)
   // code 'no-input': 입력창을 못 찾음 — 셀렉터 자가진단(shared/diag.js)이 "화면이 바뀐 것 같음"으로 본다
   if (!focus.ok) return { ok: false, error: focus.error || t('main.inject.noFocus'), code: focus.error ? 'no-input' : undefined };
 

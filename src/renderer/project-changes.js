@@ -1082,7 +1082,7 @@
     };
   };
 
-  const fmtAt = (ms) => new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmtAt = (ms) => new Date(ms).toLocaleString(MLA.i18n.getLang() === 'en' ? 'en-US' : 'ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   $('#changesLog').addEventListener('click', () => {
     modal.show(t('project.log.title'), t('project.log.note'));

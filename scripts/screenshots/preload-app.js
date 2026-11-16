@@ -12,6 +12,9 @@ const { createHistory } = require('../../src/shared/history-core');
 const S = require('./sample');
 
 const scene = new URLSearchParams(location.search).get('scene') || '02-ask-all';
+// MLA_SHOT_LANG=en: 영어 화면으로 찍는다 (v0.30.0, 기본 한국어). 예시 질문 · 답변은 한국어 그대로다.
+const LANG = process.env.MLA_SHOT_LANG === 'en' ? 'en' : 'ko';
+require('../../src/shared/i18n').setLang(LANG); // 이 파일이 쓰는 공통 모듈(단축키 이름 등)의 글도 같은 언어로
 const TOOLBAR_H = 44;
 const COMPOSER_H = 132;
 const HEADER_H = 28;
@@ -117,7 +120,7 @@ function push() {
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL || LOCAL_JUDGE, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b', contextTokens: 8192 },
     autoUpdate: true,
-    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip', commitOffer: true,
+    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip', commitOffer: true, lang: LANG, uiLang: LANG,
     update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
     storage: { encrypted: true },
     rects: rs,
@@ -125,7 +128,9 @@ function push() {
 }
 
 window.host = {
-  ui: { hints: { pick: '모델을 고르세요', chat: '' }, pickNote: '선택한 모델만 패널로 엽니다. 각 서비스에는 Google 계정으로 로그인합니다.', loginButton: { label: 'G 로그인', title: '' }, devtools: true },
+  lang: LANG,
+  // 영어로 찍을 때는 화면의 기본 글(사전)을 쓴다
+  ui: LANG === 'en' ? { devtools: true } : { hints: { pick: '모델을 고르세요', chat: '' }, pickNote: '선택한 모델만 패널로 엽니다. 각 서비스에는 Google 계정으로 로그인합니다.', loginButton: { label: 'G 로그인', title: '' }, devtools: true },
   openModels: () => ((mode = 'chat'), push()),
   pickModels: () => ((mode = 'pick'), push()),
   logout() {},

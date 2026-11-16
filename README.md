@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.29.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.30.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -162,6 +162,8 @@ multitude_llm_ai/
 | 단축키를 찾는 분 | [단축키](docs/guide.md#단축키) |
 | 데이터가 어디로 가는지, 권한이 왜 필요한지 궁금한 분 | [보안](docs/security.md) |
 | 빌드 · 개발하려는 분 | [설치 · 빌드 · 개발](docs/setup.md) · [PLAN.md](PLAN.md) |
+| 새 버전을 올리려는 분 | [출시 전 확인 목록](docs/release-checklist.md) (사람이 직접 해 보는 확인) |
+| 키보드 · 화면 읽기 프로그램으로 쓰는 분 | [접근성](docs/accessibility.md) (확인한 것 · 알려진 모자란 점) |
 | 사이트 화면이 바뀌어 고치려는 분 | [remote/README.md](remote/README.md) |
 | 스토어에 올리려는 분 | [store/README.md](store/README.md) (등록 글 · 권한 설명 · 그림) · [PRIVACY.md](PRIVACY.md) |
 | English readers | [README.en.md](README.en.md) · [English user guide](docs/en/guide.md) |
@@ -171,11 +173,11 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.30.0** | **화면 언어**(설정 › 언어: 자동 · 한국어 · English — Windows 앱 · 크롬 확장 · 사이드탭 · 오른쪽 클릭 메뉴 · 알림) · **접근성**(글자 대비 WCAG AA · 키보드 포커스 표시 · 창 포커스 가두기 · 기호 버튼 이름표 · 키보드로 닿는 목록) · [출시 전 확인 목록](docs/release-checklist.md) · [접근성 문서](docs/accessibility.md) |
 | **v0.29.0** | **작업 프리셋**(템플릿 · 스킬 · 패널 · 배치 · 종합 · 토론을 한 번에) · 스킬 **이전 버전**과 차이 보기 · 되돌리기 · **로컬 LLM을 패널 없이 판정 · 압축**에 · 로컬 모델 **컨텍스트 한도** · 사이드탭 **요약 · 번역 · 핵심만 · 쉽게 설명** 단추와 **이 페이지에서 전에 물어본 것** · **설정 옮기기**(.mla.json, 비밀번호 암호화) |
 | **v0.28.0** | 미리보기 테스트 실행에 **lint · typecheck · build** · 여러 AI 수정안을 파일마다 골라 **섞어서 적용** · 적용한 파일만 **커밋**(Windows 앱, push 없음) · 앱을 다시 켜도 **작업 이어 하기** · 변경 바와 제안 바 **두 줄로** |
 | **v0.27.0** | 기록 **필터**(기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석 · 태그) · **태그 · ★ 즐겨찾기** · 여러 기록을 **한 문서로** 저장 · **대화 줄기**로 묶어 보기 · 질문 종류별 **추천 조합**(사실 숫자만, 대상은 눌러야 바뀜) |
 | **v0.26.0** | AI끼리 **넘기기**(검토 · 반박 · 이어서) · **토론**(2~3개 AI · 1~3라운드 · 판정) · 실패하면 한 번 다시 보내기 · 한도면 다른 AI 제안 · 이견 → 관련 문단 강조 · 다시 분석 나란히 비교 |
-| **v0.25.0** | 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝 **OS 알림** · **보내기 전 미리보기**(Shift+클릭) · 셀렉터 한국어/영어 짝 · `npm run selectors:probe` |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

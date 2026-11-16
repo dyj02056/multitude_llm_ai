@@ -251,7 +251,9 @@ function analysisBlock(entry, { onJump, unique } = {}) {
           if (p && onJump && state.services.some((s) => s.name === name)) {
             c.classList.add('an-jump');
             c.title = t('analysis.jumpTitle', { name });
-            c.addEventListener('click', () => onJump(name, `${d.topic} ${p.text || ''}`)); // 쟁점 + 그 AI 입장으로 관련 문단 찾기
+            const jump = () => onJump(name, `${d.topic} ${p.text || ''}`); // 쟁점 + 그 AI 입장으로 관련 문단 찾기
+            c.addEventListener('click', jump);
+            keyClick(c, jump); // 키보드: Tab으로 칸에 닿아 Enter (v0.30.0)
           }
           row.append(c);
         }
@@ -379,7 +381,7 @@ $('#compareRefresh').addEventListener('click', renderCompare);
 // 기록 화면(목록 · 거르기 · 대화 줄기 · 상세)은 history-view.js (v0.27.0). 여기에는 비교 화면과 같이 쓰는 것만 둔다.
 
 const fmtTime = (ms) =>
-  new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  new Date(ms).toLocaleString(MLA.i18n.getLang() === 'en' ? 'en-US' : 'ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 // 글 없이 첨부만 보낸 기록의 질문 자리 (언어를 바꾸면 그때 글로)
 Object.defineProperty(window, 'NO_TEXT', { get: () => t('ui.noText') });
@@ -411,6 +413,8 @@ host.on('shortcut', (action) => {
 });
 
 $('#timeoutSelect').addEventListener('change', (e) => host.setSettings({ answerTimeoutMin: Number(e.target.value) }));
+// 화면 언어 (v0.30.0): 본체가 검사해 저장하고, 돌아오는 state.uiLang을 보고 화면을 다시 그린다 (renderer-compose.js relocalize)
+$('#langSelect').addEventListener('change', (e) => host.setSettings({ lang: e.target.value }));
 
 // 기록 최대 개수 (v0.24.0): 줄여서 지워지는 기록이 있으면 먼저 묻는다
 $('#historyMaxSelect').addEventListener('change', async (e) => {
@@ -555,6 +559,7 @@ function renderSettings() {
   renderDiagTable();
   renderStatsTable();
   renderLocalSettings();
+  $('#langSelect').value = state.lang || 'auto';
   const select = $('#timeoutSelect');
   select.replaceChildren(
     ...state.timeoutChoices.map((m) => Object.assign(document.createElement('option'), { value: m, textContent: t('ui.minutes', { n: m }) })),
@@ -582,7 +587,14 @@ function renderSettings() {
 async function renderHelp() {
   renderSettings();
   const rows = await host.shortcuts();
+  // 표 머리줄 (v0.30.0 접근성): 화면에는 안 보이고 화면 읽기 프로그램만 읽는다
+  const helpHead = document.createElement('thead');
+  helpHead.className = 'sr-only';
+  const helpHeadRow = document.createElement('tr');
+  for (const key of ['ui.a11y.helpKeys', 'ui.a11y.helpAction']) helpHeadRow.append(Object.assign(document.createElement('th'), { textContent: t(key), scope: 'col' }));
+  helpHead.append(helpHeadRow);
   $('#helpTable').replaceChildren(
+    helpHead,
     ...rows.map((r) => {
       const tr = document.createElement('tr');
       const k = document.createElement('td');

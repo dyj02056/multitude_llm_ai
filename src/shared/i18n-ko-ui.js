@@ -445,4 +445,12 @@
   'ui.h.tplSelect.aria': '질문 템플릿',
   'ui.h.prompt.ph': '모든 AI에게 한 번에 물어보기',
   'ui.h.sendBtn': '보내기',
+  'ui.diag.where.ext': '크롬 확장',
+  'ui.diag.where.app': 'Windows 앱',
+  'ui.local.name': '로컬 LLM',
+  'ui.a11y.rescan': '폴더 다시 읽기',
+  'ui.a11y.gitInput': 'git 명령 입력',
+  'ui.a11y.edText': '파일 내용',
+  'ui.a11y.helpKeys': '단축키',
+  'ui.a11y.helpAction': '하는 일',
 });

@@ -24,7 +24,7 @@
   </header>
 
   <div id="spPicker" class="sp-picker" hidden>
-    <div class="sp-picker-head"><span class="muted-label" data-i18n="ext.side.pickHead"></span><span id="spPickNote" class="muted-label"></span></div>
+    <div class="sp-picker-head"><span class="muted-label" data-i18n="ext.side.pickHead"></span><span id="spPickNote" class="muted-label" role="status" aria-live="polite"></span></div>
     <div id="spPickList" class="sp-pick-list"></div>
   </div>
 
@@ -32,14 +32,14 @@
     <span class="sp-ctx-label">ctx:</span>
     <span id="spCtxText" class="sp-ctx-text"></span>
     <button id="spCtxAuto" class="accent" hidden data-i18n-title="ext.side.ctxAutoTitle" data-i18n="ext.side.ctxAuto"></button>
-    <button id="spCtxGrab" class="ghost" data-i18n-title="ext.side.ctxGrabTitle">↻</button>
+    <button id="spCtxGrab" class="ghost" data-i18n-title="ext.side.ctxGrabTitle" data-i18n-aria="ext.side.ctxGrabTitle">↻</button>
     <button id="spCtxToggle" class="ghost" data-i18n-title="ext.side.ctxToggleTitle">on</button>
-    <button id="spCtxClear" class="ghost" data-i18n-title="ext.side.ctxClearTitle">✕</button>
+    <button id="spCtxClear" class="ghost" data-i18n-title="ext.side.ctxClearTitle" data-i18n-aria="ext.side.ctxClearTitle">✕</button>
   </div>
 
   <!-- 이 페이지에서 전에 물어본 것 (v0.29.0): 같은 주소(# 뒤 · utm_* 뺌)의 사이드탭 기록 -->
   <div id="spRecall" class="sp-recall" hidden>
-    <button id="spRecallBtn" class="ghost" aria-expanded="false"></button>
+    <button id="spRecallBtn" class="ghost" aria-expanded="false" data-label-by-script></button>
     <div id="spRecallList" class="sp-recall-list" hidden></div>
   </div>
 
@@ -54,12 +54,12 @@
       <button data-quick="explain" data-i18n="side.quick.explain" data-i18n-title="side.quick.title"></button>
     </div>
     <div class="sp-input">
-      <textarea id="spPrompt" rows="3" spellcheck="false" data-i18n-placeholder="ext.side.promptPlaceholder"></textarea>
+      <textarea id="spPrompt" data-i18n-aria="ext.side.promptPlaceholder" rows="3" spellcheck="false" data-i18n-placeholder="ext.side.promptPlaceholder"></textarea>
     </div>
     <div class="sp-foot">
       <select id="spTpl" data-i18n-title="ext.side.tplTitle" data-i18n-aria="ext.side.tplAria"></select>
       <select id="spSkill" data-i18n-title="ext.side.skillTitle" data-i18n-aria="ext.side.skillAria"></select>
-      <span id="spHint" class="muted-label" data-i18n="ext.side.hint"></span>
+      <span id="spHint" class="muted-label" role="status" aria-live="polite" data-i18n="ext.side.hint"></span>
       <span class="spacer"></span>
       <button id="spSend" class="primary">send</button>
     </div>
