@@ -252,6 +252,20 @@ Cut-off protection: if an answer was cut off or abbreviated (`... existing code 
 - **One-click prompts** (v0.29.0): **요약 · 번역 · 핵심만 · 쉽게 설명** (summary, translate Korean↔English by page language, key points, explain simply) send right away with the captured page.
 - **Earlier questions on this page** (v0.29.0): when the side-panel history has questions for the same URL (ignoring `#…` and tracking parameters such as `utm_*`), a line shows how many; open it to see them, their saved answers and **다시 묻기**.
 
+Side-panel additions (v0.37.0):
+
+- **PDF**: when the tab is a PDF the context line reads `PDF 8 pages`. The page downloads its own PDF and the side panel extracts text per page with pdf.js (`[p.3]` markers) and sends it like page text — up to 150 pages / 30 MB / 300,000 characters. **Password-protected and scanned PDFs (text as images) cannot be read.** Local PDFs need "Allow access to file URLs" for the extension in chrome://extensions. Korean CMaps are bundled; some Japanese/Chinese fonts may come out garbled.
+- **Video captions**: only captions the page **already shows** are read — an open YouTube "transcript" panel or an enabled HTML5 caption track. Nothing is downloaded and caption settings are not changed. If 40+ characters are found they replace the page text as context (`captions` on the line). If nothing is read, turn captions (CC) on or open "Show transcript", then ↻.
+- **Compare translations**: select the text on the page and press `Compare translations` — only the selection (not the page) goes to both AIs; when both finish the two translations are shown side by side with sentences found in only one of them highlighted. Needs two AIs open.
+- **One-line summary**: when on, a one-sentence conclusion is placed above the answers once both AIs finish — made by the local LLM if you turned it on in the app, otherwise by asking the top AI a follow-up (it stays in that AI's chat).
+- **Per-site presets**: in the `Site` row press `Remember for this site` to save the two open AIs and a **default button** for the host (up to 50). On that site's tabs the AIs are switched but **no question is sent by itself**; the default button is outlined and pressing Enter in an empty box clicks it. `Forget` removes it.
+
+![Reading a PDF](../screenshots/en/68-side-pdf.png)
+
+![Compare translations](../screenshots/en/69-side-compare.png)
+
+![One-line summary and site preset](../screenshots/en/70-side-oneline.png)
+
 ## 11. Local LLM (optional)
 
 Run an OpenAI-compatible server on your PC (Ollama `http://localhost:11434`, LM Studio `http://localhost:1234`, llama.cpp…). In **?** › `로컬 LLM`, turn it on, press `연결 확인` (test connection) and choose a model. Then pick **로컬 LLM** in the model list. Only `localhost` / `127.0.0.1` addresses are accepted, so nothing leaves your PC.

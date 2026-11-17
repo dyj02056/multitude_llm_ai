@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; frame-src https://gemini.google.com https://chatgpt.com https://claude.ai https://chat.deepseek.com https://www.perplexity.ai https://perplexity.ai https://grok.com https://chat.mistral.ai https://chat.qwen.ai https://auth.qwen.ai https://chat.z.ai https://www.genspark.ai https://genspark.ai https://duck.ai https://duckduckgo.com; connect-src https://raw.githubusercontent.com" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:; frame-src https://gemini.google.com https://chatgpt.com https://claude.ai https://chat.deepseek.com https://www.perplexity.ai https://perplexity.ai https://grok.com https://chat.mistral.ai https://chat.qwen.ai https://auth.qwen.ai https://chat.z.ai https://www.genspark.ai https://genspark.ai https://duck.ai https://duckduckgo.com; connect-src 'self' https://raw.githubusercontent.com" />
   <title data-i18n="ext.side.docTitle">Multitude LLM</title>
   <link rel="stylesheet" href="lib/renderer/styles.css" />
   <link rel="stylesheet" href="sidepanel.css" />
@@ -37,13 +37,52 @@
     <button id="spCtxClear" class="ghost" data-i18n-title="ext.side.ctxClearTitle" data-i18n-aria="ext.side.ctxClearTitle">✕</button>
   </div>
 
+  <!-- 사이트별 프리셋 (v0.37.0): 이 사이트에서 쓸 AI 2개 · 기본 단추를 기억한다 (질문은 저절로 보내지 않음) -->
+  <div id="spSite" class="sp-site" hidden>
+    <span class="muted-label" data-i18n="side.site.label"></span>
+    <span id="spSiteHost" class="sp-site-host"></span>
+    <span id="spSiteState" class="muted-label"></span>
+    <span class="spacer"></span>
+    <select id="spSiteQuick" data-i18n-title="side.site.quickTitle" data-i18n-aria="side.site.quickTitle">
+      <option value="" data-i18n="side.site.quickNone"></option>
+      <option value="summary" data-i18n="side.quick.summary"></option>
+      <option value="translate" data-i18n="side.quick.translate"></option>
+      <option value="keypoints" data-i18n="side.quick.keypoints"></option>
+      <option value="explain" data-i18n="side.quick.explain"></option>
+      <option value="compare" data-i18n="side.quick.compare"></option>
+    </select>
+    <button id="spSiteSave" class="ghost" data-i18n="side.site.save" data-i18n-title="side.site.saveTitle"></button>
+    <button id="spSiteClear" class="ghost" data-i18n="side.site.clear" data-i18n-title="side.site.clearTitle" hidden></button>
+  </div>
+
   <!-- 이 페이지에서 전에 물어본 것 (v0.29.0): 같은 주소(# 뒤 · utm_* 뺌)의 사이드탭 기록 -->
   <div id="spRecall" class="sp-recall" hidden>
     <button id="spRecallBtn" class="ghost" aria-expanded="false" data-label-by-script></button>
     <div id="spRecallList" class="sp-recall-list" hidden></div>
   </div>
 
+  <!-- 한 줄 종합 (v0.37.0): 두 답이 끝나면 로컬 LLM(없으면 한쪽 AI)이 만든 한 문장 결론 -->
+  <div id="spOne" class="sp-one" hidden>
+    <span id="spOneLabel" class="sp-one-label"></span>
+    <span id="spOneText" class="sp-one-text" role="status" aria-live="polite"></span>
+    <button id="spOneClose" class="ghost" data-i18n-title="side.oneLine.close" data-i18n-aria="side.oneLine.close">✕</button>
+  </div>
+
   <main id="spPanes"></main>
+
+  <!-- 번역 비교 (v0.37.0): 선택한 글을 두 AI가 번역한 결과를 나란히, 한쪽에만 있는 문장에 표시 -->
+  <section id="spCompare" class="sp-compare" hidden aria-labelledby="spCompareTitle">
+    <div class="sp-compare-head">
+      <b id="spCompareTitle" data-i18n="side.cmp.title"></b>
+      <span id="spCompareNote" class="muted-label"></span>
+      <span class="spacer"></span>
+      <button id="spCompareClose" class="ghost" data-i18n-title="side.cmp.close" data-i18n-aria="side.cmp.close">✕</button>
+    </div>
+    <div class="sp-compare-cols">
+      <div id="spCmpA" class="sp-cmp-col"></div>
+      <div id="spCmpB" class="sp-cmp-col"></div>
+    </div>
+  </section>
 
   <footer id="spComposer">
     <!-- 한 번 누르기 질문 (v0.29.0): 가져온 페이지와 함께 바로 보낸다 -->
@@ -52,6 +91,8 @@
       <button data-quick="translate" data-i18n="side.quick.translate" data-i18n-title="side.quick.translateTitle"></button>
       <button data-quick="keypoints" data-i18n="side.quick.keypoints" data-i18n-title="side.quick.title"></button>
       <button data-quick="explain" data-i18n="side.quick.explain" data-i18n-title="side.quick.title"></button>
+      <button data-quick="compare" data-i18n="side.quick.compare" data-i18n-title="side.quick.compareTitle"></button>
+      <button id="spOneToggle" class="sp-toggle" aria-pressed="false" data-i18n="side.oneLine.toggle" data-i18n-title="side.oneLine.toggleTitle"></button>
     </div>
     <div class="sp-input">
       <textarea id="spPrompt" data-i18n-aria="ext.side.promptPlaceholder" rows="3" spellcheck="false" data-i18n-placeholder="ext.side.promptPlaceholder"></textarea>
@@ -80,6 +121,8 @@
   <script src="lib/shared/web-ask.js"></script>
   <script src="lib/shared/secret-scan.js"></script>
   <script src="lib/shared/side-panel.js"></script>
+  <script src="lib/shared/page-read.js"></script>
+  <script src="lib/shared/pdf-text.js"></script>
   <script src="lib/shared/history-search.js"></script>
   <script src="lib/shared/recommend.js"></script>
   <script src="lib/shared/history-core.js"></script>

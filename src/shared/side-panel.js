@@ -23,6 +23,7 @@
   const DEFAULT_SIDE = ['gemini'];
   const MAX_PAGE = 300000; // page.md에 넣는 본문의 최대 글자 수 (오른쪽 클릭 메뉴와 같음)
   const PORT_PREFIX = 'mla-side';
+  const SOURCES = ['page', 'pdf', 'captions']; // 맥락의 출처 (v0.37.0)
   const RATIO_MIN = 0.2;
   const RATIO_MAX = 0.8;
 
@@ -82,9 +83,11 @@
       title,
       url,
       text: text.slice(0, MAX_PAGE),
-      truncated: text.length > MAX_PAGE,
+      truncated: raw.truncated === true || text.length > MAX_PAGE,
       at: Number.isFinite(raw.at) ? raw.at : Date.now(),
       tabId: Number.isInteger(raw.tabId) ? raw.tabId : null,
+      source: SOURCES.includes(raw.source) ? raw.source : 'page', // 본문 · PDF · 영상 자막 (v0.37.0)
+      ...(Number.isInteger(raw.pages) && raw.pages > 0 ? { pages: raw.pages, totalPages: Number.isInteger(raw.totalPages) ? raw.totalPages : raw.pages } : {}),
     };
   }
 
@@ -190,6 +193,118 @@
     return t(`side.quick.${kind}Prompt`);
   }
 
+  // ---------- 사이트별 프리셋 (v0.37.0) ----------
+  // 사이트(호스트)마다 사이드탭에서 쓸 AI 2개와 기본 단추를 기억한다. 그 사이트의 탭으로 가면 AI만 맞추고, 질문은 저절로 보내지 않는다.
+
+  const MAX_SITES = 50;
+  const SITE_QUICK = [...QUICK, 'compare', '']; // 기본 단추: 요약 · 번역 · 핵심만 · 쉽게 설명 · 번역 비교 · 없음
+
+  /** 주소 → 사이트 열쇠: http(s)의 호스트 이름 (소문자, 앞의 www. 뺌) | '' */
+  function hostKey(url) {
+    try {
+      const u = new URL(String(url || ''));
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+      return u.hostname.toLowerCase().replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  }
+
+  /** 저장된 값 검사 → { [호스트]: { selected: [id (웹 서비스, 최대 2)], quick, at } } (50개까지, 최근 것 우선) */
+  function normalizeSitePresets(raw, services) {
+    const out = [];
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      for (const [host, v] of Object.entries(raw)) {
+        if (!/^[a-z0-9.-]{1,253}$/.test(host) || !v || typeof v !== 'object') continue;
+        const known = new Set((services || []).filter((s) => (s.kind || 'web') === 'web').map((s) => s.id));
+        const selected = [...new Set((Array.isArray(v.selected) ? v.selected : []).filter((id) => typeof id === 'string' && known.has(id)))].slice(0, MAX_SIDE);
+        if (!selected.length) continue;
+        out.push([host, { selected, quick: SITE_QUICK.includes(v.quick) ? v.quick : '', at: Number.isFinite(v.at) ? v.at : 0 }]);
+      }
+    }
+    return Object.fromEntries(out.sort((a, b) => b[1].at - a[1].at).slice(0, MAX_SITES));
+  }
+
+  /** 사이트 프리셋 저장 → 새 목록 (같은 호스트는 덮어씀, 50개가 넘으면 가장 오래된 것부터 뺌) */
+  function setSitePreset(map, host, { selected, quick = '' } = {}, services, now = Date.now()) {
+    if (!host) return normalizeSitePresets(map, services);
+    return normalizeSitePresets({ ...map, [host]: { selected, quick, at: now } }, services);
+  }
+
+  /** 사이트 프리셋 지우기 → 새 목록 */
+  function clearSitePreset(map, host) {
+    const next = { ...(map || {}) };
+    delete next[host];
+    return next;
+  }
+
+  /** 이 주소의 사이트 프리셋 | null */
+  function presetFor(map, url) {
+    const host = hostKey(url);
+    return host && map && map[host] ? { host, ...map[host] } : null;
+  }
+
+  // ---------- 번역 비교 · 한 줄 종합 (v0.37.0) ----------
+
+  /** 글을 문장으로 (마침표 · 물음표 · 줄바꿈 뒤에서 자름) */
+  function splitSentences(text) {
+    return String(text || '')
+      .split(/(?<=[.!?。！？])\s+|\n+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  const norm = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  const bigrams = (s) => {
+    const set = new Map();
+    for (let i = 0; i < s.length - 1; i++) set.set(s.slice(i, i + 2), (set.get(s.slice(i, i + 2)) || 0) + 1);
+    return set;
+  };
+  /** 두 문장이 비슷한 정도 0~1 (글자 두 개씩 묶은 조각의 Dice 계수 — 한글 · 영어 모두) */
+  function similarity(a, b) {
+    const x = norm(a);
+    const y = norm(b);
+    if (!x || !y) return 0;
+    if (x === y) return 1;
+    if (x.length < 2 || y.length < 2) return 0;
+    const bx = bigrams(x);
+    const by = bigrams(y);
+    let hit = 0;
+    for (const [k, n] of bx) hit += Math.min(n, by.get(k) || 0);
+    return (2 * hit) / (x.length - 1 + (y.length - 1));
+  }
+
+  /**
+   * 두 번역 비교: 한쪽에만 있는(다른 쪽에 비슷한 문장이 없는) 문장에 diff 표시 → { a: [{ text, diff }], b: [...] }
+   * 같은 뜻이어도 번역이 아주 다르면 diff가 많이 뜬다 — "다른 문장"이지 틀린 문장이 아니다.
+   */
+  function diffSentences(a, b, threshold = 0.55) {
+    const sa = splitSentences(a);
+    const sb = splitSentences(b);
+    const mark = (list, other) => list.map((text) => ({ text, diff: !other.some((o) => similarity(text, o) >= threshold) }));
+    return { a: mark(sa, sb), b: mark(sb, sa) };
+  }
+
+  /** 한 줄 종합 요청 글: 두 AI의 답(앞 maxEach자씩)을 주고 한 문장 결론을 부탁한다. t(키)는 화면 문구 사전 */
+  function oneLinePrompt(answers, t, maxEach = 3000) {
+    const body = (Array.isArray(answers) ? answers : []).map((x) => `### ${x.name}\n${String(x.text || '').slice(0, maxEach)}`).join('\n\n');
+    return `${t('side.oneLine.prompt')}\n\n${body}`;
+  }
+
+  /** 한 줄 종합 답 정리: 첫 줄만, 머리표 · 굵게 · 따옴표를 벗기고 200자까지 */
+  function cleanOneLine(text) {
+    const line = String(text || '')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find(Boolean);
+    return (line || '')
+      .replace(/^(?:[#>*\-•]+\s*|\d+[.)]\s*)/, '')
+      .replace(/\*\*|__|`/g, '')
+      .replace(/^["'“”‘’「」]+|["'“”‘’「」]+$/g, '')
+      .trim()
+      .slice(0, 200);
+  }
+
   // 주소에서 뺄 추적용 칸 (utm_* · 광고 클릭 id 등)
   const TRACKING = /^(utm_\w+|fbclid|gclid|dclid|gbraid|wbraid|msclkid|yclid|mc_cid|mc_eid|igshid|_ga|_gl|ref_src|spm)$/i;
 
@@ -230,5 +345,5 @@
       }));
   }
 
-  return { MAX_SIDE, DEFAULT_SIDE, MAX_PAGE, INLINE_MAX, QUICK, detectLang, quickPrompt, normalizePageUrl, recallFor, usableTemplates, applyTemplate, withSkill, handoff, normalizeSelected, toggle, clampRatio, portName, parsePortName, normalizeContext, contextState, contextKey, inlinePrompt, buildSend };
+  return { MAX_SIDE, DEFAULT_SIDE, MAX_PAGE, INLINE_MAX, QUICK, SOURCES, MAX_SITES, SITE_QUICK, hostKey, normalizeSitePresets, setSitePreset, clearSitePreset, presetFor, splitSentences, similarity, diffSentences, oneLinePrompt, cleanOneLine, detectLang, quickPrompt, normalizePageUrl, recallFor, usableTemplates, applyTemplate, withSkill, handoff, normalizeSelected, toggle, clampRatio, portName, parsePortName, normalizeContext, contextState, contextKey, inlinePrompt, buildSend };
 });

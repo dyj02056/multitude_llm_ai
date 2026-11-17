@@ -48,10 +48,15 @@
   const webServices = () => SERVICES.filter((s) => (s.kind || 'web') === 'web');
 
   let windowId = null;
-  let prefs = { selected: [...SP.DEFAULT_SIDE], ratio: 0.5, ctxOn: true, tpl: '', skill: '' };
+  let prefs = { selected: [...SP.DEFAULT_SIDE], ratio: 0.5, ctxOn: true, tpl: '', skill: '', oneLine: false };
   let lib = PL.normalizeLibrary({}); // 앱 라이브러리 (읽기만, v0.21.0)
   // 사이드탭 기록 (v0.21.0): 'history:side'에 남기고, 앱 탭의 기록 화면이 `side` 표시와 함께 보여 준다
   const sideHistory = MLA.historyCore.createHistory((records) => chrome.storage.local.set({ 'history:side': records }).catch(() => {}));
+  let sitePresets = {}; // 사이트별 프리셋 (v0.37.0) { 호스트: { selected, quick, at } }
+  let siteHost = ''; // 지금 보는 탭의 사이트
+  let appliedHost = ''; // 프리셋을 이미 적용한 사이트 (같은 사이트에 머무는 동안 다시 덮어쓰지 않는다)
+  let localOn = false; // 앱 설정에서 로컬 LLM을 켜 두었는가 (한 줄 종합을 맡길 수 있음)
+  let run = null; // 지금 보낸 질문 { ids, done: Set, hid, compare } — 두 답이 모두 끝났는지 본다
   let ctx = null; // 가져온 페이지 { title, url, text, truncated, at, tabId }
   let ctxError = '';
   let activeTabId = null;
@@ -422,14 +427,43 @@
     try {
       host = new URL(ctx.url).hostname;
     } catch {}
-    const size = `${t('ext.side.chars', { n: ctx.text.length.toLocaleString() })}${ctx.truncated ? '+' : ''}`;
+    const srcText = ctx.source === 'pdf' ? ` · ${t(ctx.totalPages && ctx.totalPages !== ctx.pages ? 'side.src.pdfPart' : 'side.src.pdf', { n: ctx.pages || 0, total: ctx.totalPages || 0 })}` : ctx.source === 'captions' ? ` · ${t('side.src.captions')}` : '';
+    const size = `${t('ext.side.chars', { n: ctx.text.length.toLocaleString() })}${ctx.truncated ? '+' : ''}${srcText}`;
     text.replaceChildren(span('url', host || ctx.title), document.createTextNode(' '), span('ok', `✓ ${size}`), document.createTextNode(` ${ctx.title}`));
     if (state === 'other') text.append(document.createTextNode(t('ext.side.ctxOther')));
     text.title = `${ctx.title}\n${ctx.url}\n${size}${state === 'other' ? `\n${t('ext.side.ctxOtherTitle')}` : ''}`;
   }
 
+  /** PDF 본문 읽기 (v0.37.0): 그 탭의 페이지 안에서 같은 주소의 PDF를 받아(base64) pdf.js로 글을 꺼낸다 */
+  let pdfjs = null;
+  async function readPdf(tabId) {
+    const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: MLA.pdfText.fetchSelfBase64 });
+    const r = res?.result;
+    if (!r || r.error) throw Object.assign(new Error(r?.error || 'read'), { code: /^http|big|file/.test(r?.error || '') ? r.error.split(' ')[0] : 'read', detail: r?.error });
+    const bytes = MLA.pdfText.base64ToBytes(r.b64);
+    if (!pdfjs) {
+      pdfjs = await import(chrome.runtime.getURL('lib/shared/vendor/pdf.min.mjs'));
+      pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/shared/vendor/pdf.worker.min.mjs');
+    }
+    return MLA.pdfText.extractPdfText(pdfjs, bytes, { cMapUrl: chrome.runtime.getURL('lib/shared/vendor/cmaps/'), label: (n) => t('side.pdf.page', { n }) });
+  }
+  async function takePdf(raw, quiet) {
+    hint(t('side.pdf.reading'));
+    try {
+      const out = await readPdf(raw.tabId);
+      if (out.empty) throw Object.assign(new Error('empty'), { code: 'empty' });
+      takeCtx({ title: raw.title ? `${raw.title} (PDF)` : 'PDF', url: raw.url, text: out.text, truncated: out.truncated, source: 'pdf', pages: out.pages, totalPages: out.totalPages, tabId: raw.tabId, at: Date.now() }, quiet);
+    } catch (err) {
+      ctx = null;
+      ctxError = t(`side.pdf.err.${err.code || 'read'}`, { detail: err.detail || err.message });
+      renderCtx();
+      if (!quiet) hint(ctxError, 'error');
+    }
+  }
+
   function takeCtx(raw, quiet = false) {
     if (!raw) return;
+    if (raw.pdf) return void takePdf(raw, quiet);
     if (raw.error) {
       ctxError = raw.error;
       ctx = null;
@@ -450,12 +484,10 @@
     const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
     if (!tab) return;
     try {
-      const [res] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => ({ title: document.title, url: location.href, text: (document.body?.innerText || '').slice(0, 400000) }),
-      });
-      if (!res?.result?.text?.trim()) throw new Error(t('ext.side.noPageText'));
-      takeCtx({ ...res.result, tabId: tab.id, at: Date.now() }, quiet);
+      const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: MLA.pageRead.readPageNow });
+      const pick = MLA.pageRead.pickContext(res?.result);
+      if (!pick) throw new Error(t('ext.side.noPageText'));
+      takeCtx({ ...pick, tabId: tab.id, at: Date.now() }, quiet);
     } catch {
       if (autoRead) {
         // 자동 읽기 중인데 못 읽는 탭(크롬 설정 · 웹 스토어 · 빈 탭 등): 이 탭은 맥락 없이 보낸다
@@ -473,15 +505,16 @@
   // ---------- 보내기 ----------
 
   let sending = false;
-  async function send() {
-    const text = $('#spPrompt').value.trim();
+  async function send(opts = {}) {
+    const text = (typeof opts.text === 'string' ? opts.text : $('#spPrompt').value).trim();
     if (!text || sending) return;
+    const noCtx = opts.noCtx === true; // 번역 비교: 선택한 글만 보내고 페이지는 붙이지 않는다
     const ids = prefs.selected.filter((id) => panes.get(id)?.port);
     if (!ids.length) return hint(t('ext.side.noPanes'), 'error');
     // 자동 읽기면 보낼 때마다 지금 탭을 다시 읽는다 (탭을 옮겼거나 페이지가 바뀌었을 수 있다).
     // 아니면 가져온 페이지가 없을 때만 한 번 조용히 읽어 본다 (그 탭에 한 번 권한이 남아 있을 때만 된다).
-    if (prefs.ctxOn && (autoRead || !ctx)) await grabCtx(true);
-    const useCtx = prefs.ctxOn && ctx;
+    if (!noCtx && prefs.ctxOn && (autoRead || !ctx)) await grabCtx(true);
+    const useCtx = !noCtx && prefs.ctxOn && ctx;
     // 페이지 본문을 처음 보낼 때: 키 · 토큰처럼 보이는 것이 있으면 확인 (앱 탭의 오른쪽 클릭 메뉴와 같음)
     if (useCtx && ids.some((id) => panes.get(id).sentKey !== SP.contextKey(ctx))) {
       const found = scanSecrets(ctx.text);
@@ -501,11 +534,13 @@
         source: 'side',
         page: useCtx ? { title: ctx.title, url: ctx.url } : undefined,
       });
+      closeCompare();
+      run = { ids, done: new Set(), hid, compare: opts.compare === true, text };
       const results = await Promise.all(ids.map((id) => sendOne(id, asked, useCtx ? ctx : null, hid)));
       renderRecall();
       const bad = results.filter((r) => !r.ok);
       if (!bad.length) {
-        $('#spPrompt').value = '';
+        if (typeof opts.text !== 'string') $('#spPrompt').value = '';
         const how = results.map((r) => r.how).find(Boolean);
         hint(`${t('ext.side.sentTo', { names: ids.map((id) => svcOf(id).name).join(' · ') })}${how ? ` · ${how}` : useCtx ? '' : t('ext.side.sentNoPage')}`, useCtx || how ? 'ok' : 'error');
       } else hint(bad.map((r) => `${svcOf(r.id).name}: ${r.error}`).join(' · '), 'error');
@@ -573,6 +608,10 @@
       if (state === 'done') {
         const snap = await snapshot(id, true);
         sideHistory.setAnswer(hid, id, { text: snap?.text || '', md: snap?.md || snap?.text || '', state: 'done', chars: (snap?.text || '').length });
+        if (run && run.hid === hid) {
+          run.done.add(id);
+          if (run.done.size === run.ids.length) onRunDone(run);
+        }
       } else if (state !== 'answering') sideHistory.setAnswer(hid, id, { state, text: '' });
       const text = { answering: t('ext.side.answering'), done: t('ext.side.done', { n: (info.chars || 0).toLocaleString() }), timeout: t('ext.side.timeout'), 'no-answer': t('ext.side.noAnswer') }[state];
       p.status.dataset.state = `answer-${state}`;
@@ -585,6 +624,7 @@
   /** 요약 · 번역 · 핵심만 · 쉽게 설명: 가져온 페이지와 함께 바로 보낸다 (페이지가 없으면 먼저 읽어 본다) */
   async function quick(kind) {
     if (sending) return;
+    if (kind === 'compare') return quickCompare();
     if (!ctx) await grabCtx(true);
     if (!ctx) return hint(t('side.quick.noPage'), 'error');
     prefs.ctxOn = true;
@@ -594,6 +634,176 @@
     send();
   }
   for (const b of document.querySelectorAll('#spQuick [data-quick]')) b.addEventListener('click', () => quick(b.dataset.quick));
+
+  // ---------- 번역 비교 · 한 줄 종합 (v0.37.0) ----------
+
+  /** 지금 보는 탭에서 선택한 글 (그 탭에 읽기 권한이 있을 때만, 없으면 '') */
+  async function grabSelection() {
+    const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
+    if (!tab) return '';
+    try {
+      const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => String((window.getSelection && window.getSelection()) || '').slice(0, 20000) });
+      return String(res?.result || '').trim();
+    } catch {
+      return '';
+    }
+  }
+
+  /** 번역 비교: 선택한 글을 두 AI에게 번역시키고, 끝나면 나란히 비교한다. 선택한 글이 없으면 페이지 번역으로 보낸다 */
+  async function quickCompare() {
+    const ids = prefs.selected.filter((id) => panes.get(id)?.port);
+    if (ids.length < 2) return hint(t('side.cmp.needTwo'), 'error');
+    const sel = await grabSelection();
+    if (!sel) {
+      hint(t('side.cmp.noSelection'), 'error');
+      return;
+    }
+    const ask = SP.quickPrompt('translate', { text: sel }, t);
+    send({ text: `${ask}\n\n${sel}`, noCtx: true, compare: true });
+  }
+
+  function closeCompare() {
+    $('#spCompare').hidden = true;
+  }
+  $('#spCompareClose').addEventListener('click', closeCompare);
+
+  async function lastAnswer(id) {
+    const s = await snapshot(id, true);
+    return String(s?.md || s?.text || '');
+  }
+
+  async function renderCompare(r) {
+    const [a, b] = await Promise.all(r.ids.map(lastAnswer));
+    if (!a || !b) return;
+    const d = SP.diffSentences(a, b);
+    const draw = (box, id, list) => {
+      box.replaceChildren(span('sp-cmp-name', svcOf(id).name));
+      for (const s of list) {
+        const line = document.createElement('div');
+        if (s.diff) line.append(Object.assign(document.createElement('mark'), { textContent: s.text }));
+        else line.textContent = s.text;
+        box.append(line);
+      }
+    };
+    draw($('#spCmpA'), r.ids[0], d.a);
+    draw($('#spCmpB'), r.ids[1], d.b);
+    const diffs = d.a.filter((x) => x.diff).length + d.b.filter((x) => x.diff).length;
+    $('#spCompareNote').textContent = t('side.cmp.note', { n: diffs });
+    $('#spCompare').hidden = false;
+  }
+
+  function showOne(label, text) {
+    $('#spOneLabel').textContent = label;
+    $('#spOneText').textContent = text;
+    $('#spOne').hidden = !text && !label;
+  }
+  $('#spOneClose').addEventListener('click', () => ($('#spOne').hidden = true));
+  $('#spOneToggle').addEventListener('click', () => {
+    prefs.oneLine = !prefs.oneLine;
+    $('#spOneToggle').setAttribute('aria-pressed', String(prefs.oneLine));
+    if (!prefs.oneLine) $('#spOne').hidden = true;
+    savePrefs();
+  });
+
+  /** 한쪽 AI에게 이어서 묻고 끝난 답을 받는다 (한 줄 종합을 로컬 LLM에 못 맡길 때) */
+  async function askPane(id, text) {
+    const p = panes.get(id);
+    const before = await snapshot(id);
+    const res = await call(id, { type: 'mla:send', cfg: sendCfg(svcOf(id)), text, upload: null });
+    if (!res?.ok) throw new Error(res?.error || 'send');
+    return new Promise((resolve) =>
+      watchAnswer(() => snapshot(id), before, () => panes.get(id) === p, async (state) => {
+        if (state === 'done') resolve(await lastAnswer(id));
+        else if (state !== 'answering') resolve('');
+      }, { maxMs: 5 * 60 * 1000 }),
+    );
+  }
+
+  async function oneLineSynth(r) {
+    showOne(t('side.oneLine.label'), t('side.oneLine.working'));
+    try {
+      const answers = [];
+      for (const id of r.ids) answers.push({ name: svcOf(id).name, text: await lastAnswer(id) });
+      if (answers.some((x) => !x.text)) return showOne('', '');
+      const prompt = SP.oneLinePrompt(answers, t);
+      let line = '';
+      let via = '';
+      if (localOn) {
+        const out = await chrome.runtime.sendMessage({ type: 'mla:local-ask', text: prompt }).catch(() => null);
+        if (out?.ok) {
+          line = SP.cleanOneLine(out.text);
+          via = t('side.oneLine.viaLocal');
+        }
+      }
+      if (!line) {
+        const id = r.ids[0];
+        line = SP.cleanOneLine(await askPane(id, prompt));
+        via = svcOf(id).name;
+      }
+      if (run !== r) return; // 그사이 새 질문을 보냈다
+      if (!line) return showOne('', '');
+      showOne(t('side.oneLine.labelVia', { via }), line);
+    } catch (err) {
+      showOne(t('side.oneLine.label'), t('side.oneLine.failed', { error: err.message }));
+    }
+  }
+
+  /** 보낸 질문의 답이 모두 끝났다: 번역 비교면 나란히 보이고, 아니면 (켜 두었을 때) 한 줄 종합 */
+  function onRunDone(r) {
+    if (r.ids.length !== 2) return;
+    if (r.compare) renderCompare(r);
+    else if (prefs.oneLine) oneLineSynth(r);
+  }
+
+  // ---------- 사이트별 프리셋 (v0.37.0) ----------
+
+  const quickLabel = (k) => (k ? t(`side.quick.${k}`) : t('side.site.quickNone'));
+  function markDefaultQuick(kind) {
+    for (const b of document.querySelectorAll('#spQuick [data-quick]')) b.classList.toggle('sp-default', !!kind && b.dataset.quick === kind);
+  }
+  function renderSite() {
+    const box = $('#spSite');
+    box.hidden = !siteHost;
+    if (!siteHost) return markDefaultQuick('');
+    const pre = sitePresets[siteHost];
+    $('#spSiteHost').textContent = siteHost;
+    $('#spSiteHost').title = siteHost;
+    $('#spSiteState').textContent = pre ? t('side.site.saved', { names: pre.selected.map((id) => svcOf(id)?.name || id).join(' · '), quick: quickLabel(pre.quick) }) : t('side.site.none');
+    $('#spSiteQuick').value = pre ? pre.quick : $('#spSiteQuick').value;
+    $('#spSiteClear').hidden = !pre;
+    markDefaultQuick(pre?.quick || '');
+  }
+  /** 보는 탭의 사이트가 바뀌었으면 그 사이트의 프리셋을 적용한다 (AI 고르기만 — 질문은 보내지 않는다) */
+  function applySite(url) {
+    siteHost = SP.hostKey(url);
+    const pre = SP.presetFor(sitePresets, url);
+    if (pre && appliedHost !== siteHost) {
+      appliedHost = siteHost;
+      const next = SP.normalizeSelected(pre.selected, SERVICES);
+      if (next.join() !== prefs.selected.join()) {
+        prefs.selected = next;
+        savePrefs();
+        syncPanes();
+        renderPicker();
+      }
+      hint(t('side.site.applied', { host: siteHost }), 'ok');
+    } else if (!pre) appliedHost = '';
+    renderSite();
+  }
+  $('#spSiteSave').addEventListener('click', () => {
+    if (!siteHost) return;
+    sitePresets = SP.setSitePreset(sitePresets, siteHost, { selected: prefs.selected, quick: $('#spSiteQuick').value }, SERVICES);
+    appliedHost = siteHost;
+    chrome.storage.local.set({ sideSites: sitePresets }).catch(() => {});
+    renderSite();
+    hint(t('side.site.savedHint', { host: siteHost }), 'ok');
+  });
+  $('#spSiteClear').addEventListener('click', () => {
+    sitePresets = SP.clearSitePreset(sitePresets, siteHost);
+    appliedHost = '';
+    chrome.storage.local.set({ sideSites: sitePresets }).catch(() => {});
+    renderSite();
+  });
 
   /** 지금 페이지(가져온 페이지, 없으면 보고 있는 탭 주소)에서 전에 물어본 것 */
   let recallOpen = false;
@@ -635,6 +845,7 @@
   async function refreshTabUrl() {
     const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
     tabUrl = tab?.url || '';
+    applySite(tabUrl);
     renderRecall();
   }
 
@@ -697,6 +908,8 @@
   $('#spPrompt').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return; // 한글 입력 중 Enter는 글자 확정
     e.preventDefault();
+    const dflt = sitePresets[siteHost]?.quick;
+    if (!$('#spPrompt').value.trim() && dflt) return quick(dflt); // 사이트 프리셋의 기본 단추 (v0.37.0)
     send();
   });
   $('#spPick').addEventListener('click', () => {
@@ -752,7 +965,10 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'session' && windowId !== null && changes[CTX_KEY()]?.newValue) takeCtx(changes[CTX_KEY()].newValue);
-    if (area === 'local' && changes.prefs) setUiLang(changes.prefs.newValue?.lang);
+    if (area === 'local' && changes.prefs) {
+      setUiLang(changes.prefs.newValue?.lang);
+      localOn = !!(changes.prefs.newValue?.local?.enabled && changes.prefs.newValue.local.model);
+    }
     if (area === 'local' && changes.library) {
       lib = PL.normalizeLibrary(changes.library.newValue || {});
       renderLibrary();
@@ -786,7 +1002,9 @@
 
   async function init() {
     windowId = (await chrome.windows.getCurrent()).id;
-    const saved = (await chrome.storage.local.get(['sidePrefs', 'prefs', 'remoteSelectors', 'library', 'history:side']).catch(() => ({}))) || {};
+    const saved = (await chrome.storage.local.get(['sidePrefs', 'prefs', 'remoteSelectors', 'library', 'history:side', 'sideSites']).catch(() => ({}))) || {};
+    localOn = !!(saved.prefs?.local?.enabled && saved.prefs.local.model);
+    sitePresets = SP.normalizeSitePresets(saved.sideSites, SERVICES);
     setUiLang(saved.prefs?.lang);
     const sp = saved.sidePrefs || {};
     prefs = {
@@ -795,7 +1013,9 @@
       ctxOn: sp.ctxOn !== false,
       tpl: typeof sp.tpl === 'string' ? sp.tpl : '',
       skill: typeof sp.skill === 'string' ? sp.skill : '',
+      oneLine: sp.oneLine === true,
     };
+    $('#spOneToggle').setAttribute('aria-pressed', String(prefs.oneLine));
     lib = PL.normalizeLibrary(saved.library || {});
     sideHistory.load(Array.isArray(saved['history:side']) ? saved['history:side'] : []);
     renderLibrary();
@@ -807,6 +1027,7 @@
     const [tab] = await chrome.tabs.query({ active: true, windowId }).catch(() => []);
     activeTabId = tab?.id ?? null;
     tabUrl = tab?.url || '';
+    applySite(tabUrl);
     autoRead = await chrome.permissions.contains({ origins: AUTO_ORIGINS }).catch(() => false);
     const cmds = await chrome.commands?.getAll?.().catch(() => null);
     if (cmds) shortcut = cmds.find((c) => c.name === 'open-side-panel')?.shortcut || '';

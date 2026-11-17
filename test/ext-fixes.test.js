@@ -91,6 +91,6 @@ test('확장 화면 CSP: 로컬 LLM 서버(localhost · 127.0.0.1, 포트 아무
 
 test('사이드탭 보내기: 중간에 오류가 나도 finally에서 보내기 버튼을 다시 켠다', () => {
   const src = fs.readFileSync(path.join(ext, 'sidepanel.js'), 'utf8');
-  const body = src.slice(src.indexOf('async function send()'), src.indexOf('async function sendOne('));
+  const body = src.slice(src.indexOf('async function send('), src.indexOf('async function sendOne('));
   assert.match(body, /try \{[\s\S]*sideHistory\.add[\s\S]*\} catch \(err\) \{[\s\S]*'error'[\s\S]*\} finally \{\s*sending = false;\s*\$\('#spSend'\)\.disabled = false;/);
 });

@@ -32,6 +32,8 @@ importScripts('lib/shared/services.js');
 // 화면 문구 사전 (v0.30.0): 오른쪽 클릭 메뉴 이름 · 사이드탭에 넘기는 오류 글. 사전 → i18n.js 순서로 읽는다.
 // 언어 (v0.30.0): 앱 탭 설정 › 언어(prefs.lang)를 따른다. 'auto'면 크롬 표시 언어 (한국어 아니면 영어).
 importScripts('lib/shared/i18n-ko.js', 'lib/shared/i18n-ko-ext.js', 'lib/shared/i18n-en.js', 'lib/shared/i18n-en-ext.js', 'lib/shared/i18n.js');
+// 사이드탭: 본문 · PDF · 자막 가리기 (v0.37.0), 한 줄 종합을 로컬 LLM에 맡길 때 (사이드 패널 화면은 localhost로 직접 연결하지 못한다)
+importScripts('lib/shared/page-read.js', 'lib/shared/local-llm.js');
 
 const APP_URL = chrome.runtime.getURL('app.html');
 const SIDE_URL = chrome.runtime.getURL('sidepanel.html');
@@ -94,12 +96,9 @@ async function setupAskMenus() {
 chrome.runtime.onInstalled.addListener(setupAskMenus);
 chrome.runtime.onStartup.addListener(setupAskMenus);
 
-/** 그 탭의 본문 글 (메뉴 클릭으로 받은 한 번 권한으로). 앱 탭 · 확장 페이지는 읽지 않는다 */
+/** 그 탭의 본문 글 + 이미 떠 있는 자막 + 문서 종류 (메뉴 클릭으로 받은 한 번 권한으로). 앱 탭 · 확장 페이지는 읽지 않는다 */
 async function readPageText(tabId) {
-  const [res] = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => ({ title: document.title, url: location.href, text: (document.body?.innerText || '').slice(0, 400000) }),
-  });
+  const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: MLA.pageRead.readPageNow });
   return res?.result || null;
 }
 
@@ -110,9 +109,10 @@ const SIDE_CTX = (windowId) => `mla:side-ctx:${windowId}`;
 async function sideAsk(tab) {
   try {
     if (!/^https?:/i.test(tab.url || '')) throw new Error(MLA.i18n.t('ext.bg.httpOnly'));
-    const page = await readPageText(tab.id);
-    if (!page?.text?.trim()) throw new Error(MLA.i18n.t('ext.bg.noPageText'));
-    const ctx = { title: page.title || tab.title || '', url: page.url || tab.url, text: page.text, tabId: tab.id, at: Date.now() };
+    const page = MLA.pageRead.pickContext(await readPageText(tab.id));
+    if (!page) throw new Error(MLA.i18n.t('ext.bg.noPageText'));
+    // PDF는 글을 여기서 읽지 않고 표시만 해 둔다 — 사이드 패널이 pdf.js로 읽는다 (v0.37.0)
+    const ctx = { ...page, title: page.title || tab.title || '', url: page.url || tab.url, tabId: tab.id, at: Date.now() };
     await chrome.storage.session.set({ [SIDE_CTX(tab.windowId)]: ctx });
   } catch (err) {
     await chrome.storage.session.set({ [SIDE_CTX(tab.windowId)]: { error: err.message, tabId: tab.id, at: Date.now() } }).catch(() => {});
@@ -127,6 +127,21 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'open-side-panel') openSide(tab);
 });
 
+// 한 줄 종합을 로컬 LLM에 부탁한다 (v0.37.0): 사이드 패널 화면에서만 받고, 설정의 localhost 주소 · 모델로만 보낸다 (글만 받음)
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg?.type !== 'mla:local-ask') return;
+  if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(SIDE_URL) || typeof msg.text !== 'string' || !msg.text.trim() || msg.text.length > 200000) return reply({ ok: false, error: 'bad' });
+  chrome.storage.local
+    .get('prefs')
+    .then(({ prefs }) => {
+      const local = prefs?.local;
+      if (!local?.enabled) return { ok: false, error: MLA.i18n.t('ext.host.localOff') };
+      return MLA.localLLM.askOnce({ fetchFn: (url, opts) => fetch(url, opts), getConfig: () => local, text: msg.text });
+    })
+    .then(reply, (err) => reply({ ok: false, error: err.message }));
+  return true;
+});
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!ASK_MENUS.some((m) => m.id === info.menuItemId) || !tab || tab.id < 0) return;
   if (info.menuItemId === 'mla-side-page') return openSide(tab);
@@ -137,7 +152,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       ask = { kind: 'selection', title: tab.title || '', url: tab.url, text: String(info.selectionText || '') };
     } else {
       const page = await readPageText(tab.id);
-      if (!page) throw new Error(MLA.i18n.t('ext.bg.noPageText'));
+      if (!page || !page.text?.trim()) throw new Error(MLA.i18n.t('ext.bg.noPageText'));
       ask = { kind: 'page', title: page.title || tab.title || '', url: page.url || tab.url, text: page.text };
     }
     await chrome.storage.session.set({ [ASK_KEY]: { ...ask, at: Date.now() } });

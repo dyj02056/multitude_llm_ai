@@ -84,10 +84,16 @@ function buildFiles() {
     if (!name.endsWith('.js')) continue;
     files[`lib/shared/${name}`] = `// ${GENERATED} (원본: src/shared/${name})\n${read(`src/shared/${name}`)}`;
   }
-  for (const name of fs.readdirSync(path.join(ROOT, 'src/shared/vendor'))) {
-    const body = read(`src/shared/vendor/${name}`);
-    files[`lib/shared/vendor/${name}`] = name.endsWith('.js') ? `// ${GENERATED} (원본: src/shared/vendor/${name})\n${body}` : body;
-  }
+  // 외부 라이브러리 (하위 폴더 포함): .js는 머리말을 붙여 글로, 그 밖(.mjs · .bcmap · 라이선스)은 바이트 그대로 복사한다 (v0.37.0: pdf.js)
+  const walk = (rel) => {
+    for (const ent of fs.readdirSync(path.join(ROOT, 'src/shared/vendor', rel), { withFileTypes: true })) {
+      const sub = rel ? `${rel}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) walk(sub);
+      else if (ent.name.endsWith('.js')) files[`lib/shared/vendor/${sub}`] = `// ${GENERATED} (원본: src/shared/vendor/${sub})\n${read(`src/shared/vendor/${sub}`)}`;
+      else files[`lib/shared/vendor/${sub}`] = fs.readFileSync(path.join(ROOT, 'src/shared/vendor', sub));
+    }
+  };
+  walk('');
   for (const name of RENDERER_FILES) {
     files[`lib/renderer/${name}`] = `// ${GENERATED} (원본: src/renderer/${name})\n${read(`src/renderer/${name}`)}`;
   }

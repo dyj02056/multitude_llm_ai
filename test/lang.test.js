@@ -108,7 +108,7 @@ test('크롬 확장: host · 사이드탭 · background가 저장된 언어 설�
   assert.match(host, /get pickNote\(\)/);
   const side = read('extension/sidepanel.js');
   assert.ok(side.indexOf('MLA.i18n.setLang(') > 0 && side.indexOf('MLA.i18n.setLang(') < side.indexOf('MLA.i18n.apply(document)'));
-  assert.match(side, /if \(area === 'local' && changes\.prefs\) setUiLang\(changes\.prefs\.newValue\?\.lang\);/);
+  assert.match(side, /if \(area === 'local' && changes\.prefs\) \{\s*setUiLang\(changes\.prefs\.newValue\?\.lang\);/);
   assert.match(side, /setUiLang\(saved\.prefs\?\.lang\);/);
   const bg = read('extension/background.js');
   assert.match(bg, /MLA\.i18n\.setLang\(uiLangOf\(r\?\.prefs\?\.lang\)\)/);
@@ -245,7 +245,7 @@ test('없는 키 없음: 사이드탭 · background는 읽어 들이는 사전(�
 test('스크린샷 도구: MLA_SHOT_LANG=en으로 영어 화면을 찍을 수 있다', () => {
   assert.match(read('scripts/screenshots/preload-app.js'), /process\.env\.MLA_SHOT_LANG === 'en' \? 'en' : 'ko'/);
   assert.match(read('scripts/screenshots/preload-app.js'), /lang: LANG, uiLang: LANG/);
-  assert.match(read('scripts/screenshots/preload-side.js'), /prefs: \{ lang: process\.env\.MLA_SHOT_LANG === 'en' \? 'en' : 'ko' \}/);
+  assert.match(read('scripts/screenshots/preload-side.js'), /prefs: \{ lang: process\.env\.MLA_SHOT_LANG === 'en' \? 'en' : 'ko'/);
 });
 
 test('확인 창의 "보내지 않은 이유"는 지금 언어로, AI에게 보내는 목록은 한국어 그대로', () => {

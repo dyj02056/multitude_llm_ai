@@ -71,6 +71,28 @@ body.sp-dragging .sp-frame { pointer-events: none; }
 #spSend::after { content: " ⏎"; font-weight: 400; }
 
 /* 한 번 누르기 질문 · 이 페이지에서 전에 물어본 것 (v0.29.0) */
+.sp-site { flex: none; display: flex; align-items: center; gap: 4px; padding: 2px 8px; border-bottom: 1px solid var(--border); font-size: 11.5px; background: var(--bg-2); }
+.sp-site[hidden], .sp-site button[hidden] { display: none; }
+.sp-site { flex-wrap: wrap; row-gap: 2px; }
+.sp-site > * { white-space: nowrap; }
+#spSiteState { order: 9; flex: 1 1 100%; white-space: normal; }
+.sp-site-host { color: var(--accent-text); max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-site select, .sp-site button { font-size: 11.5px; padding: 0 6px; }
+.sp-one { flex: none; display: flex; align-items: flex-start; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--accent-soft); font-size: 12.5px; }
+.sp-one[hidden] { display: none; }
+.sp-one-label { color: var(--accent-text); font-size: 11px; white-space: nowrap; padding-top: 1px; }
+.sp-one-text { flex: 1; min-width: 0; color: var(--text); font-weight: 600; word-break: break-word; }
+.sp-one button { padding: 0 6px; font-size: 11.5px; }
+.sp-compare { flex: none; max-height: 38vh; display: flex; flex-direction: column; border-top: 1px solid var(--border); background: var(--bg-2); }
+.sp-compare[hidden] { display: none; }
+.sp-compare-head { display: flex; align-items: center; gap: 6px; padding: 3px 8px; font-size: 12px; }
+.sp-compare-head button { padding: 0 6px; }
+.sp-compare-cols { display: flex; gap: 6px; padding: 0 6px 6px; min-height: 0; overflow: auto; }
+.sp-cmp-col { flex: 1 1 0; min-width: 0; font-size: 12px; line-height: 1.5; }
+.sp-cmp-col .sp-cmp-name { display: block; font-weight: 700; margin-bottom: 2px; color: var(--accent-text); }
+.sp-cmp-col mark { background: rgba(210, 153, 34, 0.28); color: inherit; border-radius: 2px; padding: 0 1px; }
+.sp-quick button.sp-default { border-color: var(--accent); color: var(--accent-text); }
+.sp-quick .sp-toggle[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
 .sp-quick { display: flex; gap: 4px; padding: 4px 6px 0; flex-wrap: wrap; }
 .sp-quick button { padding: 1px 8px; font-size: 11.5px; }
 .sp-recall { flex: none; border-bottom: 1px solid var(--border); background: var(--bg-2); font-size: 11.5px; }

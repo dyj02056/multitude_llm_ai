@@ -91,6 +91,10 @@ const SCENES = [
   { name: '65-local-attach', page: 'app' },
   { name: '66-semantic-search', page: 'app' },
   { name: '67-local-settings', page: 'app' },
+  // v0.37.0 (사이드탭)
+  { name: '68-side-pdf', page: 'side', width: 420 },
+  { name: '69-side-compare', page: 'side', width: 420 },
+  { name: '70-side-oneline', page: 'side', width: 420 },
   { name: '41-side-recall', page: 'side', width: 420 },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];
@@ -99,7 +103,7 @@ const SCENES = [
 app.disableHardwareAcceleration(); // 숨긴 창 캡처가 GPU에서 실패하는 PC가 있어 소프트웨어로 그린다
 protocol.registerSchemesAsPrivileged([{ scheme: 'shot', privileges: { standard: true, secure: true, bypassCSP: true, supportFetchAPI: true } }]);
 
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.bcmap': 'application/octet-stream', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };
 
 /** 앱 패널 안의 테스트용 채팅 페이지 (장면에 따라 내용이 다름) */
 function appChat(id, scene) {

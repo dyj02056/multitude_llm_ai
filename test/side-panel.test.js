@@ -49,7 +49,7 @@ test('페이지 맥락: 빈 글 · 이상한 주소 · 긴 글', () => {
   assert.equal(SP.normalizeContext({ text: '   ' }), null);
   assert.equal(SP.normalizeContext(null), null);
   const c = SP.normalizeContext({ title: '  제목\n둘 ', url: 'javascript:alert(1)', text: 'a\r\nb', at: 5, tabId: 7 });
-  assert.deepEqual(c, { title: '제목 둘', url: '', text: 'a\nb', truncated: false, at: 5, tabId: 7 });
+  assert.deepEqual(c, { title: '제목 둘', url: '', text: 'a\nb', truncated: false, at: 5, tabId: 7, source: 'page' });
   const long = SP.normalizeContext({ url: 'https://x.test/', text: 'x'.repeat(SP.MAX_PAGE + 3) });
   assert.equal(long.text.length, SP.MAX_PAGE);
   assert.equal(long.truncated, true);
