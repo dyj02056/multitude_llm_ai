@@ -304,6 +304,8 @@
    * 상태 바꾸기 → { ok: true, roadmap, changed } | { ok: false, error }
    * 선행 작업이 끝나지 않은 작업은 진행 · 검증 · 완료로 못 옮긴다 (막힘 · 대기로는 가능).
    * 완료로 옮기면 doneAt을 적고, 완료에서 되돌리면 지운다. 바뀔 때마다 기록(log)에 남긴다.
+   * 완료에서 되돌릴 때 이 작업을 선행으로 두고 이미 시작 · 끝낸 후속 작업이 있으면 그 id를 dependents로 돌려준다
+   * (후속 작업의 상태는 바꾸지 않는다 — 화면이 "다시 확인하세요"라고 알린다, v0.38.1).
    */
   function setStatus(rm, id, status, { now, note = '', commit = '', lang } = {}) {
     const ko = langOf(lang) === 'ko';
@@ -329,7 +331,13 @@
       })),
       log: [...rm.log, { at, task: id, status, note: str(note, 300) }].slice(-500),
     };
-    return { ok: true, roadmap: next, changed: true };
+    const dependents =
+      cur.status === 'done' && status !== 'done'
+        ? tasksOf(rm)
+            .filter((t) => t.deps.includes(id) && ['doing', 'verify', 'done'].includes(t.status))
+            .map((t) => t.id)
+        : [];
+    return { ok: true, roadmap: next, changed: true, dependents };
   }
 
   // ---------- 편집 ----------

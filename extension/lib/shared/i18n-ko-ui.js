@@ -533,6 +533,7 @@
   'ui.roadmap.merge': '합치기',
   'ui.roadmap.mergeTitle': '고른 작업을 이 작업에 합칩니다',
   'ui.roadmap.editCycle': '선행 관계가 돌고 돌게 되어 바꾸지 않았습니다.',
+  'ui.roadmap.reopened': '{id}을(를) 완료에서 되돌렸습니다. 이 작업 뒤에 이어지는 {ids}은(는) 이미 시작했거나 끝냈으니 다시 확인하세요.',
   'ui.roadmap.f.title': '제목',
   'ui.roadmap.f.desc': '내용',
   'ui.roadmap.f.accept': '완료 조건',

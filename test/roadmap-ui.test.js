@@ -222,7 +222,68 @@ test('로드맵 창: 비밀 정보로 보이는 글이 문서에 들어가면 �
   await off.dom.$('#roadmapGetAnswer').listeners.click();
   await off.dom.$('#roadmapApply').listeners.click();
   await tick(30);
-  assert.equal(off.FS.has('docs/procedure.md'), true); // 새로 만든 로드맵의 설정이 기본(켬)이라 쓴다
+  // 로드맵을 만들기 전에 끈 설정도 새 로드맵에 넘어간다 (v0.38.1 — 전에는 무시되고 기본(켬)으로 써 버렸다)
+  assert.equal(off.FS.has('docs/procedure.md'), false);
+  assert.equal(off.ctx.MLA.roadmapUI.get().settings.docs, false);
+  await off.dom.$('#roadmapClose').listeners.click(); // 닫으면 바로 저장
+  await tick();
+  assert.equal(JSON.parse(off.FS.get('.mla/roadmap.json')).settings.docs, false);
+});
+
+test('로드맵 창: 분해 부탁을 두 번 눌러도 한 번만 보내고, 소개 문장은 고른 AI의 답을 먼저 쓴다', async () => {
+  const intro = (s) => `\`\`\`json\n{"intro":"${s}","features":["a"]}\n\`\`\``;
+  const h = setup({ files: { 'package.json': '{}' }, answers: [{ id: 'gemini', text: intro('다른 AI') }, { id: 'claude', text: ANSWER }] });
+  const { dom } = h;
+  await bootstrap(h);
+  h.sent.length = 0;
+  await Promise.all([dom.$('#roadmapSendPlan').listeners.click(), dom.$('#roadmapSendPlan').listeners.click()]);
+  assert.equal(h.sent.length, 1);
+
+  const answers = [{ id: 'gemini', text: intro('다른 AI') }, { id: 'claude', text: ANSWER }];
+  const h2 = setup({ files: { 'package.json': '{}' }, answers });
+  await bootstrap(h2);
+  answers[1].text = intro('고른 AI'); // 소개 요청에 대한 Claude의 새 답
+  h2.dom.$('#roadmapWho').value = 'claude';
+  await h2.dom.$('#roadmapIntroGet').listeners.click();
+  assert.equal(h2.ctx.MLA.roadmapUI.get().docs.intro, '고른 AI');
+});
+
+test('로드맵 창: 완료에서 되돌리면 이미 시작한 후속 작업을 알리고, 문서 쓰기가 중간에 실패하면 새로 만든 파일도 지운다', async () => {
+  const h = setup({ files: { 'package.json': '{}' }, answers: [{ id: 'claude', text: ANSWER }] });
+  const { dom } = h;
+  await bootstrap(h);
+  const sel = (id) => find(rowOf(dom.$('#roadmapTasks'), id), (n) => n.className === 'rm-status');
+  const set = async (id, v) => {
+    const s = sel(id);
+    s.value = v;
+    await s.listeners.change();
+    await tick(10);
+  };
+  await set('t1', 'done');
+  await set('t2', 'doing');
+  await set('t1', 'todo');
+  assert.match(dom.$('#roadmapStatus').textContent, /t1.*t2.*다시 확인/);
+
+  const f = setup({ files: { 'package.json': '{}' }, answers: [{ id: 'claude', text: ANSWER }] });
+  f.dom.$('#roadmapDocsOn').checked = false;
+  await f.dom.$('#roadmapBtn').listeners.click();
+  await tick();
+  await f.dom.$('#roadmapDocsOn').listeners.change({ target: f.dom.$('#roadmapDocsOn') });
+  f.dom.$('#roadmapWho').value = 'claude';
+  await f.dom.$('#roadmapGetAnswer').listeners.click();
+  await f.dom.$('#roadmapApply').listeners.click();
+  await tick(30);
+  const real = f.ctx.host.project.writeFile;
+  f.ctx.host.project.writeFile = async (p, text) => {
+    if (p !== 'docs/procedure.md') throw new Error('디스크 가득');
+    return real(p, text);
+  };
+  await f.dom.$('#roadmapDocsMake').listeners.click();
+  const go = find(f.dom.$('#roadmapDocsPreview'), (n) => n.tag === 'button');
+  await go.listeners.click();
+  assert.match(f.dom.$('#roadmapStatus').textContent, /디스크 가득/);
+  assert.equal(f.FS.has('docs/procedure.md'), false); // 먼저 새로 쓴 파일도 되돌림(삭제)
+  assert.equal(f.FS.has('README.md'), false);
 });
 
 test('로드맵 창: 수동 모드면 자동으로 쓰지 않고, [문서 만들기]는 미리보기 뒤 [문서 쓰기]에서 쓰며 되돌릴 수 있다', async () => {

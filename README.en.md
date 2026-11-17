@@ -3,7 +3,7 @@
 [한국어](README.md) · **English**
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.38.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.38.1-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-not%20needed-3fb950)
@@ -52,6 +52,7 @@
 | | Apply changes | Apply from the bar under each panel, compare across AIs, apply by hunk, undo; a failed multi-file apply rolls back; mix changes from several AIs per file and pick up work after a restart (v0.28.0) |
 | | Cut-off protection | Blocks truncated or abbreviated code, find/replace blocks for long files, continue automatically, plan-first mode |
 | | Test run, git console & commit | Compare `npm test` and lint / typecheck / build before/after (v0.28.0); commit only the applied files, never pushed (v0.28.0); run git commands in that folder (Windows app) |
+| | Roadmap | Split a plan into milestones and tasks with an AI, track each task's status (dependencies lock later tasks), see a progress ring, milestone bars, dependency map and burndown, and write `docs/procedure.md` and `README.md` into the project without touching text you wrote (v0.38.0) |
 | **Extension** | Side panel | Two AIs in Chrome's side panel; the page you are reading is sent along |
 | | Ask about a page | Right-click › selected text or the whole page goes into the app |
 | | Local LLM | Ollama / LM Studio / any OpenAI-compatible server on localhost as a panel; nothing leaves your PC; can judge synthesis/debate and compress skills without a panel, with a context limit (v0.29.0); up to 3 local panels with their own models, text-file attachments and semantic history search (v0.36.0) |

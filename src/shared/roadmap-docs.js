@@ -190,7 +190,7 @@
     return { overview, table, detail, progress, history };
   }
 
-  const PROC_HEAD = (rm, tx, lang) => ({
+  const PROC_HEAD = (rm, tx) => ({
     overview: tx.overview,
     table: tx.table,
     detail: tx.detail,
@@ -300,7 +300,8 @@
     if (hasMarkers(existing)) return done(path, applyMarkers(existing, sections, heads).text, 'update', existing);
     if (mode === 'replace') return done(path, full(), 'replace', existing);
     if (mode === 'merge') {
-      const parts = Object.entries(sections).map(([k, v]) => `## ${heads[k] || k}\n\n${block(k, v)}`);
+      // 제목이 없는 구역(README의 intro)은 제목 없이 붙인다 — 키 이름("## intro")을 제목으로 쓰지 않는다
+      const parts = Object.entries(sections).map(([k, v]) => `${heads[k] ? `## ${heads[k]}\n\n` : ''}${block(k, v)}`);
       return done(path, `${existing.replace(/\n*$/, '\n\n')}${parts.join('\n\n')}\n`, 'merge', existing);
     }
     // separate: 있던 파일은 그대로 두고 별도 파일에 쓴다 (별도 파일이 이미 있으면 그 표식 구역만 갱신)

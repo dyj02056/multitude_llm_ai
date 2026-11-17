@@ -369,3 +369,48 @@ test('연결: 스크립트 순서 · 확장 프로그램 동기화 · 창 닫기
   assert.match(read('src/renderer/renderer-compose.js'), /window\.onRoadmapState\?\.\(\)/);
   assert.ok(read('src/shared/project-ignore.js').includes("'.mla/'")); // 진행 데이터 폴더는 AI에게 보내지 않는다
 });
+
+// ---------- v0.38.1 고침 ----------
+test('v0.38.1 setStatus: 완료에서 되돌리면 이미 시작 · 끝낸 후속 작업 id를 dependents로 알려 준다 (상태는 그대로)', () => {
+  let rm = fresh();
+  rm = RM.setStatus(rm, 't1', 'done', { now: NOW }).roadmap;
+  rm = RM.setStatus(rm, 't2', 'doing', { now: NOW }).roadmap;
+  const back = RM.setStatus(rm, 't1', 'verify', { now: NOW });
+  assert.deepEqual(back.dependents, ['t2']);
+  assert.equal(RM.findTask(back.roadmap, 't2').status, 'doing');
+  assert.deepEqual(RM.setStatus(rm, 't2', 'verify', { now: NOW }).dependents, []);
+});
+
+test('v0.38.1 문서: 끝에 붙이기 모드에서 README 소개 구역에 "## intro" 같은 키 이름 제목을 달지 않는다', () => {
+  const merged = ko(() => DOCS.planWrite({ kind: 'readme', rm: fresh(), existing: '# 내 README\n', mode: 'merge', lang: 'ko' }));
+  assert.ok(!/^## intro$/m.test(merged.text));
+  assert.ok(merged.text.includes('<!-- mla:intro:start -->') && merged.text.includes('## 주요 기능'));
+});
+
+test('v0.38.1 그림: 글은 폭 기준으로 자르고, 링의 칠한 부분 = 진행률, 같은 열 화살표는 왼쪽으로 돌고, 대기 막대 기호는 보이는 색', () => {
+  assert.equal(CH.fit('abc', 100), 'abc');
+  const k = CH.fit('기초 환경 구성과 데이터 모델 설계', 138);
+  assert.ok(k.endsWith('…') && k.length < 19);
+  const wide = (s) => [...s].reduce((w, c) => w + (/[가-힣]/.test(c) ? 12 : 7), 0);
+  assert.ok(wide(k) <= 138 + 12);
+  let rm = fresh();
+  rm = RM.setStatus(rm, 't1', 'done', { now: NOW }).roadmap;
+  rm = RM.setStatus(rm, 't2', 'doing', { now: NOW }).roadmap;
+  const ring = ko(() => CH.ringSvg(rm));
+  const C = 2 * Math.PI * 62;
+  const painted = [...ring.matchAll(/stroke-dasharray="([\d.]+) /g)].reduce((s, m) => s + Number(m[1]), 0);
+  assert.ok(Math.abs((painted / C) * 100 - RM.progress(rm).pct) < 1);
+  const map = ko(() => CH.mapSvg(rm));
+  const m = map.match(/<path class="rm-edge" d="M(\d+) [\d.]+ C(\d+)/); // t1 → t2 (같은 마일스톤)
+  assert.ok(Number(m[2]) < Number(m[1]), '같은 열 화살표는 노드 왼쪽 여백으로 돈다');
+  assert.ok(ko(() => CH.barsSvg(rm)).includes('rm-glyph rm-s-todo'));
+  assert.ok(CH.CSS.includes('.rm-glyph.rm-s-todo{fill:var(--c)}'));
+  assert.ok(!ko(() => CH.burndownSvg(rm, { now: day(1) })).svg.includes('rm-ideal'));
+});
+
+test('v0.38.1 그림 CSS: 앱은 CSP(style-src self)라 <style>을 끼워 넣지 않고, styles.css에 그림 규칙이 그대로 들어 있다', () => {
+  const css = read('src/renderer/styles.css');
+  for (const line of CH.CSS.split('\n')) assert.ok(css.includes(line), `styles.css에 없음: ${line.slice(0, 60)}`);
+  assert.match(read('src/renderer/index.html'), /style-src 'self'/);
+  assert.doesNotMatch(read('src/renderer/roadmap-ui.js'), /createElement\('style'\)|el\('style'\)/);
+});

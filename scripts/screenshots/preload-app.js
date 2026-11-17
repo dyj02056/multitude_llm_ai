@@ -29,7 +29,8 @@ const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
 // v0.31.0: 09 · 10 · 16 · 21 · 22 · 23(예전 디자인이던 프로젝트 장면)과 47(파일 나무 키보드)도 같은 가짜 프로젝트로 찍는다
-const PROJ = ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
+const ROADMAP = ['71-roadmap-tasks', '72-roadmap-dash'].includes(scene); // v0.38.1
+const PROJ = ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
 const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
 let onboarded = !ONBOARD;
 const SIDEBAR_W = 300;
@@ -307,6 +308,7 @@ function fakeProject() {
     files['config.js'] = "export const config = { base: '/api/users/' };\n";
   }
   const info = { name: 'demo-app', id: 'C:\\work\\demo-app' };
+  if (ROADMAP) files['.mla/roadmap.json'] = JSON.stringify(S.roadmapSample(LANG));
   const readDir = async (dir) => {
     const pre = dir ? `${dir}/` : '';
     const out = new Map();
@@ -591,6 +593,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 숨긴 창에서는 :focus-visible이 안 그려져 같은 모양(.ps-row:focus-visible)을 직접 붙인다
     Object.assign(document.activeElement.style, { outline: '2px solid var(--accent)', outlineOffset: '-2px' });
     await sleep(200);
+  }
+  if (ROADMAP) {
+    // 로드맵 (v0.38.0): 진행 데이터가 있는 프로젝트에서 창을 열면 작업 탭, 대시보드 장면은 탭을 바꾼다
+    click('#roadmapBtn');
+    await sleep(700);
+    if (scene === '72-roadmap-dash') click('#roadmapTab-dash');
+    await sleep(500);
   }
   if (scene === '58-related-files') {
     click('#psRelated');

@@ -1221,7 +1221,20 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, summary
 /* 움직임을 줄이도록 설정한 사용자에게는 깜빡임 · 전환을 끈다 */
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 
-/* 로드맵 (v0.38.0, roadmap-ui.js) — 진행 그림의 색은 shared/roadmap-charts.js의 CSS가 입힌다 */
+/* 로드맵 (v0.38.0, roadmap-ui.js). 아래 진행 그림 규칙은 shared/roadmap-charts.js의 CSS와 같아야 한다 (테스트가 검사).
+   앱은 CSP(style-src 'self')라 <style>을 끼워 넣을 수 없어 여기 둔다 (v0.38.1). HTML 내보내기는 같은 CSS를 파일 안에 넣는다. */
+.rm-s-done{--c:#2ea043}.rm-s-verify{--c:#388bfd}.rm-s-doing{--c:#d29922}.rm-s-blocked{--c:#f85149}.rm-s-todo{--c:#8b949e}
+.rm-ring,.rm-bars,.rm-map,.rm-burn{--rm-text:var(--text,#c9d1d9);--rm-sub:var(--text-2,#8b949e);--rm-track:var(--border,#30363d);--rm-node:var(--bg-2,#161b22);max-width:100%}
+.rm-ring{width:170px;height:170px;flex:none}.rm-bars,.rm-burn{width:100%;max-width:560px;height:auto}
+.rm-arc{stroke:var(--c)}.rm-track{stroke:var(--rm-track)}.rm-seg{fill:var(--c)}.rm-seg.rm-s-todo{fill:none;stroke:var(--c);stroke-dasharray:3 3}
+.rm-glyph{fill:#fff;font:700 11px system-ui,sans-serif}.rm-glyph.rm-s-doing{fill:#1f2328}.rm-glyph.rm-s-todo{fill:var(--c)}.rm-node .rm-glyph{fill:var(--c);font-size:13px}
+.rm-ring-pct{fill:var(--rm-text);font:700 28px system-ui,sans-serif}.rm-ring-sub{fill:var(--rm-sub);font:12px system-ui,sans-serif}
+.rm-label,.rm-pct,.rm-node-t,.rm-col,.rm-tick{fill:var(--rm-text);font:12px system-ui,sans-serif}.rm-col{font-weight:700}.rm-tick{fill:var(--rm-sub);font-size:11px}
+.rm-node rect{fill:var(--rm-node);stroke:var(--c);stroke-width:2}.rm-node.rm-s-todo rect{stroke-dasharray:4 3}.rm-node.rm-locked{opacity:.55}.rm-node.rm-current rect{stroke-width:4}.rm-node{cursor:pointer}.rm-node:focus{outline:none}.rm-node:focus rect{stroke-width:4}
+.rm-edge{stroke:var(--rm-sub);stroke-width:1.4}.rm-arrowhead{fill:var(--rm-sub)}
+.rm-axis{stroke:var(--rm-sub);stroke-width:1}.rm-est{stroke:#d29922;stroke-width:2;stroke-dasharray:2 4}
+.rm-burn-line{stroke:#388bfd;stroke-width:2.5}.rm-dot{fill:#388bfd}
+.rm-dash-top{display:flex;gap:20px;align-items:center;flex-wrap:wrap}.rm-dash-bars{flex:1 1 320px;min-width:0}.rm-scroll{overflow:auto}.rm-dash h3{margin:14px 0 6px;font-size:13px}.rm-note{font-size:12px;opacity:.8}
 .modal-box.roadmap-box { width: min(980px, 95vw); }
 .rm-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--bg-2); }
 .rm-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 7px 12px; color: var(--text-2); }
@@ -1245,3 +1258,6 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, summary
 .rm-edit-bar { display: flex; gap: 6px; }
 .rm-doc-plan { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 8px; margin: 6px 0; display: flex; flex-direction: column; gap: 4px; }
 .rm-doc-pre { margin: 0; max-height: 220px; overflow: auto; font: 12px/1.45 var(--mono); white-space: pre-wrap; background: var(--field); padding: 6px; user-select: text; }
+/* v0.38.1: 로드맵 창의 고르기 칸을 어두운 화면에 맞추고(기본 select는 흰 바탕), 작업 칸 안 안내 글의 아래 여백(16px)을 없앤다 */
+.rm-body select, .rm-body input[type="text"], .rm-body input[type="number"] { background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 2px 6px; }
+.rm-task .muted.small { margin: 0; }

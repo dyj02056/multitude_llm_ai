@@ -23,7 +23,8 @@
   let saveTimer = null;
   let lastWrite = null; // 문서 쓰기 되돌리기용 [{ path, before }]
   let editing = ''; // 편집 중인 작업 id
-  let busy = false;
+  let busy = false; // AI에게 보내는 중 (두 번 눌러 두 번 보내지 않게)
+  let draftSettings = null; // 로드맵을 만들기 전에 문서 탭에서 바꾼 설정 — 분해해 만든 로드맵에 넘긴다 (v0.38.1)
 
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -41,15 +42,8 @@
   };
   const docsLang = () => (rm?.settings.docsLang === 'auto' ? MLA.i18n.getLang() : rm?.settings.docsLang || MLA.i18n.getLang());
 
-  // ---------- 차트 CSS (앱 · 내보내기 공통) ----------
-  const STYLE_ID = 'roadmapChartStyle';
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    const s = el('style');
-    s.id = STYLE_ID;
-    s.textContent = CH.CSS;
-    document.head.append(s);
-  }
+  // 차트 CSS는 styles.css에 있다 — 앱의 CSP(style-src 'self')가 끼워 넣은 <style>을 막기 때문 (v0.38.1).
+  // 내보내기 HTML만 CH.CSS를 파일 안에 넣는다.
 
   // ---------- 읽기 · 저장 ----------
   async function readText(rel) {
@@ -72,6 +66,7 @@
     loadedFor = key;
     const text = await readText(DOCS.STATE_PATH);
     rm = null;
+    draftSettings = null;
     if (text) {
       try {
         const next = RM.normalizeRoadmap(JSON.parse(text));
@@ -108,7 +103,6 @@
   async function openDialog() {
     if (open) return close();
     if (!hasProject()) return alert(t('ui.roadmap.needProject'));
-    injectStyle();
     const dialog = state?.chatView === 'panels';
     open = { dialog, pending: dialog, tab: 'plan' };
     if (dialog) host.setView('dialog');
@@ -203,9 +197,10 @@
     const who = $('#roadmapWho').value;
     if (!plan) return status(t('ui.roadmap.plan.empty'), 'warn');
     if (!who) return status(t('ui.roadmap.plan.noAi'), 'warn');
-    const text = RM.buildDecomposePrompt({ plan, tree: await treeText(), lang: MLA.i18n.getLang() });
+    if (busy) return;
     busy = true;
     try {
+      const text = RM.buildDecomposePrompt({ plan, tree: await treeText(), lang: MLA.i18n.getLang() });
       const results = await host.sendPrompt(text, [who], [], { question: t('ui.roadmap.plan.question') });
       const r = results?.[0];
       status(r?.ok ? t('ui.roadmap.plan.sent', { name: nameOf(who) }) : t('ui.roadmap.plan.sendFail', { name: nameOf(who) }), r?.ok ? '' : 'warn');
@@ -236,10 +231,11 @@
       warn.hidden = false;
       return status(t('ui.roadmap.plan.parseFail'), 'warn');
     }
-    const keepSettings = rm?.settings;
+    const keepSettings = rm?.settings || draftSettings;
     const keepDocs = rm?.docs;
     rm = r.roadmap;
-    if (keepSettings) rm.settings = keepSettings;
+    if (keepSettings) rm.settings = { ...rm.settings, ...keepSettings };
+    draftSettings = null;
     if (keepDocs && (keepDocs.intro || keepDocs.features.length)) rm.docs = keepDocs;
     warn.textContent = r.warnings.join('\n');
     warn.hidden = !r.warnings.length;
@@ -379,7 +375,9 @@
     persist();
     render();
     if (to === 'done') await afterDone(id, prevMs);
-    else maybeDocs('task');
+    else await maybeDocs('task');
+    // 완료에서 되돌렸는데 이미 시작 · 끝낸 후속 작업이 있으면 알린다 (상태는 그대로 둔다). 문서 쓰기 알림에 덮이지 않게 마지막에
+    if (r.dependents?.length) status(t('ui.roadmap.reopened', { id, ids: r.dependents.join(', ') }), 'warn');
   }
 
   /** 작업 요청 글을 입력창에 채운다 (보내지는 않는다). 상태는 "진행 중"으로 */
@@ -459,7 +457,7 @@
 
   // ----- 문서 탭 -----
   function renderDocs() {
-    const s = rm?.settings || RM.DEFAULT_SETTINGS;
+    const s = rm?.settings || draftSettings || RM.DEFAULT_SETTINGS;
     $('#roadmapDocsOn').checked = s.docs;
     $('#roadmapDocsWhen').value = s.docsWhen;
     $('#roadmapReadmeMode').value = s.readmeMode;
@@ -473,7 +471,11 @@
   }
 
   function setting(key, value) {
-    if (!rm) return;
+    if (!rm) {
+      // 아직 로드맵이 없으면 기억해 두었다가 분해해 만든 로드맵에 넘긴다 (켜고 끈 설정이 사라지지 않게)
+      draftSettings = { ...(draftSettings || RM.DEFAULT_SETTINGS), [key]: value };
+      return;
+    }
     rm = { ...rm, settings: { ...rm.settings, [key]: value } };
     persist();
   }
@@ -537,9 +539,11 @@
         await host.project.writeFile(p.path, p.text);
       }
     } catch (err) {
+      // 중간에 실패하면 원래대로: 있던 파일은 전 글로, 이번에 새로 만든 파일은 지운다
       for (const u of undo.reverse()) {
         try {
           if (u.before != null) await host.project.writeFile(u.path, u.before);
+          else await host.project.deleteFile(u.path);
         } catch {}
       }
       status(t('ui.roadmap.docs.fail', { msg: err.message }), 'warn');
@@ -568,25 +572,35 @@
     }
   }
 
-  /** 설정의 갱신 시점에 맞으면 문서를 자동으로 쓴다 (when: 'create' | 'task' | 'milestone') */
+  /** 설정의 갱신 시점에 맞으면 문서를 자동으로 쓴다 (when: 'create' | 'task' | 'milestone'). 끝날 때까지 기다릴 수 있게 Promise를 돌려준다 */
   function maybeDocs(when) {
-    if (!rm || !rm.settings.docs || rm.settings.docsWhen === 'manual') return;
-    const w = rm.settings.docsWhen;
-    if (when === 'task' && w !== 'task') return;
-    if (when === 'milestone' && w === 'manual') return;
-    makeDocs({ auto: true }).catch(() => {});
+    if (!rm || !rm.settings.docs || rm.settings.docsWhen === 'manual') return Promise.resolve();
+    // 'create'와 'milestone'은 task · milestone 설정 모두에서, 'task'는 task 설정에서만 쓴다
+    if (when === 'task' && rm.settings.docsWhen !== 'task') return Promise.resolve();
+    return makeDocs({ auto: true }).catch(() => {});
   }
 
   async function askIntro() {
     const who = $('#roadmapWho').value || openIds()[0];
     if (!who) return status(t('ui.roadmap.plan.noAi'), 'warn');
-    const r = await host.sendPrompt(RM.buildDocsPrompt(rm, { lang: docsLang() }), [who], [], { question: t('ui.roadmap.docs.introQuestion') });
-    status(r?.[0]?.ok ? t('ui.roadmap.plan.sent', { name: nameOf(who) }) : t('ui.roadmap.plan.sendFail', { name: nameOf(who) }), r?.[0]?.ok ? '' : 'warn');
+    if (busy) return;
+    busy = true;
+    try {
+      const r = await host.sendPrompt(RM.buildDocsPrompt(rm, { lang: docsLang() }), [who], [], { question: t('ui.roadmap.docs.introQuestion') });
+      status(r?.[0]?.ok ? t('ui.roadmap.plan.sent', { name: nameOf(who) }) : t('ui.roadmap.plan.sendFail', { name: nameOf(who) }), r?.[0]?.ok ? '' : 'warn');
+    } catch (err) {
+      status(t('ui.send.error', { msg: err.message }), 'warn');
+    } finally {
+      busy = false;
+    }
   }
 
+  /** 소개 문장 가져오기: 계획 탭에서 고른 AI의 답을 먼저 보고, 거기 없을 때만 다른 패널의 답을 본다 */
   async function getIntro() {
+    const who = $('#roadmapWho').value;
     const got = await host.getAnswers().catch(() => ({ answers: [] }));
-    for (const a of got.answers || []) {
+    const answers = (got.answers || []).slice().sort((a, b) => (b.id === who) - (a.id === who));
+    for (const a of answers) {
       const info = a.text ? RM.parseDocsInfo(a.text) : null;
       if (info) {
         rm = { ...rm, docs: info };

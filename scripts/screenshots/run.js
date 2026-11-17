@@ -91,6 +91,9 @@ const SCENES = [
   { name: '65-local-attach', page: 'app' },
   { name: '66-semantic-search', page: 'app' },
   { name: '67-local-settings', page: 'app' },
+  // v0.38.0 (로드맵)
+  { name: '71-roadmap-tasks', page: 'app' },
+  { name: '72-roadmap-dash', page: 'app' },
   // v0.37.0 (사이드탭)
   { name: '68-side-pdf', page: 'side', width: 420 },
   { name: '69-side-compare', page: 'side', width: 420 },

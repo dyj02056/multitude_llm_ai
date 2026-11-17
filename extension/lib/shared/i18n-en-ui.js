@@ -532,6 +532,7 @@
   'ui.roadmap.merge': 'Merge',
   'ui.roadmap.mergeTitle': 'Merge the chosen task into this one',
   'ui.roadmap.editCycle': 'Not changed: it would make the dependencies circular.',
+  'ui.roadmap.reopened': '{id} is no longer done. {ids} depend on it and were already started or finished — check them again.',
   'ui.roadmap.f.title': 'Title',
   'ui.roadmap.f.desc': 'Details',
   'ui.roadmap.f.accept': 'Done condition',

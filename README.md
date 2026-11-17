@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.38.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.38.1-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -175,12 +175,12 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.38.1** | **로드맵 고침** — Windows 앱에서 대시보드 그림이 깨지던 문제(CSP), 분해 전에 바꾼 설정 무시, README 붙이기의 `## intro` 제목, 실패 시 새 파일 남음 고침 · 긴 한글 제목 넘침, 같은 마일스톤 화살표, 링 색과 %가 다르던 문제 등 그림 가독성 · 영어 안내 · 코드 구조 문서 갱신 |
 | **v0.38.0** | **로드맵** — 계획서를 마일스톤 · 작업으로 쪼개고(AI 분해 답 검사) 작업마다 진행 상태 기록, **진행 링 · 마일스톤 막대 · 선행 관계 지도 · 번다운** 그림, 프로젝트 폴더에 `docs/procedure.md` · `README.md` 자동 정리(내가 쓴 글 · 기존 README 보호) · 단계마다 사람이 확인하는 반자동 |
 | **v0.37.0** | **사이드탭** — 보고 있는 **PDF**를 읽어 질문(pdf.js 포함, 스캔 PDF 제외) · 페이지에 이미 떠 있는 **영상 자막**을 맥락으로 · 선택한 글을 두 AI로 **번역 비교** · 두 답이 끝나면 **한 줄 종합**(로컬 LLM 또는 한쪽 AI) · **사이트별 프리셋**(그 사이트에서 쓸 AI 2개와 기본 단추) |
 | **v0.36.0** | **로컬 LLM · 의미 검색** — 로컬 패널을 **최대 3개**(패널마다 모델을 따로 골라 같은 질문의 답을 나란히 비교) · 질문에 붙인 **글 파일**(.md · .txt · 코드 등)을 로컬 모델에게 본문으로 끼워 보내기(컨텍스트 한도를 넘으면 앞부분만) · 기록을 **비슷한 뜻으로 찾기**(로컬 임베딩 모델로 만든 색인, 글은 PC 밖으로 안 나감) |
 | **v0.35.0** | **기록 · 통계 · 설정 · 셀렉터** — 최대 개수를 넘은 기록을 지우지 않고 **달별 보관 파일**로(검색에서 "보관된 기록 포함") · 고른 기록을 **옮기기 파일**(`.mla-history.json`, 비밀번호 선택)로 앱 ↔ 확장 사이에 · 추천에 **★ · 평가 반영 + 줄 세우는 기준** 고르기 · **시간대별 응답 속도** 표 · 템플릿 · 스킬 · 프리셋 **하나만 공유** · 자가진단 창에서 **셀렉터 직접 고치기** + 진단 정보를 채운 **GitHub 이슈** 열기 |
 | **v0.34.0** | **프로젝트 모드** — 테스트 실행에 **pytest · cargo test · go test**(해당 파일이 있을 때만) · 실패한 검사 로그를 AI에게 돌려 **다시 받기**(기본 2번, 최대 3번, 자동 적용 없음) · **관련 파일 찾기**(import 따라가기, JS · TS · Python) · **새 브랜치에 적용**(`mla/날짜-AI`) |
-| **v0.33.0** | **작업 흐름**(초안 → 비판 → 고쳐 쓰기 → 검증처럼 정한 순서대로 AI 여러 개에게 차례로, 걸음마다 멈춤 · 건너뛰기, 프리셋에 저장) · **사실 확인**(답에서 주장을 최대 10개 뽑아 검색형 AI에 한 번에 확인 → 확인 · 반박 · 일부 · 출처 없음 표) · 시작 전에 **보낼 횟수** 표시(작업 흐름 · 사실 확인 · 토론) |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

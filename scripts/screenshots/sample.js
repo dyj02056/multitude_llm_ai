@@ -258,4 +258,37 @@ const PROJECT_ANSWERS = {
   ].join('\n'),
 };
 
-module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage, PROJECT_FILES, PROJECT_ANSWERS };
+/** 로드맵 장면 (v0.38.1): 진행 중인 로드맵 — 긴 한글 제목 · 같은 마일스톤 안 선행 · 막힘 · 잠김이 다 보이게 */
+function roadmapSample(lang = 'ko') {
+  const en = lang === 'en';
+  const day = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  const T = (ko, e) => (en ? e : ko);
+  const task = (id, title, o = {}) => ({ id, title, desc: '', deps: [], files: [], accept: T('확인할 수 있는 조건', 'A checkable condition'), weight: 2, status: 'todo', ...o });
+  return {
+    version: 1,
+    title: T('할 일 관리 웹앱', 'Todo web app'),
+    plan: T('할 일을 추가 · 완료 · 마감일 알림까지 하는 웹앱을 만든다.', 'Build a web app to add and finish todos, with due-date reminders.'),
+    createdAt: day(16),
+    updatedAt: day(0),
+    milestones: [
+      { id: 'm1', title: T('기초 환경 구성과 데이터 모델 설계', 'Project setup and data model design'), tasks: [
+        task('t1', T('프로젝트 초기 설정 및 빌드 도구 구성', 'Initial project setup and build tooling'), { status: 'done', doneAt: day(14), files: ['package.json'], commit: 'a1b2c3d' }),
+        task('t2', T('데이터베이스 스키마와 마이그레이션 작성', 'Database schema and migrations'), { deps: ['t1'], weight: 3, status: 'done', doneAt: day(10), files: ['src/db.js'] }),
+        task('t3', T('사용자 인증 API 구현', 'User authentication API'), { deps: ['t2'], weight: 3, status: 'verify', files: ['src/auth.js'] }),
+      ] },
+      { id: 'm2', title: T('화면 구현', 'Screens'), tasks: [
+        task('t4', T('할 일 목록 화면', 'Todo list screen'), { deps: ['t2'], status: 'doing', files: ['src/ui/list.js'] }),
+        task('t5', T('할 일 추가 · 수정 폼', 'Add and edit form'), { deps: ['t4'] }),
+        task('t6', T('마감일 알림 기능', 'Due-date reminders'), { deps: ['t3'], weight: 4, status: 'blocked', note: T('알림 권한 정책 확인 필요', 'Need to check the notification permission policy') }),
+      ] },
+      { id: 'm3', title: T('배포와 마무리', 'Release'), tasks: [
+        task('t7', T('통합 테스트와 배포 스크립트', 'Integration tests and deploy script'), { deps: ['t5', 't6'], weight: 3 }),
+      ] },
+    ],
+    settings: { docs: true, docsWhen: 'task', readmeMode: 'separate', docsLang: 'auto', mermaid: true, autoCommit: false },
+    docs: { intro: '', features: [] },
+    log: [{ at: day(14), task: 't1', status: 'done', note: '' }, { at: day(10), task: 't2', status: 'done', note: '' }],
+  };
+}
+
+module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage, PROJECT_FILES, PROJECT_ANSWERS, roadmapSample };
