@@ -219,6 +219,17 @@ In the project sidebar the file tree is one tab stop: `↑` `↓` move, `→` ex
 8. **Commit after applying** (Windows app, v0.28.0): **커밋하기…** on the applied bar or in the preview commits only the applied files (`git add -A -- paths`, `git commit -m msg -- paths`; files you staged yourself stay staged). The message is prefilled; **AI에게 메시지 요약 부탁** asks the AI for a one-line summary. Nothing is pushed. Turn the offer off in settings (`적용 후 커밋 제안`).
 9. **Pick up where you left off** (v0.28.0): which files each AI already has, file-by-file progress and continuation counts are saved with the project. Reopening the project restores them; after an app restart the panels open new chats, so the sidebar shows **지난 실행의 작업** — reopen the old conversation in the panel to continue automatically, or click **이어 쓰기**. A paused file-by-file run shows **▶ 이어서 계속**.
 
+10. **More checks** (Windows app, v0.34.0): with `pyproject.toml`, `Cargo.toml` or `go.mod` in the project root, **test run** also offers `pytest`, `cargo-test` and `go-test` (only those that apply). Exactly three fixed commands run (`python -m pytest -q`, `cargo test`, `go test ./...`), without a shell, and the executable is looked up only in absolute PATH folders. Files that change how a check runs (`conftest.py`, `build.rs`, `go.mod`…) are flagged with ⚠ in the confirm dialog.
+11. **Send the failure log back** (v0.34.0): when a check fails after applying, **실패 로그를 ○○에게 돌려 다시 받기 (n/max)** sends that check's output (secrets masked, trimmed) to the same AI as a follow-up. The reply appears as a new change bar to preview and test again. **Nothing is applied automatically.** Default 2 rounds, maximum 3 (0–3, remembered); the counter resets on a new question or an apply.
+12. **Find related files** (v0.34.0): `관련 파일 찾기` in the sidebar follows `import` / `require` / `from … import` from your chosen files up to **2 levels** and suggests files worth sending along — tick and **add**. JS/TS (relative paths) and Python only; `@/…` aliases and computed paths are not found. Works in the Chrome extension too.
+13. **Apply on a new branch** (Windows app, v0.34.0): tick `새 브랜치에 적용` in the preview and the app runs `git switch -c mla/<date>-<AI>` right before writing (name editable, always `mla/…`, letters/digits/`. _ -`). An existing name is refused. **Nothing is committed or pushed.**
+
+![Send the failure log back to the AI](../screenshots/en/57-fix-loop.png)
+
+![Related files suggested](../screenshots/en/58-related-files.png)
+
+![Apply on a new branch](../screenshots/en/59-branch-apply.png)
+
 Cut-off protection: if an answer was cut off or abbreviated (`... existing code ...`), the change is blocked or flagged. Long files are requested as find/replace blocks; `↪ 이어서 받기` (continue) asks the same AI for the rest. **큰 작업** (big task) mode asks for a plan first and then one file at a time.
 
 ![Patch preview](../screenshots/en/11-patch-preview.png)

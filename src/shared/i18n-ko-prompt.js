@@ -218,6 +218,16 @@
   'prompt.proj.skip.notInProject': '프로젝트에 없는 파일',
   'prompt.proj.skip.excluded': '제외 규칙: {rule}',
 
+  // 실패 로그 되먹임 (v0.34.0): 임시 적용 검사가 실패했을 때 그 AI에게 돌려 보내는 글
+  'prompt.proj.fix.intro': '방금 준 수정안을 내 프로젝트에 임시로 적용해 검사를 돌렸더니 실패했어. 아래는 실패한 검사의 출력이야 (비밀 정보로 보이는 글은 가렸어).',
+  'prompt.proj.fix.files': '[바꾼 파일] {files}',
+  'prompt.proj.fix.block': '### {name} — {command} (종료 코드 {code}, {before})',
+  'prompt.proj.fix.beforeOk': '적용 전에는 통과했어',
+  'prompt.proj.fix.beforeBad': '적용 전에도 실패했어',
+  'prompt.proj.fix.cut': '(출력이 길어 끝의 {n}자만 보냄)',
+  'prompt.proj.fix.noOutput': '(출력 없음)',
+  'prompt.proj.fix.ask': '원인을 3줄 이내로 설명하고, 고친 수정안을 처음 답변 규칙대로 줘 (바꾸거나 새로 만들 파일마다 "파일: 경로" 줄 다음에 코드 블록 하나). 이미 맞는 파일은 다시 쓰지 않아도 돼.',
+
   // ---------- 프로젝트 파일 올리기 (project-upload.js) ----------
   'prompt.up.part': '({path} — 파일이 커서 {total}조각으로 나눔: {i}/{total}, 이어 붙이면 한 파일)',
   'prompt.up.chunk': '({total}개 중 {i}번째)',

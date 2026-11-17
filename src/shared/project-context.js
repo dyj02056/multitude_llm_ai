@@ -201,6 +201,38 @@
     return tr('prompt.proj.step', { i: index + 1, total, path, note: note ? ` — ${note}` : '', n: EDIT_LINES });
   }
 
+  // ---------- 실패 로그 되먹임 (v0.34.0) ----------
+  // 수정안을 임시로 적용해 검사를 돌렸더니 실패했을 때, 실패한 검사의 출력(비밀 정보는 이미 가려져 있다)을 그 AI에게 돌려 다시 받는다.
+  const FIX_LOG_MAX = 6000; // 검사 하나의 출력에서 보내는 끝부분 길이 (실패 이유는 대개 끝에 있다)
+  const FIX_TOTAL_MAX = 14000; // 모든 검사 출력의 합 한도
+  const MAX_FIX_ROUNDS = 3; // 한 번의 요청에서 돌려 보낼 수 있는 최대 횟수 (기본은 2, 화면에서 0~3으로 고름)
+  const DEFAULT_FIX_ROUNDS = 2;
+
+  /** 저장된 횟수 → 0~MAX_FIX_ROUNDS의 정수 (아니면 기본 2) */
+  const normalizeFixRounds = (v) => (Number.isInteger(Number(v)) && v !== '' && v !== null && Number(v) >= 0 && Number(v) <= MAX_FIX_ROUNDS ? Number(v) : DEFAULT_FIX_ROUNDS);
+
+  /**
+   * 실패 로그를 AI에게 돌려 보낼 글.
+   * files: 임시로 적용한 파일 경로들, failures: [{ name, command, code, output, beforeOk }] (실패한 검사만), 끝에 답변 규칙을 다시 붙인다
+   */
+  function buildFixFeedback({ files, failures }) {
+    let room = FIX_TOTAL_MAX;
+    const blocks = (failures || []).map((f) => {
+      const raw = String(f.output || '').trim();
+      const take = Math.max(0, Math.min(FIX_LOG_MAX, room));
+      const cut = raw.length > take;
+      const body = cut ? raw.slice(raw.length - take) : raw;
+      room -= body.length;
+      const fe = fence(body);
+      return [
+        tr('prompt.proj.fix.block', { name: f.name, command: f.command, code: f.code === null || f.code === undefined ? '?' : f.code, before: tr(f.beforeOk ? 'prompt.proj.fix.beforeOk' : 'prompt.proj.fix.beforeBad') }),
+        ...(cut ? [tr('prompt.proj.fix.cut', { n: take })] : []),
+        `${fe}\n${body || tr('prompt.proj.fix.noOutput')}\n${fe}`,
+      ].join('\n');
+    });
+    return [tr('prompt.proj.fix.intro'), '', tr('prompt.proj.fix.files', { files: (files || []).join(', ') }), '', ...blocks.flatMap((b) => [b, '']), tr('prompt.proj.fix.ask'), '', rules()].join('\n');
+  }
+
   /** 고른 파일 수 · 줄 수가 크면 "큰 작업"을 권할지 */
   const suggestSplit = ({ files, lines }) => files > SPLIT_SUGGEST.files || lines > SPLIT_SUGGEST.lines;
 
@@ -386,6 +418,10 @@
     buildContext,
     buildFollowUp,
     buildRefetch,
+    buildFixFeedback,
+    normalizeFixRounds,
+    MAX_FIX_ROUNDS,
+    DEFAULT_FIX_ROUNDS,
     parseNeedFiles,
     parsePlanFiles,
     stepPrompt,

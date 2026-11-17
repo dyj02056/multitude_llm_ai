@@ -111,6 +111,8 @@
       <label class="check ps-split" data-i18n-title="ui.h.psAutoCont.title"><input type="checkbox" id="psAutoCont" /> <span data-i18n="ui.h.psAutoCont"></span></label>
       <label class="check ps-split" data-i18n-title="ui.h.psIncremental.title"><input type="checkbox" id="psIncremental" /> <span data-i18n="ui.h.psIncremental"></span></label>
       <label class="check ps-split ps-sub" data-i18n-title="ui.h.psFollowList.title"><input type="checkbox" id="psFollowList" /> <span data-i18n="ui.h.psFollowList"></span></label>
+      <button id="psRelated" data-i18n="project.related.btn" data-i18n-title="project.related.btnTitle"></button>
+      <div id="psRelatedBox" class="ps-related" hidden></div>
       <div id="psRestore" class="ps-restore" hidden></div>
       <button id="psGit" data-i18n-title="ui.h.psGit.title" hidden data-i18n="ui.h.psGit"></button>
       <button id="psSync" class="primary" data-label-by-script hidden></button>
@@ -347,6 +349,10 @@
       <div class="modal-foot">
         <span id="patchStatus" class="muted-label" role="status" aria-live="polite"></span>
         <span id="patchChecks" class="patch-checks" hidden></span>
+        <span id="patchBranch" class="patch-branch" hidden>
+          <label class="check-label" data-i18n-title="project.branch.title"><input type="checkbox" id="patchBranchOn" /> <span data-i18n="project.branch.on"></span></label>
+          <input id="patchBranchName" type="text" spellcheck="false" maxlength="64" data-i18n-aria="project.branch.nameLabel" />
+        </span>
         <button id="patchTest" hidden data-i18n-title="ui.h.patchTest.title" data-i18n="ui.h.patchTest"></button>
         <button id="patchAll" data-i18n-title="ui.h.patchAll.title" data-i18n="ui.h.patchAll"></button>
         <button id="patchApply" class="primary" title="Ctrl+Enter" data-i18n="ui.h.patchApply"></button>
@@ -722,7 +728,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle" data-i18n="ui.h.sendBtn"></button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → library.js → library-presets.js → settings-transfer-ui.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → library.js → library-presets.js → settings-transfer-ui.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
   <script src="../shared/i18n-ko.js"></script>
   <script src="../shared/i18n-ko-ui.js"></script>
   <script src="../shared/i18n-ko-project.js"></script>
@@ -743,6 +749,8 @@
   <script src="../shared/tree-nav.js"></script>
   <script src="../shared/onboarding.js"></script>
   <script src="../shared/project-ignore.js"></script>
+  <script src="../shared/import-graph.js"></script>
+  <script src="../shared/branch-name.js"></script>
   <script src="../shared/secret-scan.js"></script>
   <script src="../shared/project-context.js"></script>
   <script src="../shared/project-upload.js"></script>
@@ -779,6 +787,7 @@
   <script src="workflow-ui.js"></script>
   <script src="factcheck-ui.js"></script>
   <script src="project.js"></script>
+  <script src="project-related.js"></script>
   <script src="project-changes.js"></script>
   <script src="project-runs.js"></script>
   <script src="project-devtest.js"></script>

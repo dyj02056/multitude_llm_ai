@@ -26,7 +26,7 @@ const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
 // v0.31.0: 09 · 10 · 16 · 21 · 22 · 23(예전 디자인이던 프로젝트 장면)과 47(파일 나무 키보드)도 같은 가짜 프로젝트로 찍는다
-const PROJ = ['36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
+const PROJ = ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
 const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
 let onboarded = !ONBOARD;
 const SIDEBAR_W = 300;
@@ -265,6 +265,12 @@ window.host = {
 // ---------- v0.28.0 프로젝트 장면용 가짜 폴더 · 테스트 실행 · git ----------
 function fakeProject() {
   const files = { ...S.PROJECT_FILES };
+  if (scene === '58-related-files') {
+    // 관련 파일 찾기 장면: user.js가 부르는 파일을 두어 단계로 이어 둔다
+    files['src/user.js'] = "import { get, set } from './cache.js';\nimport { api } from './api.js';\n\nexport async function getUser(id) {\n  return get(id) || (await api(id));\n}\n";
+    files['src/api.js'] = "import { config } from '../config.js';\nexport const api = (id) => fetch(config.base + id).then((r) => r.json());\n";
+    files['config.js'] = "export const config = { base: '/api/users/' };\n";
+  }
   const info = { name: 'demo-app', id: 'C:\\work\\demo-app' };
   const readDir = async (dir) => {
     const pre = dir ? `${dir}/` : '';
@@ -324,6 +330,7 @@ function fakeGit() {
     stop: async () => true,
     openTerminal: async () => ({ ok: true }),
     commitInfo: async () => ({ ok: true, branch: 'main', otherStaged: ['README.md'] }),
+    createBranch: async (name) => ({ ok: true, branch: name, from: 'main' }), // 새 브랜치에 적용 (v0.34.0)
     commit: async () => ({ ok: true, hash: '3f9c2a1', output: '[main 3f9c2a1] Fix getUser error handling\n 3 files changed, 14 insertions(+), 2 deletions(-)' }),
   };
 }
@@ -487,6 +494,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 숨긴 창에서는 :focus-visible이 안 그려져 같은 모양(.ps-row:focus-visible)을 직접 붙인다
     Object.assign(document.activeElement.style, { outline: '2px solid var(--accent)', outlineOffset: '-2px' });
     await sleep(200);
+  }
+  if (scene === '58-related-files') {
+    click('#psRelated');
+    await sleep(400);
+  }
+  if (scene === '57-fix-loop' || scene === '59-branch-apply') {
+    btnIn(document.querySelector('.change-bar:not([hidden])'), '변경 보기')?.click();
+    await sleep(500);
+    if (scene === '57-fix-loop') {
+      document.querySelector('#patchChecks input[data-check="lint"]')?.click();
+      click('#patchTest');
+      await sleep(700);
+    } else {
+      document.querySelector('#patchBranchOn')?.click();
+    }
   }
   if (scene === '36-check-scripts' || scene === '16-test-run') {
     btnIn(document.querySelector('.change-bar:not([hidden])'), '변경 보기')?.click();

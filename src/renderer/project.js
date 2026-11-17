@@ -1072,5 +1072,5 @@
     }
   });
 
-  Object.assign(P, { project, ed, has, MAX_LOG, RUN_ID, panelEpoch, allowedFor, answerMd, listLines, notice, remember, rescan, saveState, sendProjectFollowUp, renderTree, syncStale, notePanels, openProject, render });
+  Object.assign(P, { entryOf, toggleFile, sendablePaths, project, ed, has, MAX_LOG, RUN_ID, panelEpoch, allowedFor, answerMd, listLines, notice, remember, rescan, saveState, sendProjectFollowUp, renderTree, syncStale, notePanels, openProject, render });
 })();

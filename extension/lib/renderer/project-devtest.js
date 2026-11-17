@@ -9,6 +9,7 @@
 (() => {
   const P = MLA.projectUI;
   const { testState } = P; // project-changes.js
+  const PC = MLA.projectContext;
 
   // ---------- 검사 실행 (test · lint · typecheck · build, Windows 앱) ----------
 
@@ -23,7 +24,7 @@
       ...checks.map((c) => {
         const l = document.createElement('label');
         l.className = 'check-label patch-check';
-        l.title = [c.pre && `pre${c.name}: ${c.pre}`, `${c.name}: ${c.script}`, c.post && `post${c.name}: ${c.post}`].filter(Boolean).join('\n');
+        l.title = c.runner ? `${c.name}: ${c.script}` : [c.pre && `pre${c.name}: ${c.pre}`, `${c.name}: ${c.script}`, c.post && `post${c.name}: ${c.post}`].filter(Boolean).join('\n');
         const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: testChecks.has(c.name) });
         cb.dataset.check = c.name;
         cb.addEventListener('change', () => (cb.checked ? testChecks.add(c.name) : testChecks.delete(c.name)));
@@ -35,8 +36,73 @@
     return () => checks.map((c) => c.name).filter((n) => testChecks.has(n));
   }
 
-  /** 창의 [테스트 실행]: 체크한 수정안을 잠깐 쓰고 고른 검사를 적용 전 · 후로 돌려 나란히 보여 준다. getChosen() → 적용할 plan 목록 */
-  function setupTestRun(getChosen) {
+  // ---------- 실패 로그를 AI에게 돌려 보내기 (v0.34.0) ----------
+  // 임시로 적용해 돌린 검사가 실패하면 그 출력을 같은 AI에게 돌려 고친 수정안을 다시 받는다. 매번 변경 바에서 미리보기가 다시 열려야 하고
+  // (자동으로 적용하지 않는다), 한 번의 요청에서 돌려 보내는 횟수는 기본 2번 · 최대 3번 (화면에서 0~3으로 고름, 이 PC에 기억).
+  const FIX_KEY = 'mla-fix-max';
+  const fixMax = () => {
+    try {
+      return PC.normalizeFixRounds(localStorage.getItem(FIX_KEY));
+    } catch {
+      return PC.DEFAULT_FIX_ROUNDS;
+    }
+  };
+  const setFixMax = (n) => {
+    try {
+      localStorage.setItem(FIX_KEY, String(n));
+    } catch {}
+  };
+
+  /** 결과 아래에 [실패 로그를 AI에게 돌려 다시 받기]를 붙인다. ai: 이 미리보기의 수정안을 낸 AI ({ id, name }, 섞어서 적용이면 없음) */
+  function renderFixLoop(box, r, ai, chosen) {
+    if (!r?.ok || !ai?.id || ai.mixed || !host.sendFollowUp) return;
+    const results = Array.isArray(r.results) ? r.results : [];
+    // 적용 후 검사가 실패한 것 (실행하지 못한 오류 · 중지 · 시간 초과는 되돌려 보낼 로그가 없다)
+    const failing = results.filter((x) => x.after && !x.after.ok && !x.after.stopped && !x.after.timedOut && !x.after.error);
+    if (!failing.length) return;
+    const used = P.fixRounds.get(ai.id) || 0;
+    const max = fixMax();
+    const bar = document.createElement('div');
+    bar.className = 'fix-bar';
+    const sel = document.createElement('select');
+    sel.setAttribute('aria-label', t('project.fix.maxLabel'));
+    sel.title = t('project.fix.maxTitle');
+    for (let n = 0; n <= PC.MAX_FIX_ROUNDS; n++) sel.append(Object.assign(document.createElement('option'), { value: String(n), textContent: n ? t('project.fix.maxOption', { n }) : t('project.fix.maxOff') }));
+    sel.value = String(max);
+    const go = button(t('project.fix.send', { name: ai.name, n: Math.min(used + 1, max), max }), t('project.fix.sendTitle', { name: ai.name }), async () => {
+      if (!P.allowedFor(ai.id)) return ($('#patchStatus').textContent = t('project.fix.blocked', { name: ai.name }));
+      go.disabled = true;
+      const text = PC.buildFixFeedback({
+        files: chosen.map((p) => p.path),
+        failures: failing.map((x) => ({ name: x.name, command: x.runner ? x.script : x.name === 'test' ? 'npm test' : `npm run ${x.name}`, code: x.after.code, output: x.after.output, beforeOk: !!x.before?.ok })),
+      });
+      const res = await host.sendFollowUp(ai.id, text).catch((err) => ({ ok: false, error: err.message }));
+      if (!res?.ok) {
+        go.disabled = false;
+        return ($('#patchStatus').textContent = res?.error || t('offer.failed'));
+      }
+      P.fixRounds.set(ai.id, used + 1);
+      P.modal.hide();
+      $('#sendHint').textContent = t('project.fix.sent', { name: ai.name, n: used + 1, max });
+    });
+    const exhausted = used >= max;
+    go.disabled = exhausted || max === 0;
+    bar.append(
+      span('test-badge bad', t('project.fix.failed', { names: failing.map((x) => x.name).join(' · ') })),
+      go,
+      span('muted-label', exhausted && max > 0 ? t('project.fix.exhausted', { n: max }) : t('project.fix.note')),
+      span('muted-label', t('project.fix.maxLabel')),
+      sel,
+    );
+    sel.addEventListener('change', () => {
+      setFixMax(Number(sel.value));
+      renderFixLoop.redraw?.();
+    });
+    box.append(bar);
+  }
+
+  /** 창의 [테스트 실행]: 체크한 수정안을 잠깐 쓰고 고른 검사를 적용 전 · 후로 돌려 나란히 보여 준다. getChosen() → 적용할 plan 목록, ai: 이 수정안을 낸 AI (v0.34.0) */
+  function setupTestRun(getChosen, ai) {
     if (!host.devtest) return;
     const btn = $('#patchTest');
     btn.hidden = false;
@@ -65,6 +131,12 @@
       try {
         const r = await host.devtest.trial(chosen.map((p) => ({ path: p.path, after: p.op === 'delete' ? null : p.after })), scripts);
         renderTestResult(out, r);
+        const draw = () => {
+          for (const old of out.querySelectorAll('.fix-bar')) old.remove();
+          renderFixLoop(out, r, ai, chosen);
+        };
+        renderFixLoop.redraw = draw; // 횟수를 바꾸면 단추를 다시 그린다
+        draw();
       } catch (err) {
         renderTestResult(out, { ok: false, error: err.message });
       } finally {
@@ -143,7 +215,8 @@
       const h = document.createElement('div');
       h.className = 'test-script-head';
       const v = verdictOf(x);
-      h.append(span('test-name', x.name === 'test' ? 'npm test' : `npm run ${x.name}`), span('muted-label', x.script ? `(${x.script})` : ''), span(`test-badge ${v[0]}`, v[1]));
+      // 다른 언어 검사(v0.34.0)는 이름이 곧 명령이라 "(명령)"을 따로 붙이지 않는다
+      h.append(span('test-name', x.runner ? x.script : x.name === 'test' ? 'npm test' : `npm run ${x.name}`), span('muted-label', x.script && !x.runner ? `(${x.script})` : ''), span(`test-badge ${v[0]}`, v[1]));
       const cols = document.createElement('div');
       cols.className = 'test-cols';
       cols.append(col(t('project.test.before'), x.before), col(t('project.test.after'), x.after));

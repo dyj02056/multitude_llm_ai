@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.33.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.34.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -174,11 +174,11 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.34.0** | **프로젝트 모드** — 테스트 실행에 **pytest · cargo test · go test**(해당 파일이 있을 때만) · 실패한 검사 로그를 AI에게 돌려 **다시 받기**(기본 2번, 최대 3번, 자동 적용 없음) · **관련 파일 찾기**(import 따라가기, JS · TS · Python) · **새 브랜치에 적용**(`mla/날짜-AI`) |
 | **v0.33.0** | **작업 흐름**(초안 → 비판 → 고쳐 쓰기 → 검증처럼 정한 순서대로 AI 여러 개에게 차례로, 걸음마다 멈춤 · 건너뛰기, 프리셋에 저장) · **사실 확인**(답에서 주장을 최대 10개 뽑아 검색형 AI에 한 번에 확인 → 확인 · 반박 · 일부 · 출처 없음 표) · 시작 전에 **보낼 횟수** 표시(작업 흐름 · 사실 확인 · 토론) |
 | **v0.32.0** | 분석에 **합의율** · 줄마다 **같은 입장 AI 수** · 답변에 나온 링크를 모은 **출처** 칸 · 토론 **역할**(찬성 · 반대 · 반론 전담) · 라운드 사이 **끼어들기** · 역할 · 끼어들기까지 **프리셋에 저장** · 답변 비교 **보기 방식**(문단 맞추기 · 코드만 · 표 비교) |
 | **v0.31.0** | **AI에게 보내는 글도 화면 언어를 따름**(종합 · 분석 · 토론 · 프로젝트 요청 · 기본 템플릿) · **첫 사용 안내**(처음 켤 때 4걸음, 설정에서 다시 보기) · **접근성**(버튼 · 입력칸 테두리 3:1, 파일 나무 방향키, 앱 화면 확대 `Ctrl` `+` `-` `0`) · 큰 파일 나누기 · 프로젝트 장면 그림 새로 찍기 |
 | **v0.30.0** | **화면 언어**(설정 › 언어: 자동 · 한국어 · English — Windows 앱 · 크롬 확장 · 사이드탭 · 오른쪽 클릭 메뉴 · 알림) · **접근성**(글자 대비 WCAG AA · 키보드 포커스 표시 · 창 포커스 가두기 · 기호 버튼 이름표 · 키보드로 닿는 목록) · [출시 전 확인 목록](docs/release-checklist.md) · [접근성 문서](docs/accessibility.md) |
-| **v0.29.0** | **작업 프리셋**(템플릿 · 스킬 · 패널 · 배치 · 종합 · 토론을 한 번에) · 스킬 **이전 버전**과 차이 보기 · 되돌리기 · **로컬 LLM을 패널 없이 판정 · 압축**에 · 로컬 모델 **컨텍스트 한도** · 사이드탭 **요약 · 번역 · 핵심만 · 쉽게 설명** 단추와 **이 페이지에서 전에 물어본 것** · **설정 옮기기**(.mla.json, 비밀번호 암호화) |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

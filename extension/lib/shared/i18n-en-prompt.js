@@ -216,6 +216,16 @@
   'prompt.proj.skip.notInProject': 'not a file in the project',
   'prompt.proj.skip.excluded': 'exclusion rule: {rule}',
 
+  // feeding a failed check back (v0.34.0): sent to the AI when a trial run of its change failed
+  'prompt.proj.fix.intro': 'I applied the change you just proposed to my project temporarily and ran the checks, and one failed. Below is the output of the failed check (text that looks like a secret was masked).',
+  'prompt.proj.fix.files': '[Changed files] {files}',
+  'prompt.proj.fix.block': '### {name} — {command} (exit code {code}, {before})',
+  'prompt.proj.fix.beforeOk': 'it passed before the change',
+  'prompt.proj.fix.beforeBad': 'it also failed before the change',
+  'prompt.proj.fix.cut': '(long output — only the last {n} characters are sent)',
+  'prompt.proj.fix.noOutput': '(no output)',
+  'prompt.proj.fix.ask': 'Explain the cause in at most 3 lines and give the fixed change following the original answer rules (for every changed or new file, a "File: path" line followed by one code block). You do not need to rewrite files that are already right.',
+
   // ---------- project file upload (project-upload.js) ----------
   'prompt.up.part': '({path} — a large file split into {total} parts: {i}/{total}; joined together they are one file)',
   'prompt.up.chunk': '(part {i} of {total})',

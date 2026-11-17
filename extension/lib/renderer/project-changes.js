@@ -20,6 +20,7 @@ const PU = MLA.projectUpload;
 const PX = MLA.patch;
 
   // 뒤에 읽히는 파일의 함수 (부를 때 P에서 찾는다)
+  P.fixRounds = new Map(); // 패널 id → 실패 로그를 돌려 보낸 횟수 (project-devtest.js, v0.34.0)
   const renderRunBar = (...a) => P.renderRunBar(...a); // project-runs.js
   const continueFile = (...a) => P.continueFile(...a); // project-runs.js
   const setupTestRun = (...a) => P.setupTestRun(...a); // project-devtest.js
@@ -100,6 +101,7 @@ const PX = MLA.patch;
   function clearBars() {
     for (const id of bars.keys()) setChangeBar(id, false);
     bars.clear();
+    P.fixRounds.clear(); // 새 질문 · 새 대화: 실패 로그를 돌려 보낸 횟수를 다시 센다 (v0.34.0)
   }
 
   /** 패널 하나의 답변을 다시 읽어 바를 새로 그린다. 바를 띄웠으면 true */
@@ -353,6 +355,8 @@ const PX = MLA.patch;
       $('#patchTitle').textContent = title;
       $('#patchNote').textContent = note || '';
       $('#patchStatus').textContent = '';
+      $('#patchBranch').hidden = true; // 새 브랜치 선택은 적용 창(openPreview · 섞어서 적용)만 다시 보인다 (v0.34.0)
+      $('#patchBranchOn').checked = false; // 누를 때만
       $('#patchModal').hidden = false;
       if (state?.chatView === 'panels') {
         modal.view = 'dialog';
@@ -529,21 +533,24 @@ const PX = MLA.patch;
       });
     $('#patchApply').textContent = t('project.preview.applyChosen');
     $('#patchApply').focus(); // Enter(또는 Ctrl+Enter)로 바로 적용
+    P.setupBranch(ai.name);
     $('#patchApply').onclick = async () => {
       if (testState.running) return ($('#patchStatus').textContent = t('project.preview.waitTest'));
       const chosen = chosenPlans();
       if (!chosen.length) return ($('#patchStatus').textContent = t('project.preview.pickApply'));
       $('#patchApply').disabled = true;
       try {
+        const branch = await P.prepareBranch(); // 체크했다면 적용 전에 새 브랜치로 (v0.34.0)
+        if (!branch.ok) return;
         const { entry, text } = await applyPlans(ai, chosen);
-        afterApplied(entry, text);
+        afterApplied(entry, branch.branch ? `${text} — ${t('project.branch.created', { name: branch.branch, from: branch.from || '?' })}` : text);
       } finally {
         $('#patchApply').disabled = false;
       }
     };
 
     // 테스트 실행 (Windows 앱 전용: host.devtest) — v0.28.0: lint · typecheck · build도 골라서
-    setupTestRun(chosenPlans);
+    setupTestRun(chosenPlans, ai);
   }
 
   /**
@@ -551,6 +558,7 @@ const PX = MLA.patch;
    * 아니면 예전처럼 잠깐 뒤 닫는다. 커밋은 누를 때만 한다.
    */
   function afterApplied(entry, text) {
+    P.fixRounds.clear(); // 적용했으면 실패 로그 되먹임은 끝 (v0.34.0)
     $('#patchStatus').textContent = text;
     if (entry && P.canOfferCommit?.()) {
       $('#patchStatus').textContent = `${text} — ${t('commit.offerNote')}`;
@@ -692,7 +700,31 @@ const PX = MLA.patch;
     if (failed.length) alert(t('project.log.revertFailed', { list: failed.join('\n') }));
   }
 
+  /**
+   * 적용 창 아래 "새 브랜치에 적용" 칸 (Windows 앱 · git 있음 · 프로젝트 열림일 때만): 체크하면 적용 직전에 git switch -c mla/<날짜>-<이름>.
+   * 이름은 mla/20261117-claude처럼 제안하고 고칠 수 있다. 체크는 창을 열 때마다 꺼져 있다 (누를 때만).
+   */
+  function setupBranch(label) {
+    const row = $('#patchBranch');
+    if (!host.git?.createBranch || !P.has()) return (row.hidden = true);
+    $('#patchBranchName').value = MLA.branchName.suggestBranchName({ label });
+    row.hidden = false;
+  }
+
+  /** 적용 직전: 새 브랜치를 체크했으면 만든다 → { ok: true, branch?, from? } | { ok: false } (실패하면 창에 이유를 보이고 적용하지 않는다) */
+  async function prepareBranch() {
+    if ($('#patchBranch').hidden || !$('#patchBranchOn').checked) return { ok: true };
+    $('#patchStatus').textContent = t('project.branch.creating');
+    const r = await host.git.createBranch($('#patchBranchName').value).catch((err) => ({ ok: false, error: err.message }));
+    if (!r?.ok) {
+      $('#patchStatus').textContent = r?.error || t('project.branch.failed');
+      return { ok: false };
+    }
+    return { ok: true, branch: r.branch, from: r.from };
+  }
+
   Object.assign(P, {
+    setupBranch, prepareBranch,
     clearBars, continuing, currentText, refreshBar, runs, writeBlocked, revert, modal,
     // v0.28.0: 섞어서 적용(project-mix.js) · 커밋(project-commit.js) · 이어 하기(project-restore.js)가 쓴다
     applyPlans, afterApplied, isQuick, bars, renderBar, diffPre, OP_TEXT, plansByAi: () => plansByAi,

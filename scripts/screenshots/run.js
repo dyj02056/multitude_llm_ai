@@ -77,6 +77,10 @@ const SCENES = [
   { name: '54-workflow', page: 'app' },
   { name: '55-workflow-chain', page: 'app' },
   { name: '56-fact-check', page: 'app' },
+  // v0.34.0
+  { name: '57-fix-loop', page: 'app' },
+  { name: '58-related-files', page: 'app' },
+  { name: '59-branch-apply', page: 'app' },
   { name: '41-side-recall', page: 'side', width: 420 },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];

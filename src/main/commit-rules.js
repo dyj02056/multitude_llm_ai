@@ -78,12 +78,21 @@ function pickCommitPaths(paths, { exists, tracked }) {
   return paths.filter((p) => exists(p) || known.has(p));
 }
 
-/** 하는 일이 정해진 모양인지 마지막으로 확인 (gitcommit.js가 실행 직전에 부른다): add · commit · diff · ls-files · rev-parse만 */
+// ---------- 새 브랜치에 적용 (v0.34.0) ----------
+// 수정안을 적용하기 전에 사용자가 체크했을 때만 "git switch -c mla/<날짜>-<이름>"을 한다 (이미 있는 브랜치 · 저장소가 아닌 폴더는 거절). 이름 규칙은 shared/branch-name.js.
+const { checkBranchName, suggestBranchName } = require('../shared/branch-name');
+
+/** 그 이름의 브랜치가 이미 있는지 (종료 코드 0이면 있음) / 새 브랜치로 옮겨 가며 만들기 */
+const branchExistsArgs = (name) => [...PREFIX, 'rev-parse', '--verify', '--quiet', `refs/heads/${name}`];
+const branchSwitchArgs = (name) => [...PREFIX, 'switch', '-c', name];
+
+/** 하는 일이 정해진 모양인지 마지막으로 확인 (gitcommit.js가 실행 직전에 부른다): add · commit · diff · ls-files · rev-parse, 그리고 switch -c <mla/…>만 */
 function isAllowedCommitStep(args) {
   if (!Array.isArray(args) || args.length <= PREFIX.length) return false;
   if (PREFIX.some((a, i) => args[i] !== a)) return false;
   const sub = args[PREFIX.length];
+  if (sub === 'switch') return args.length === PREFIX.length + 3 && args[PREFIX.length + 1] === '-c' && checkBranchName(args[PREFIX.length + 2]).ok;
   return ['add', 'commit', 'diff', 'ls-files', 'rev-parse'].includes(sub);
 }
 
-module.exports = { MAX_PATHS, MAX_MESSAGE, checkCommitRequest, checkPaths, addArgs, commitArgs, stagedArgs, trackedArgs, splitNul, otherStaged, pickCommitPaths, isAllowedCommitStep, PREFIX };
+module.exports = { checkBranchName, suggestBranchName, branchExistsArgs, branchSwitchArgs, MAX_PATHS, MAX_MESSAGE, checkCommitRequest, checkPaths, addArgs, commitArgs, stagedArgs, trackedArgs, splitNul, otherStaged, pickCommitPaths, isAllowedCommitStep, PREFIX };

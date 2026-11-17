@@ -4,6 +4,7 @@
 //   1) 지금 파일 그대로 npm test (적용 전)
 //   2) 체크한 수정안을 잠깐 써 두고 npm test (적용 후)
 //   v0.28.0: package.json에 lint · typecheck · build가 있으면 화면에서 골라 함께 돌린다 (이름만 받음, 스크립트마다 시간 제한)
+//   v0.34.0: pyproject.toml · Cargo.toml · go.mod가 있으면 pytest · cargo test · go test ./...도 고를 수 있다 (정해 둔 명령 세 개뿐, test-rules.js)
 //   3) 원래 파일로 되돌림 — 성공·실패·중지와 상관없이 항상. 실제 적용은 사용자가 결과를 보고 "선택한 파일 적용"으로 한다.
 // 앱이 2)와 3) 사이에 꺼져도 원본을 잃지 않도록, 쓰기 전에 원본을 앱 데이터 폴더(devtest-recovery.json)에 적어 두고
 // 다음에 그 프로젝트를 열 때 되돌린다 (recover).
@@ -26,7 +27,7 @@ const { t } = require('../shared/i18n');
 /**
  * ipcMain, getWin(): 앱 창, project: main/project.js (열린 폴더 안에서만 읽고 씀), userDataDir: 앱 데이터 폴더
  */
-function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
+function setupDevTest({ ipcMain, getWin, project, userDataDir, findRunner = (name) => R.findRunnerExe(name, { exists: (p) => fs.existsSync(p) }) }) {
   const recoveryFile = path.join(userDataDir, 'devtest-recovery.json');
   let running = null; // { child, stopped }
   let busy = false;
@@ -35,8 +36,9 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
   const root = () => project.info()?.id || null;
 
   /**
-   * package.json의 검사 스크립트(test · lint · typecheck · build 중 있는 것)와 npm 위치.
-   * → { ok, checks: [{ name, script, pre?, post? }], test: test 스크립트 정보 | 오류, npmCli, nodeExe, pkgText } | { ok: false, error }
+   * 고를 수 있는 검사: package.json의 스크립트(test · lint · typecheck · build 중 있는 것) + 표시 파일이 있는 다른 언어 검사(v0.34.0).
+   * → { ok, checks: [{ name, script, pre?, post?, runner? }], test: test 스크립트 정보 | 오류, npmCli, nodeExe, runners: { [name]: { command, args } }, missingRunners: [{ name, marker }] }
+   *   | { ok: false, error }
    */
   async function scriptInfo() {
     if (!root()) return { ok: false, error: t('main.noProject') };
@@ -44,17 +46,48 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
     const pkgText = typeof r.text === 'string' ? r.text : undefined;
     const test = R.readTestScript(pkgText);
     const avail = R.availableChecks(pkgText);
-    if (!avail.ok) return test.ok ? avail : test; // package.json이 없거나 깨졌거나, 검사 스크립트가 하나도 없음
-    const npmCli = R.findNpmCli({ exists: (p) => fs.existsSync(p) });
-    if (!npmCli) return { ok: false, error: t('main.devtest.noNpm') };
-    return { ok: true, checks: avail.checks, test, npmCli, nodeExe: R.findNodeFor(npmCli, { exists: (p) => fs.existsSync(p) }) };
+    // 다른 언어: 맨 위 폴더에 표시 파일이 있고 실행 파일을 찾은 것만
+    const markers = new Set();
+    for (const name of R.RUNNER_CHECKS) {
+      const m = await project.readFile(R.RUNNERS[name].marker, { maxBytes: 1 }).catch(() => ({ missing: true }));
+      if (!m.missing) markers.add(R.RUNNERS[name].marker);
+    }
+    const runners = {};
+    const missingRunners = [];
+    const extra = [];
+    for (const c of R.runnerChecks((m) => markers.has(m))) {
+      const exe = findRunner(c.name); // (테스트에서 바꿔 끼울 수 있다)
+      if (!exe) missingRunners.push({ name: c.name, marker: c.marker });
+      else {
+        runners[c.name] = exe;
+        extra.push({ name: c.name, script: c.label, runner: true });
+      }
+    }
+    if (!avail.ok && !extra.length) return missingRunners.length ? { ok: false, error: t('devtest.noRunnerExe', { list: missingRunners.map((x) => `${x.marker} → ${R.RUNNERS[x.name].label}`).join(', ') }) } : test.ok ? avail : test; // package.json이 없거나 깨졌거나, 검사 스크립트가 하나도 없음
+    let npmCli = null;
+    let nodeExe = null;
+    if (avail.ok) {
+      npmCli = R.findNpmCli({ exists: (p) => fs.existsSync(p) });
+      if (!npmCli && !extra.length) return { ok: false, error: t('main.devtest.noNpm') };
+      nodeExe = npmCli ? R.findNodeFor(npmCli, { exists: (p) => fs.existsSync(p) }) : null;
+    }
+    const checks = [...(npmCli ? avail.checks : []), ...extra];
+    return { ok: true, checks, test, npmCli, nodeExe, runners, missingRunners };
   }
 
-  /** npm test(또는 npm run <script>) 한 번 → { ok, code, timedOut, stopped, ms, output, summary, error? } */
-  function runOnce(npmCli, label, nodeExe = null, script = 'test') {
-    const spec = R.buildTestSpawn({ root: root(), npmCli, execPath: process.execPath, isElectron, nodeExe, script });
-    if (!R.isAllowedTestSpawn(spec, { root: root(), execPath: process.execPath, nodeExe, script })) {
-      return Promise.resolve({ ok: false, error: t('main.devtest.notAllowedRun'), output: '' });
+  /** 검사 한 번: npm test(또는 npm run <script>) · 또는 다른 언어 검사(v0.34.0). → { ok, code, timedOut, stopped, ms, output, summary, error? } */
+  function runOnce(info, label, name = 'test') {
+    let spec;
+    if (R.isRunner(name)) {
+      const exe = info.runners?.[name];
+      if (!exe) return Promise.resolve({ ok: false, error: t('main.devtest.notAllowedRun'), output: '' });
+      spec = R.buildRunnerSpawn({ name, root: root(), exe });
+      if (!R.isAllowedRunnerSpawn(spec, { root: root(), name })) return Promise.resolve({ ok: false, error: t('main.devtest.notAllowedRun'), output: '' });
+    } else {
+      spec = R.buildTestSpawn({ root: root(), npmCli: info.npmCli, execPath: process.execPath, isElectron, nodeExe: info.nodeExe, script: name });
+      if (!R.isAllowedTestSpawn(spec, { root: root(), execPath: process.execPath, nodeExe: info.nodeExe, script: name })) {
+        return Promise.resolve({ ok: false, error: t('main.devtest.notAllowedRun'), output: '' });
+      }
     }
     const started = Date.now();
     return new Promise((resolve) => {
@@ -145,7 +178,8 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
       script: tst.script || null,
       pre: tst.pre || null,
       post: tst.post || null,
-      checks: info.checks.map((c) => ({ name: c.name, script: c.script, pre: c.pre || null, post: c.post || null })),
+      checks: info.checks.map((c) => ({ name: c.name, script: c.script, pre: c.pre || null, post: c.post || null, ...(c.runner ? { runner: true } : {}) })),
+      ...(info.missingRunners?.length ? { missingRunners: info.missingRunners } : {}),
     };
   });
 
@@ -159,19 +193,23 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
       const info = await scriptInfo();
       if (!info.ok) return info;
       const wantTest = rawScripts === undefined || (Array.isArray(rawScripts) && rawScripts.includes('test'));
-      if (wantTest && !info.test.ok) return info.test; // test를 고른 경우: 없으면 예전과 같은 이유로 거절
+      if (wantTest && !info.test.ok && (rawScripts === undefined || !R.isRunner(rawScripts[0]) || rawScripts.includes('test'))) return info.test; // test를 고른 경우: 없으면 예전과 같은 이유로 거절
       const names = rawScripts === undefined ? ['test'] : R.checkScriptNames(rawScripts, info.checks.map((c) => c.name));
       if (!names) return { ok: false, error: t('devtest.badScripts') };
       const checks = names.map((n) => info.checks.find((c) => c.name === n));
 
-      const scripts = checks.flatMap((c) => [c.pre && `pre${c.name}: ${c.pre}`, `${c.name}: ${c.script}`, c.post && `post${c.name}: ${c.post}`]).filter(Boolean);
+      const scripts = checks.flatMap((c) => (c.runner ? [`${c.name}: ${c.script}`] : [c.pre && `pre${c.name}: ${c.pre}`, `${c.name}: ${c.script}`, c.post && `post${c.name}: ${c.post}`])).filter(Boolean);
       // 수정안이 실행 방식(package.json의 test 등 · 실행 영향 파일)을 바꾸면 "적용 후"에는 그것이 돈다 — 확인 창에 따로 보여 준다
       const withBefore = [];
       for (const c of changes) {
         const r = await project.readFile(c.path, { maxBytes: 5 * 1024 * 1024 }).catch(() => ({ missing: true }));
         withBefore.push({ ...c, before: r.missing ? null : typeof r.text === 'string' ? r.text : null });
       }
-      const warn = R.trialWarnings(withBefore, executionRisk, names);
+      const warn = R.trialWarnings(withBefore, executionRisk, names.filter((n) => !R.isRunner(n)));
+      // 다른 언어 검사를 골랐으면 그 검사의 실행 방식을 바꾸는 파일(conftest.py · pyproject.toml · Cargo.toml · build.rs · go.mod …)도 알린다 (v0.34.0)
+      if (names.some(R.isRunner)) {
+        for (const c of withBefore) if (R.RUNNER_SENSITIVE.test(c.path)) warn.riskLines.push(`${c.path} — ${t('devtest.runnerSensitive')}`);
+      }
       const warnText = [
         ...(warn.scriptLines.length ? ['', t('main.devtest.warnScripts'), ...warn.scriptLines] : []),
         ...(warn.riskLines.length ? ['', t('main.devtest.warnRisk'), ...warn.riskLines] : []),
@@ -191,7 +229,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
       if (response !== 0) return { ok: false, error: t('main.cancelled'), cancelled: true };
 
       // 결과: 고른 스크립트마다 { name, script, before, after } (v0.28.0). 예전 모양(script · before · after)은 test 것으로 함께 준다
-      const results = checks.map((c) => ({ name: c.name, script: c.script, before: null, after: null }));
+      const results = checks.map((c) => ({ name: c.name, script: c.script, before: null, after: null, ...(c.runner ? { runner: true } : {}) }));
       const reply = (extra = {}) => {
         const test = results.find((x) => x.name === 'test');
         return { ok: true, scripts: names, results, script: test?.script || null, before: test?.before || null, after: test?.after || null, ...extra };
@@ -199,7 +237,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
 
       // 1) 적용 전: 스크립트마다 차례로 (중지하면 거기서 멈춘다)
       for (const r of results) {
-        r.before = await runOnce(info.npmCli, 'before', info.nodeExe, r.name);
+        r.before = await runOnce(info, 'before', r.name);
         if (r.before.stopped) return reply();
       }
 
@@ -222,7 +260,7 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir }) {
           else await project.writeFile(c.path, c.after);
         }
         for (const r of results) {
-          r.after = await runOnce(info.npmCli, 'after', info.nodeExe, r.name);
+          r.after = await runOnce(info, 'after', r.name);
           if (r.after.stopped) break;
         }
       } catch (err) {

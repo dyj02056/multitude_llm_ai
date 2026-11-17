@@ -54,6 +54,7 @@ const RENDERER_FILES = [
   'workflow-ui.js', // 작업 흐름 (v0.33.0)
   'factcheck-ui.js', // 사실 확인 탭 (v0.33.0)
   'project.js',
+  'project-related.js', // 관련 파일 찾기 (v0.34.0)
   'project-changes.js',
   'project-runs.js', // v0.31.0: project-changes.js에서 떼어 냄 (큰 작업 · 이어서 받기)
   'project-devtest.js', // 검사 실행

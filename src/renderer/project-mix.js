@@ -98,6 +98,7 @@
     $('#patchAll').hidden = true;
     $('#patchApply').hidden = false;
     $('#patchApply').textContent = t('mix.apply');
+    P.setupBranch(plansByAi.length === 1 ? plansByAi[0].name : 'mix');
     $('#patchApply').onclick = async () => {
       const { plans, sources, items } = chosen();
       if (!plans.length) return;
@@ -107,8 +108,10 @@
       $('#patchApply').disabled = true;
       try {
         const ai = { id: names.length === 1 ? items[0].ai.id : null, name: names.join(' + '), color: null, plans: [], mixed: names.length > 1 };
+        const branch = await P.prepareBranch(); // 체크했다면 적용 전에 새 브랜치로 (v0.34.0)
+        if (!branch.ok) return;
         const { entry, text } = await P.applyPlans(ai, plans, { sources });
-        P.afterApplied(entry, text);
+        P.afterApplied(entry, branch.branch ? `${text} — ${t('project.branch.created', { name: branch.branch, from: branch.from || '?' })}` : text);
       } finally {
         $('#patchApply').disabled = false;
       }

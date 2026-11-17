@@ -119,6 +119,7 @@ contextBridge.exposeInMainWorld('host', {
     // 적용 후 커밋 (v0.28.0): 경로 목록 · 메시지만 넘기고, 검사 · 실행은 메인(gitcommit.js)이 한다. push는 하지 않는다
     commitInfo: (paths) => ipcRenderer.invoke('git:commitInfo', paths),
     commit: (req) => ipcRenderer.invoke('git:commit', req),
+    createBranch: (name) => ipcRenderer.invoke('git:branchCreate', name), // 새 브랜치에 적용 (v0.34.0)
   },
   // 미리보기 창의 테스트 실행 (Windows 앱 전용): 고칠 파일 목록만 넘기고, 확인·실행·되돌리기는 메인(devtest.js)이 한다
   devtest: {

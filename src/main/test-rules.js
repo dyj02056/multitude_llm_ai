@@ -17,6 +17,21 @@ const { t } = require('../shared/i18n');
 const TEST_TIMEOUT_MS = 3 * 60 * 1000; // 스크립트 한 번의 시간 제한 (스크립트마다 따로)
 // 미리보기 창에서 고를 수 있는 검사 스크립트 (v0.28.0). 이 순서로 실행한다. 이름이 이 목록에 없으면 실행하지 않는다.
 const CHECK_SCRIPTS = ['test', 'lint', 'typecheck', 'build'];
+// 다른 언어의 검사 (v0.34.0): 정해 둔 명령 세 개뿐. 그 프로젝트 맨 위 폴더에 표시 파일이 있을 때만 보이고, 글로 적은 명령은 받지 않는다.
+//   pytest     pyproject.toml → python -m pytest -q   (Windows는 py 런처가 있으면 py -3 -m pytest -q)
+//   cargo-test Cargo.toml     → cargo test
+//   go-test    go.mod         → go test ./...
+// npm 스크립트와 같게 셸 없이 실행 파일을 직접 띄우고(PATH의 절대 경로 폴더에서 찾음 — 프로젝트 안의 가짜 실행 파일은 쓰지 않음),
+// 스크립트마다 시간 제한 · 출력 가림 · 적용 전 · 후 비교도 같다.
+const RUNNER_CHECKS = ['pytest', 'cargo-test', 'go-test'];
+const RUNNERS = {
+  pytest: { marker: 'pyproject.toml', label: 'python -m pytest -q' },
+  'cargo-test': { marker: 'Cargo.toml', label: 'cargo test' },
+  'go-test': { marker: 'go.mod', label: 'go test ./...' },
+};
+// 다른 언어 검사를 골랐을 때, 수정안이 그 검사의 실행 방식을 바꾸는 파일이면 확인 창에서 따로 알린다
+const RUNNER_SENSITIVE = /(^|\/)(conftest\.py|pyproject\.toml|setup\.py|setup\.cfg|pytest\.ini|tox\.ini|Cargo\.toml|build\.rs|go\.mod|go\.sum|\.cargo\/config(\.toml)?)$/i;
+const ALL_CHECKS = [...CHECK_SCRIPTS, ...RUNNER_CHECKS]; // 미리보기 창에서 고를 수 있는 검사 전체 (이 순서로 실행)
 const MAX_OUTPUT = 2 * 1024 * 1024;
 const NPM_DEFAULT_TEST = /no test specified/i; // npm init이 넣는 기본 test 스크립트
 
@@ -82,14 +97,91 @@ function availableChecks(pkgText) {
  * → CHECK_SCRIPTS 순서로 정리한 이름 목록 | null
  */
 function checkScriptNames(raw, available) {
-  if (!Array.isArray(raw) || !raw.length || raw.length > CHECK_SCRIPTS.length) return null;
+  if (!Array.isArray(raw) || !raw.length || raw.length > ALL_CHECKS.length) return null;
   const have = new Set(available);
   const seen = new Set();
   for (const n of raw) {
-    if (typeof n !== 'string' || !CHECK_SCRIPTS.includes(n) || !have.has(n) || seen.has(n)) return null;
+    if (typeof n !== 'string' || !ALL_CHECKS.includes(n) || !have.has(n) || seen.has(n)) return null;
     seen.add(n);
   }
-  return CHECK_SCRIPTS.filter((n) => seen.has(n));
+  return ALL_CHECKS.filter((n) => seen.has(n));
+}
+
+/**
+ * 표시 파일(pyproject.toml · Cargo.toml · go.mod)이 있는 다른 언어 검사 → [{ name, marker, label }] (RUNNER_CHECKS 순서)
+ * has(marker): 그 파일이 프로젝트 맨 위에 있는지
+ */
+function runnerChecks(has) {
+  return RUNNER_CHECKS.filter((n) => has(RUNNERS[n].marker)).map((n) => ({ name: n, marker: RUNNERS[n].marker, label: RUNNERS[n].label }));
+}
+
+const isRunner = (name) => RUNNER_CHECKS.includes(name);
+
+/**
+ * 다른 언어 검사의 실행 파일을 PATH에서 찾는다 (절대 경로 폴더만 — 프로젝트 안의 상대 경로는 보지 않음).
+ * → { command, args } | null. args는 이름마다 정해진 것 (py 런처는 앞에 -3).
+ * Windows: pytest는 python.exe(Microsoft Store 별칭 폴더 WindowsApps의 것은 제외) → 없으면 py.exe, cargo는 cargo.exe(+ ~/.cargo/bin), go는 go.exe(+ Program Files\Go\bin)
+ */
+function findRunnerExe(name, { env = process.env, platform = process.platform, exists }) {
+  if (!isRunner(name)) return null;
+  const win = platform === 'win32';
+  const P = win ? path.win32 : path.posix;
+  const ext = win ? '.exe' : '';
+  const dirs = String(env.PATH || env.Path || '')
+    .split(win ? ';' : ':')
+    .filter((d) => d && P.isAbsolute(d));
+  const extra = [];
+  if (win) {
+    if (name === 'cargo-test' && env.USERPROFILE) extra.push(P.join(env.USERPROFILE, '.cargo', 'bin'));
+    if (name === 'go-test') extra.push(...[env.ProgramFiles, env['ProgramFiles(x86)']].filter(Boolean).map((b) => P.join(b, 'Go', 'bin')));
+  } else {
+    if (name === 'cargo-test' && env.HOME) extra.push(P.join(env.HOME, '.cargo', 'bin'));
+    if (name === 'go-test') extra.push('/usr/local/go/bin');
+  }
+  const find = (names, { skipStore = false } = {}) => {
+    for (const dir of [...dirs, ...extra]) {
+      if (skipStore && /[\\/]WindowsApps([\\/]|$)/i.test(dir)) continue;
+      for (const n of names) {
+        const p = P.join(dir, n + ext);
+        if (exists(p)) return p;
+      }
+    }
+    return null;
+  };
+  if (name === 'pytest') {
+    const py = find(win ? ['python'] : ['python3', 'python'], { skipStore: true });
+    if (py) return { command: py, args: ['-m', 'pytest', '-q'] };
+    const launcher = win ? find(['py']) : null;
+    return launcher ? { command: launcher, args: ['-3', '-m', 'pytest', '-q'] } : null;
+  }
+  const exe = find([name === 'cargo-test' ? 'cargo' : 'go']);
+  return exe ? { command: exe, args: name === 'cargo-test' ? ['test'] : ['test', './...'] } : null;
+}
+
+/** 다른 언어 검사 실행 방법: 셸 없이, 프로젝트 폴더에서, 색 · 대화형 끄기 */
+function buildRunnerSpawn({ name, root, exe, env = process.env }) {
+  if (!isRunner(name) || !exe) throw new Error(t('devtest.notAllowed', { name: String(name) }));
+  const childEnv = { ...env, CI: '1', NO_COLOR: '1', FORCE_COLOR: '0', CARGO_TERM_COLOR: 'never', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1' };
+  for (const k of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_TEST_CONTEXT', 'npm_lifecycle_event', 'npm_lifecycle_script']) delete childEnv[k];
+  return { command: exe.command, args: [...exe.args], options: { cwd: root, env: childEnv, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] } };
+}
+
+/** 허용 규칙: 정해진 실행 파일 이름 · 정해진 인자 · 셸 없음 · 프로젝트 폴더에서일 때만 (devtest.js가 spawn 직전에 다시 검사) */
+function isAllowedRunnerSpawn(spec, { root, name }) {
+  if (!isRunner(name) || !spec || typeof spec.command !== 'string') return false;
+  const win = /^[A-Za-z]:[\\/]|^\\\\/.test(spec.command);
+  const P = win ? path.win32 : path.posix;
+  if (!P.isAbsolute(spec.command)) return false;
+  const base = P.basename(spec.command).toLowerCase().replace(/\.exe$/, '');
+  const same = (a, b) => Array.isArray(a) && a.length === b.length && b.every((x, i) => a[i] === x);
+  const ok =
+    name === 'pytest'
+      ? (['python', 'python3'].includes(base) && same(spec.args, ['-m', 'pytest', '-q'])) || (base === 'py' && same(spec.args, ['-3', '-m', 'pytest', '-q']))
+      : name === 'cargo-test'
+        ? base === 'cargo' && same(spec.args, ['test'])
+        : base === 'go' && same(spec.args, ['test', './...']);
+  const o = spec.options || {};
+  return ok && o.shell === false && o.cwd === root;
 }
 
 /** npm에 넘길 인자: test는 npm test, 나머지는 npm run <이름> */
@@ -194,6 +286,19 @@ function summarizeTestOutput(text) {
   pass = num(/^\s*(\d+)\s+passing/gm);
   fail = num(/^\s*(\d+)\s+failing/gm);
   if (pass !== null || fail !== null) return { pass: pass ?? 0, fail: fail ?? 0 };
+  // pytest (v0.34.0): "=== 1 failed, 3 passed in 0.12s ===" · "3 passed in 0.10s" · "no tests ran"
+  const pyLine = [...s.matchAll(/^.*\b(?:passed|failed|error|errors)\b.*\bin\s+[\d.]+s.*$/gm)].pop()?.[0];
+  if (pyLine) {
+    const n = (re) => Number(re.exec(pyLine)?.[1] || 0);
+    return { pass: n(/(\d+)\s+passed/), fail: n(/(\d+)\s+failed/) + n(/(\d+)\s+errors?\b/) };
+  }
+  // cargo test: 시험 묶음마다 "test result: ok. 5 passed; 0 failed; …" — 모두 더한다
+  const cargo = [...s.matchAll(/^test result: \w+\. (\d+) passed; (\d+) failed;/gm)];
+  if (cargo.length) return { pass: cargo.reduce((n, m) => n + Number(m[1]), 0), fail: cargo.reduce((n, m) => n + Number(m[2]), 0) };
+  // go test: 패키지마다 "ok  \tname\t0.1s" 또는 "FAIL\tname\t0.1s" (패키지 수로 센다)
+  const goOk = [...s.matchAll(/^ok\s+\S+/gm)].length;
+  const goFail = [...s.matchAll(/^FAIL\s+\S+/gm)].length;
+  if (goOk || goFail) return { pass: goOk, fail: goFail };
   return null;
 }
 
@@ -259,6 +364,15 @@ module.exports = {
   TEST_TIMEOUT_MS,
   MAX_OUTPUT,
   CHECK_SCRIPTS,
+  RUNNER_CHECKS,
+  RUNNERS,
+  RUNNER_SENSITIVE,
+  ALL_CHECKS,
+  runnerChecks,
+  isRunner,
+  findRunnerExe,
+  buildRunnerSpawn,
+  isAllowedRunnerSpawn,
   readTestScript,
   readScript,
   availableChecks,
