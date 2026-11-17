@@ -32,6 +32,11 @@ jobs:
 
       - run: npm ci
 
+      # Electron 44부터 npm ci 때가 아니라 처음 require('electron') 할 때 바이너리를 받는다. 테스트 파일 여럿이 동시에 받으면
+      # 같은 폴더에 동시에 풀다가 실패하므로(os error 183, v0.38.1 CI), 테스트 전에 한 번만 받아 둔다.
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+
       - name: Check extension folder is up to date
         run: npm run check:ext
 
