@@ -73,6 +73,10 @@ const SCENES = [
   { name: '51-analysis-rate', page: 'app' },
   { name: '52-debate-roles', page: 'app' },
   { name: '53-debate-note', page: 'app' },
+  // v0.33.0
+  { name: '54-workflow', page: 'app' },
+  { name: '55-workflow-chain', page: 'app' },
+  { name: '56-fact-check', page: 'app' },
   { name: '41-side-recall', page: 'side', width: 420 },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];

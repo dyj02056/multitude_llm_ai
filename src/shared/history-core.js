@@ -70,7 +70,8 @@
   //   handoff  : { intent: 'review' | 'counter' | 'continue', from, to, fromName, toName, state, text, md } — 한 답변을 다른 AI에게 넘김
   //   fallback : { from, to, fromName, toName, state, text, md } — 사용 한도에 걸린 AI 대신 다른 AI에게 같은 질문
   //   debate   : { round, rounds, answers: [{ id, name, state, text, md }] } — 토론 한 라운드 (결론은 synth의 mode 'debate')
-  const CHAIN_KINDS = new Set(['handoff', 'fallback', 'debate']);
+  const CHAIN_KINDS = new Set(['handoff', 'fallback', 'debate', 'workflow']);
+  const WORKFLOW_KINDS = new Set(['draft', 'critique', 'counter', 'revise', 'verify', 'continue']);
   const CHAIN_INTENTS = new Set(['review', 'counter', 'continue']);
   const DEBATE_ROLES = new Set(['pro', 'con', 'rebut']);
   const MAX_CHAIN = 60; // 기록 하나의 chain 최대 개수
@@ -102,6 +103,25 @@
       if (!answers.length) return null;
       const note = str(e.note, 4000).trim(); // 이 라운드 앞에 사용자가 끼워 넣은 말 (v0.32.0)
       return { kind: 'debate', round, rounds: Number.isInteger(rounds) && rounds >= round ? rounds : round, at, answers, ...(note ? { note } : {}) };
+    }
+    // 작업 흐름 한 걸음 (v0.33.0): { step, steps, stepKind, to, toName, state, text, md, reused? } — 보낸 쪽(from)이 없다
+    if (e.kind === 'workflow') {
+      const step = Number(e.step);
+      const steps = Number(e.steps);
+      if (!okSvcId(e.to) || !Number.isInteger(step) || step < 1 || step > 10 || !WORKFLOW_KINDS.has(e.stepKind)) return null;
+      return {
+        kind: 'workflow',
+        step,
+        steps: Number.isInteger(steps) && steps >= step ? steps : step,
+        stepKind: e.stepKind,
+        to: e.to,
+        toName: str(e.toName, MAX_NAME) || e.to,
+        at,
+        state: stateOf(e.state),
+        text: str(e.text, MAX_CHAIN_TEXT),
+        md: str(e.md, MAX_CHAIN_TEXT),
+        ...(e.reused === true ? { reused: true } : {}),
+      };
     }
     if (!okSvcId(e.from) || !okSvcId(e.to) || e.from === e.to) return null;
     if (e.kind === 'handoff' && !CHAIN_INTENTS.has(e.intent)) return null;
@@ -273,7 +293,8 @@
         question: String(r.question || '').slice(0, 200),
         answered: answers.filter((a) => a && a.text).length,
         targets: Array.isArray(r.targets) ? r.targets.length : 0,
-        synth: synth.filter((s) => s.mode !== 'analysis' && s.mode !== 'debate').length,
+        synth: synth.filter((s) => s.mode !== 'analysis' && s.mode !== 'debate' && s.mode !== 'factcheck').length,
+        factcheck: synth.filter((s) => s.mode === 'factcheck').length,
         analysis: synth.filter((s) => s.mode === 'analysis').length,
         debate: synth.filter((s) => s.mode === 'debate').length,
         chain: chainOf(r).length,

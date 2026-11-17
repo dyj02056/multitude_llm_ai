@@ -49,6 +49,7 @@
       synthTarget: state?.synthTarget,
       autoSynth: !!state?.autoSynth,
       debate: window.debateDefaults?.() || null,
+      workflow: window.workflowDefaults?.() || null, // 작업 흐름 (v0.33.0)
     });
   }
 
@@ -82,6 +83,7 @@
     if (p.debate) {
       lines.push([t('preset.sumDebate'), (p.debate.roles && Object.keys(p.debate.roles).length ? `${t('preset.sumDebateRoles', { roles: Object.entries(p.debate.roles).map(([id, r]) => `${nameOf(id)}=${t(`debate.role.${r}`)}`).join(', ') })} · ` : '') + (p.debate.interject ? `${t('preset.sumDebateInterject')} · ` : '') + t('preset.sumDebateValue', { names: p.debate.participants.map(nameOf).join(', ') || '-', rounds: p.debate.rounds || '-', judge: p.debate.judge ? nameOf(p.debate.judge) : '-' })]);
     }
+    if (p.workflow) lines.push([t('preset.sumWorkflow'), p.workflow.steps.map((s) => t('preset.sumWorkflowStep', { kind: t('workflow.kind.' + s.kind), name: nameOf(s.who) })).join(' → ') + (p.workflow.stepByStep ? ' · ' + t('preset.sumWorkflowPause') : '')]);
     return lines;
   }
 
@@ -106,6 +108,7 @@
     api().setTemplate(tid);
     api().refreshAll();
     window.setDebateDefaults?.(p.debate);
+    window.setWorkflowDefaults?.(p.workflow);
     if (plan.layout && plan.layout !== state.layout) host.setLayout(plan.layout);
     const notes = [];
     if (plan.missing.services.length) notes.push(t('preset.missingServices', { names: plan.missing.services.join(', ') }));

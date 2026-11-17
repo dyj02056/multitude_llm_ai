@@ -568,6 +568,16 @@
     resend: async (id) => (okChainId(id) && hasPanelId(id) ? rounds.resend(id) : { ok: false, error: MLA.i18n.t('handoff.errClosed') }),
     sendElsewhere: async (from, to) =>
       okChainId(from) && okChainId(to) && hasPanelId(to) ? rounds.sendElsewhere(from, to) : { ok: false, error: MLA.i18n.t('handoff.errClosed') },
+    // 작업 흐름 · 사실 확인 (v0.33.0)
+    workflow: {
+      start: async (cfg) => rounds.startWorkflow(MLA.workflow.cleanWorkflowCfg(cfg, okChainId)),
+      stop: async () => rounds.stopWorkflow(),
+      resume: async (opts) => rounds.resumeWorkflow({ skip: !!(opts && opts.skip === true) }),
+    },
+    factcheck: {
+      start: async (cfg) => rounds.startFactcheck(MLA.factcheck.cleanFactCfg(cfg, okChainId)),
+      stop: async () => rounds.stopFactcheck(),
+    },
     debate: {
       start: async (cfg) => {
         const c = cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? cfg : {};

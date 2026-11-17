@@ -66,13 +66,13 @@
       return { kind: e.kind, title: t(`notify.${e.kind}Title`), body: t(`notify.${e.kind}Body`, { names: who }), view: null };
     }
     if (e.kind === 'synth') {
-      const what = t(e.mode === 'analysis' ? 'notify.analysis' : e.mode === 'debate' ? 'notify.debate' : 'notify.synth');
+      const what = t(e.mode === 'analysis' ? 'notify.analysis' : e.mode === 'debate' ? 'notify.debate' : e.mode === 'workflow' ? 'notify.workflow' : e.mode === 'factcheck' ? 'notify.factcheck' : 'notify.synth');
       const judge = typeof e.judge === 'string' && e.judge ? e.judge : 'AI';
       return {
         kind: 'synth',
         title: t('notify.synthTitle', { what }),
         body: t(e.ok ? 'notify.synthDone' : 'notify.synthFailed', { judge, what }),
-        view: e.ok && (e.mode === 'analysis' || e.mode === 'debate') ? 'compare' : null, // 토론 결론도 답변 비교 화면에서 (v0.26.0)
+        view: e.ok && ['analysis', 'debate', 'workflow', 'factcheck'].includes(e.mode) ? 'compare' : null, // 토론 결론 · 작업 흐름 · 사실 확인도 답변 비교 화면에서
       };
     }
     return null;

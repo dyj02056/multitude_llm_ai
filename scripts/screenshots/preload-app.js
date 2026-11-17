@@ -55,6 +55,23 @@ if (scene === '30-analysis-compare') answers.analyses = [analysis2, answers.anal
 if (scene === '51-analysis-rate') {
   for (const a of answers.answers) a.text = a.md = `${a.text}\n\n참고: https://docs.python.org/3/tutorial/ · [MDN JavaScript 안내](https://developer.mozilla.org/docs/Web/JavaScript/Guide)${a.id === 'gemini' || a.id === 'chatgpt' ? ' · https://survey.stackoverflow.co/2025' : ''}`;
 }
+// v0.33.0 작업 흐름 결과 장면: 초안 → 비판 → 고쳐 쓰기 → 검증이 chain에 걸음마다 남은 모습
+if (scene === '55-workflow-chain') {
+  const w = (step, stepKind, to, toName, text, extra = {}) => ({ kind: 'workflow', step, steps: 4, stepKind, to, toName, at: now - (5 - step) * 90e3, state: 'done', text, md: text, ...extra });
+  answers.chain = [
+    w(1, 'draft', 'gemini', 'Gemini', '파이썬은 배우기 쉽고 데이터 분석 · AI에 많이 쓰입니다. 실행 속도는 느립니다.', { reused: true }),
+    w(2, 'critique', 'chatgpt', 'ChatGPT', '1) "느립니다"는 근거가 없습니다. 2) 오픈소스라는 점이 빠졌습니다. 3) 처음 배울 때의 장점을 더 구체적으로.'),
+    w(3, 'revise', 'gemini', 'Gemini', '파이썬은 문법이 단순해 배우기 쉽고, 데이터 분석 · AI에 많이 쓰이는 오픈소스 언어입니다. 순수 실행 속도는 느린 편이지만 무거운 계산은 C로 만든 확장 모듈이 맡습니다.'),
+    w(4, 'verify', 'deepseek', 'DeepSeek', '## 검증 결과\n- 오픈소스 여부: 통과\n- 속도 설명: 통과\n\n## 남은 문제\n- 없음\n\n## 판정\n통과'),
+  ];
+  answers.debates = [];
+}
+// v0.33.0 사실 확인 장면: 확인 결과 한 건
+if (scene === '56-fact-check') {
+  const claims = ['파이썬은 1991년에 처음 공개되었다', '자바스크립트는 1996년에 나왔다', '파이썬은 컴파일 언어다', 'V8 엔진은 JIT 컴파일을 쓴다'];
+  const md = ['| 번호 | 판정 | 근거 · 출처 |', '|---|---|---|', '| 1 | 확인 | 1991년 2월 0.9.0 공개 https://docs.python.org/3/faq/general.html |', '| 2 | 반박 | 1995년 12월 공개, 1996년은 표준화 https://developer.mozilla.org/docs/Web/JavaScript/About_JavaScript |', '| 3 | 일부 | 바이트코드로 컴파일한 뒤 해석 실행 |', '| 4 | 출처 없음 | 믿을 만한 출처를 찾지 못함 |'].join('\n');
+  answers.factchecks = [{ judge: 'Perplexity', at: now - 120e3, text: md, md, mode: 'factcheck', names: ['Gemini'], claims, extractor: 'Gemini' }];
+}
 // v0.32.0 문단 맞추기 장면: 같은 이야기를 다르게 쓴 네 답변
 if (scene === '48-compare-align') {
   const say = {
@@ -397,6 +414,18 @@ window.addEventListener('DOMContentLoaded', async () => {
       await sleep(300);
       $('#interjectText').value = '속도뿐 아니라 배우는 비용도 따져 줘';
     }
+  }
+  if (scene === '54-workflow') {
+    for (const id of ['gemini', 'chatgpt', 'deepseek']) emit('panel:status', { id, answer: 'done', chars: S.ANSWERS[id].length });
+    await sleep(100);
+    click('#workflowBtn');
+    await sleep(400);
+  }
+  if (scene === '55-workflow-chain' || scene === '56-fact-check') {
+    click('#compareBtn');
+    await sleep(500);
+    click('#compareTabs button[data-ctab="' + (scene === '56-fact-check' ? 'fact' : 'chain') + '"]');
+    await sleep(300);
   }
   if (['48-compare-align', '49-compare-table', '50-compare-code', '51-analysis-rate'].includes(scene)) {
     click('#compareBtn');

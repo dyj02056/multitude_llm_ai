@@ -39,6 +39,15 @@ contextBridge.exposeInMainWorld('host', {
     stop: () => ipcRenderer.invoke('debate:stop'),
     interject: (text) => ipcRenderer.invoke('debate:interject', text),
   },
+  workflow: {
+    start: (cfg) => ipcRenderer.invoke('workflow:start', cfg),
+    stop: () => ipcRenderer.invoke('workflow:stop'),
+    resume: (opts) => ipcRenderer.invoke('workflow:resume', opts),
+  },
+  factcheck: {
+    start: (cfg) => ipcRenderer.invoke('factcheck:start', cfg),
+    stop: () => ipcRenderer.invoke('factcheck:stop'),
+  },
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
   setView: (value) => ipcRenderer.send('view:set', value),
   getAnswers: () => ipcRenderer.invoke('answers:get'),

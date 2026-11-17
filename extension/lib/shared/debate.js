@@ -37,7 +37,7 @@
 
     /** 토론 시작 → { ok } | { ok: false, error }. 진행은 status로 알리고, 끝나기를 기다리지 않고 바로 돌아온다. */
     async function start(cfg) {
-      if (run) return fail(t('debate.errRunning'));
+      if (run) return { ok: false, error: t('debate.errRunning') }; // 진행 중인 토론의 상태 표시를 덮어쓰지 않는다 (v0.33.0)
       const r = d.getRound();
       if (!r) return fail(t('debate.errNoRound'));
       const c = normalizeDebate(cfg, d.openIds(), d.defaultJudge(), d.judgeIds?.());

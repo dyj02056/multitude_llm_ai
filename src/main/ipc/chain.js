@@ -6,6 +6,8 @@
 // [쉽게 말하면] 패널 머리줄의 → 넘기기, 패널 아래 [다시 보내기] · [다른 AI로], 토론 창의 [시작] · [멈추기]가 부르는 곳입니다.
 
 const { INTENTS, MAX_ROUNDS, MAX_NOTE_CHARS, cleanDebateExtras } = require('../../shared/chain');
+const { cleanWorkflowCfg } = require('../../shared/workflow');
+const { cleanFactCfg } = require('../../shared/factcheck');
 const { t } = require('../../shared/i18n');
 
 const okId = (v) => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(v);
@@ -36,6 +38,12 @@ function register(ctx) {
   ipcMain.handle('debate:start', (_e, cfg) => ctx.rounds().startDebate(cleanDebateCfg(cfg)));
   ipcMain.handle('debate:stop', () => ctx.rounds().stopDebate());
   // 라운드 사이 끼어들기 (v0.32.0): 글만 받는다 (4000자까지, 비어도 됨 — 그냥 이어 가기)
+  // 작업 흐름 · 사실 확인 (v0.33.0): 걸음 · 설정은 아는 칸만 받고 규칙 검사는 shared/workflow.js · factcheck.js
+  ipcMain.handle('workflow:start', (_e, cfg) => ctx.rounds().startWorkflow(cleanWorkflowCfg(cfg, okId)));
+  ipcMain.handle('workflow:stop', () => ctx.rounds().stopWorkflow());
+  ipcMain.handle('workflow:resume', (_e, opts) => ctx.rounds().resumeWorkflow({ skip: !!(opts && opts.skip === true) }));
+  ipcMain.handle('factcheck:start', (_e, cfg) => ctx.rounds().startFactcheck(cleanFactCfg(cfg, okId)));
+  ipcMain.handle('factcheck:stop', () => ctx.rounds().stopFactcheck());
   ipcMain.handle('debate:interject', (_e, text) => ctx.rounds().interjectDebate(typeof text === 'string' ? text.slice(0, MAX_NOTE_CHARS) : ''));
 }
 

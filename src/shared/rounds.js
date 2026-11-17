@@ -8,10 +8,10 @@
 // 패널을 실제로 다루는 방법(adapter, 아래 a)은 Windows 앱과 크롬 확장이 각자 넘겨줍니다.
 (function (root, factory) {
   const M = root.MLA || {};
-  const api = factory(M.synth, M.services, M.sendPlan, M.chain, M.retry, M.debate, M.i18n, M.recommend);
+  const api = factory(M.synth, M.services, M.sendPlan, M.chain, M.retry, M.debate, M.i18n, M.recommend, M.workflow, M.factcheck, M.analysis);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.MLA = root.MLA || {}).rounds = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services, sendPlan, chainLib, retryLib, debateLib, i18n, recommendLib) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (synth, services, sendPlan, chainLib, retryLib, debateLib, i18n, recommendLib, workflowLib, factcheckLib, analysisLib) {
   'use strict';
 
   const { buildSynthPrompt, analysisNames } = synth || require('./synth');
@@ -22,6 +22,9 @@
   const { createDebate } = debateLib || require('./debate');
   const t = (i18n || require('./i18n')).t;
   const { classifyQuestion } = recommendLib || require('./recommend');
+  const { createWorkflow } = workflowLib || require('./workflow'); // 작업 흐름 (v0.33.0)
+  const { createFactcheck } = factcheckLib || require('./factcheck'); // 사실 확인 (v0.33.0)
+  const AN = analysisLib || require('./analysis');
   const FINISHED = new Set(['done', 'timeout', 'no-answer']);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -389,6 +392,7 @@
         analyses: round?.analyses || [],
         chain: Array.isArray(rec?.chain) ? rec.chain : [],
         debates: synths.filter((s) => s.mode === 'debate'),
+        factchecks: synths.filter((s) => s.mode === 'factcheck'), // 사실 확인 결과 (v0.33.0)
       };
     }
 
@@ -497,6 +501,42 @@
       log: a.log,
     });
 
+    // 작업 흐름 (v0.33.0): 정한 순서대로 AI 여러 개에게 차례로 (shared/workflow.js)
+    const workflow = createWorkflow({
+      sendAndWait,
+      readAnswer,
+      nameOf,
+      openIds,
+      getRound: () => round,
+      history: { addChain: (hid, e) => a.history.addChain?.(hid, e) },
+      status: (patch) => a.sendSynthStatus({ ...patch, mode: 'workflow' }),
+      notify: (e) => a.notify?.(e),
+      cancel: cancelWatch,
+      log: a.log,
+    });
+
+    // 사실 확인 (v0.33.0): 답에서 주장을 뽑아 검색형 AI 하나에 한 번에 확인 (shared/factcheck.js)
+    const factcheck = createFactcheck({
+      sendAndWait,
+      readAnswer,
+      nameOf,
+      openIds,
+      judgeIds: () => [...openIds(), ...(a.localJudge && headlessLocal(a.localJudge.id) ? [a.localJudge.id] : [])],
+      defaultJudge: () => a.prefs().synthTarget,
+      getRound: () => round,
+      // 이번 질문의 최신 분석의 "최종 답변" (분석이 없거나 형식이 깨졌으면 '')
+      analysisFinal: () => {
+        const an = round?.analysis;
+        const res = an ? AN.parseAnalysis(an.md || an.text, { names: an.names || [] }) : null;
+        return res?.ok ? res.final : '';
+      },
+      history: { addSynth: (hid, e) => a.history.addSynth(hid, e) },
+      status: (patch) => a.sendSynthStatus({ ...patch, mode: 'factcheck' }),
+      notify: (e) => a.notify?.(e),
+      cancel: cancelWatch,
+      log: a.log,
+    });
+
     return {
       sendAll,
       sendFollowUp,
@@ -514,6 +554,13 @@
       stopDebate: () => debate.stop(),
       interjectDebate: (text) => debate.interject(text), // 라운드 사이 끼어들기 (v0.32.0)
       debateDone: () => debate.whenDone(),
+      startWorkflow: (cfg) => workflow.start(cfg),
+      stopWorkflow: () => workflow.stop(),
+      resumeWorkflow: (opts) => workflow.resume(opts),
+      workflowDone: () => workflow.whenDone(),
+      startFactcheck: (cfg) => factcheck.start(cfg),
+      stopFactcheck: () => factcheck.stop(),
+      factcheckDone: () => factcheck.whenDone(),
     };
   }
 

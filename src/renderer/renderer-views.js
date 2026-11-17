@@ -30,18 +30,20 @@ const saveCompareView = () => {
 
 /** 답변 비교 화면: 마지막 질문과 각 AI의 최신 답변(또는 분석 결과)을 보여 줍니다. */
 async function renderCompare() {
-  const { question, answers, analysis, analyses, chain, debates } = await host.getAnswers();
+  const { question, answers, analysis, analyses, chain, debates, factchecks } = await host.getAnswers();
   $('#compareQuestion').textContent = question || t('ui.compare.noQuestion');
   compareView.answers = answers;
   compareView.analysis = analysis || null;
   compareView.analyses = analyses || []; // 이번 질문의 분석 전부 (v0.26.0 다시 분석 비교)
   compareView.chain = chain || []; // 이어 묻기 · 토론 (v0.26.0)
   compareView.debates = debates || [];
+  compareView.factchecks = factchecks || []; // 사실 확인 결과 (v0.33.0)
   compareView.question = question;
   renderCompareTabs();
   renderCompareAnswers();
   renderCompareAnalysis();
   renderCompareChain();
+  window.renderCompareFact?.();
 }
 
 /** 이어 묻기 · 토론 탭 (v0.26.0, chain-views.js chainBlock) */
@@ -60,6 +62,7 @@ function renderCompareTabs() {
   const tab = document.querySelector('#compareTabs [data-ctab="analysis"]');
   tab.textContent = n?.ok ? t('ui.compare.analysisTabCount', { n: n.disagreements.length }) : t('ui.compare.analysisTab');
   const count = (compareView.chain || []).length + (compareView.debates || []).length;
+  window.renderCompareFact?.(); // 사실 확인 탭 이름의 개수도 맞춘다
   document.querySelector('#compareTabs [data-ctab="chain"]').textContent = count ? t('compare.chainTabCount', { n: count }) : t('compare.chainTab');
 }
 

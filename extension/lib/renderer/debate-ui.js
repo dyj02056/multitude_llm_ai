@@ -41,6 +41,9 @@
     const n = checked().length;
     $('#debateSub').textContent = t('debate.sub', { n, max: CH.MAX_PARTICIPANTS });
     $('#debateStart').disabled = n < CH.MIN_PARTICIPANTS || !open?.question;
+    // 보낼 횟수 (v0.33.0): 라운드마다 참가 AI 수만큼 + 판정 1번 — 사용 한도를 가늠하라고 시작 전에 보여 준다
+    const rounds = Number($('#debateRounds').value) || CH.DEFAULT_ROUNDS;
+    $('#debateCount').textContent = t('debate.count', { total: n * rounds + 1, n, rounds });
   }
 
   function fill(question) {
@@ -201,6 +204,7 @@
   };
 
   $('#debateBtn').addEventListener('click', openDialog);
+  $('#debateRounds').addEventListener('change', limitChecks); // 라운드를 바꾸면 보낼 횟수도 (v0.33.0)
   $('#debateNote').addEventListener('click', openNote);
   $('#interjectSend').addEventListener('click', () => sendNote($('#interjectText').value));
   $('#interjectSkip').addEventListener('click', () => sendNote(''));

@@ -140,6 +140,12 @@
   'prompt.web.attached': 'The attached page.md is the body of the web page {src}.',
   'prompt.web.inline': 'The following is the body of the web page {src} that I am looking at now. Please answer based on it.',
 
+  // ---------- workflow and fact check (v0.33.0) ----------
+  "prompt.workflow.revise": "Below are an answer by {productName} and the feedback {feedbackName} gave on it.\n\n[Original question]\n{question}\n\n[{productName}'s answer]\n{product}\n\n[{feedbackName}'s feedback]\n{feedback}\n\nRewrite the answer as a complete text from start to finish, taking the feedback into account.\n- Fix what the feedback gets right; if a point is wrong, do not follow it and say why in one line.\n- Keep the parts that are already correct.",
+  "prompt.workflow.verify": "Please verify whether the following answer is correct.\n\n[Original question]\n{question}\n\n[{name}'s answer]\n{answer}\n\nReply in exactly the format below. Do not rename or reorder the headings.\n\n## Verification\n- What you checked and the result (pass / problem) — one per line\n\n## Remaining problems\n- What still needs fixing (if none, write \"- None\")\n\n## Verdict\nPass or Needs changes (one word)",
+  "prompt.fact.extract": "Below is {name}'s answer. Pick at most {max} claims from it whose truth can be checked.\n- Pick only things that can be checked by a web search, such as numbers, dates, names and cause-and-effect; leave out opinions, recommendations and general explanations.\n- One per line in the form \"1. claim\", each understandable on its own.\n- Write nothing else.\n\n[Original question]\n{question}\n\n[{name}'s answer]\n{answer}",
+  "prompt.fact.check": "Please check with a web search whether each of the claims below is true.\n\n{claims}\n\nReply in exactly the table format below: one row per claim, with the same numbers as the list above.\n| # | Verdict | Evidence · source |\n|---|---|---|\n| 1 | Confirmed | one line of evidence and the source URL |\n\nUse only one of these verdicts: \"Confirmed\" (shown to be true), \"Refuted\" (not true), \"Partly\" (only partly true), \"No source\" (no reliable source found). Write nothing outside the table.",
+
   // ---------- commit message (commit-msg.js) ----------
   'prompt.commit.ask': [
     'I applied the changes you just proposed to the files below. Write a git commit message describing this change as a single English line (at most 72 characters, imperative mood, e.g. "Fix null check in user loader").',

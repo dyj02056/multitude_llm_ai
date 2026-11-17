@@ -84,7 +84,34 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 
 ![Compare › Hand-offs · Debate](../screenshots/en/29-debate-result.png)
 
+### Workflow (v0.33.0)
+
+Have several AIs work **one after another in an order you set**, e.g. A drafts → B critiques → A revises → C verifies. Press **flow** under the input box.
+
+- **2–6 steps.** Pick what each step does and which AI does it; **Fill in an example** sets draft → critique → revise → verify. The same AI may take several steps.
+
+  | Task | What it does | Takes from earlier steps |
+  |---|---|---|
+  | **draft** | (first step only) uses the AI's existing answer to this question **without sending again**, or sends the question | — |
+  | **critique** | asks for errors, omissions, weak claims and a better answer (the same request as Hand-off › review) | result |
+  | **counter** | asks it to argue against the result (Hand-off › counter) | result |
+  | **revise** | gives the result and the latest feedback (critique / counter / verify) and asks for a full rewrite | result + feedback |
+  | **verify** | asks whether the result is right, as verification · remaining problems · verdict (pass / needs changes) | result |
+  | **continue** | asks it to take the result further (Hand-off › continue) | result |
+
+  The "result" is the latest answer from a draft, revise or continue step. Rules: the first step is a draft; critique, counter, verify and continue need a result before them; revise needs feedback before it. A rule violation is shown in the window and **Start** stays disabled.
+- **Pause after each step**: when on, it stops after every step and shows **Next step**, **Skip next step** and **Stop flow** under the input box (it pauses after a skipped step too). **Stop flow** works any time.
+- **Messages to send**: shown before you start, e.g. "3 (ChatGPT 1 · Gemini 1 · DeepSeek 1)"; a draft is not counted if the AI already answered. Use fewer steps on services with tight usage limits.
+- If a step gets no answer (timeout, no answer, error) the flow stops and **the steps already received stay in history**. A notification is shown at the end.
+- Results appear step by step in **Compare › Hand-offs · Debate** and in history ("Workflow 2/4 · critique → ChatGPT") and in exports. The order can be saved in a work preset.
+
+![Workflow window](../screenshots/en/54-workflow.png)
+
 ## 5. Compare answers
+
+**Fact check** tab (v0.33.0): an AI checks the facts in an answer with web search. Choose the **text to check** (one AI's answer or the analysis's final answer), the **AI that picks the claims** (a local LLM works too) and the **AI that checks** (a searching AI such as Perplexity or Genspark is recommended), then **Run fact check**. The AI that picks claims returns up to **10 checkable claims** (numbers, dates, names, cause and effect — not opinions); the checking AI is asked about **all claims in one message** and answers with a table, shown per claim as **Confirmed / Refuted / Partly / No source** (refuted in red, partly in yellow). Source links can be copied (the app does not open links). It costs **2 messages** (shown before you start). This is what an AI found, not a guarantee — open the links yourself for anything important.
+
+![Fact check tab](../screenshots/en/56-fact-check.png)
 
 **cmp** (`Ctrl+Shift+D`) shows the last question and each AI's latest answer in columns. Each column can be copied as Markdown.
 

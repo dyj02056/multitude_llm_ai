@@ -66,6 +66,8 @@
         // 라운드 앞에 사용자가 끼워 넣은 말 (v0.32.0)
         if (c.note) parts.unshift({ name: t('chain.userNote'), text: String(c.note) });
         if (parts.length) out.push({ title: t('chain.debateRound', { round: c.round, rounds: c.rounds || c.round }), parts });
+      } else if (c.kind === 'workflow') {
+        if (c.md || c.text) out.push({ title: t('workflow.chainTitle', { step: c.step, steps: c.steps || c.step, kind: t(`workflow.kind.${c.stepKind}`), name: c.toName || c.to }), parts: [{ name: String(c.toName || c.to || ''), text: c.md || c.text }] });
       } else if (c.md || c.text) {
         const what = c.kind === 'handoff' ? t(`handoff.intent.${c.intent}`) : t('chain.fallback');
         out.push({ title: t('chain.title', { from: c.fromName || c.from, to: c.toName || c.to, what }), parts: [{ name: String(c.toName || c.to || ''), text: c.md || c.text }] });

@@ -29,6 +29,7 @@ function renderSynth() {
   // 로컬 LLM을 패널 없이 판정으로 쓰면 답한 패널이 하나여도 종합할 수 있다
   $('#synthBtn').disabled = open.length < (state.synthTarget === 'local' && !open.includes('local') ? 1 : 2);
   $('#debateBtn').disabled = open.length < 2; // 토론은 패널이 2개 이상일 때 (v0.26.0)
+  $('#workflowBtn').disabled = open.length < 1; // 작업 흐름은 패널이 하나만 있어도 (같은 AI에게 여러 걸음) (v0.33.0)
 }
 
 $('#synthTarget').addEventListener('change', (e) => host.setSynth({ target: e.target.value }));
@@ -47,7 +48,7 @@ $('#synthResult').addEventListener('click', async () => {
 
 // 종합 요청 진행 상황(보내는 중·보냄·실패)을 입력창 아래 안내 글로 보여 줍니다.
 host.on('synth:status', ({ state: st, judge, count, error, cause, mode, trimmed, headless, historyId }) => {
-  if (mode === 'debate') return; // 토론 진행은 debate-ui.js가 보여 준다 (v0.26.0)
+  if (mode === 'debate' || mode === 'workflow' || mode === 'factcheck') return; // 토론 · 작업 흐름 · 사실 확인 진행은 각자의 화면 파일이 보여 준다 (v0.26.0 · v0.33.0)
   const prefix = cause === 'auto' ? t('ui.synth.autoPrefix') : '';
   const what = mode === 'analysis' ? t('ui.synth.whatAnalysis') : t('ui.synth.whatSynth');
   $('#sendHint').textContent =
@@ -443,6 +444,7 @@ host.on('state', (next) => {
   }
   window.onPreviewState?.(); // 보내기 전 미리보기 창: 그 화면을 떠났으면 보내지 않고 닫는다 (send-preview.js)
   window.onDebateState?.(); // 토론 설정 창도 같은 규칙 (debate-ui.js, v0.26.0)
+  window.onWorkflowState?.(); // 작업 흐름 설정 창도 같은 규칙 (workflow-ui.js, v0.33.0)
   window.onOnboardState?.(); // 첫 사용 안내: 처음이면 띄우고, 화면을 떠났으면 닫는다 (onboarding.js, v0.31.0)
   if (state.chatView === 'help') renderUpdate();
   // 툴바 이름 뒤의 "~/chat" 같은 경로 = 지금 보는 화면

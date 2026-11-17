@@ -48,6 +48,7 @@
   };
   const MAX_PANELS = 6; // 프리셋에 담는 패널 수 (앱의 최대 패널 수와 같음)
   const MAX_DEBATE = 3; // 토론 참가 AI · 라운드 최대 (shared/chain.js와 같음)
+  const WORKFLOW_KINDS = ['draft', 'critique', 'counter', 'revise', 'verify', 'continue']; // 작업 흐름 걸음 종류 (shared/workflow.js와 같음)
   const SVC_ID = /^[a-z0-9-]{1,40}$/; // 서비스 id 모양 (gemini · chatgpt · local …)
   const TPL_ID = /^[\w-]{1,60}$/; // 템플릿 id 모양 (기본 템플릿 summary · 내 템플릿 u-…)
   const BUILTIN_VARS = ['오늘', '프로젝트', '선택 파일'];
@@ -369,6 +370,16 @@
             };
           })()
         : null,
+      // 작업 흐름 (v0.33.0): 걸음 2~6개의 종류 · AI와 걸음마다 멈춤. 걸음이 모자라면 저장하지 않는다
+      workflow: (() => {
+        const w = p.workflow && typeof p.workflow === 'object' ? p.workflow : null;
+        if (!w) return null;
+        const steps = (Array.isArray(w.steps) ? w.steps : [])
+          .filter((s) => s && typeof s === 'object' && WORKFLOW_KINDS.includes(s.kind) && okSvc(s.who))
+          .slice(0, 6)
+          .map((s) => ({ kind: s.kind, who: s.who }));
+        return steps.length >= 2 ? { steps, ...(w.stepByStep === true ? { stepByStep: true } : {}) } : null;
+      })(),
     };
   }
 
@@ -393,6 +404,7 @@
       layout: c.layout,
       synth: { target: c.synthTarget, auto: c.autoSynth },
       debate: c.debate || null,
+      workflow: c.workflow || null,
     });
   }
 

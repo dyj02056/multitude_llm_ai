@@ -50,6 +50,18 @@ function chainCard(c) {
     }
     return card;
   }
+  if (c.kind === 'workflow') {
+    // 작업 흐름 한 걸음 (v0.33.0): "작업 흐름 2/4 · 비판 → ChatGPT"
+    head.append(
+      span('chain-kind', t('workflow.chainKind', { step: c.step, steps: c.steps || c.step })),
+      span('chain-route', `${t(`workflow.kind.${c.stepKind}`)} → ${c.toName || c.to}${c.reused ? ` (${t('workflow.reused')})` : ''}`),
+      span('muted-label', chainTime(c.at)),
+    );
+    const body = chainText(c.toName || c.to, c.md || c.text || '', svcColor(c.to));
+    body.open = true;
+    card.append(head, body);
+    return card;
+  }
   const what = c.kind === 'handoff' ? t(`handoff.intent.${c.intent}`) : t('chain.fallback');
   head.append(
     span('chain-kind', what),
