@@ -641,6 +641,8 @@
   'settings.langNote': '화면 글의 언어입니다. 자동은 Windows(확장은 크롬) 언어가 한국어면 한국어, 아니면 영어로 보입니다. 바꾸면 바로 적용되고, 패널 상태 글 등 일부는 다음에 바뀔 때 새 언어로 나옵니다. AI에게 보내는 종합 · 분석 · 토론 · 프로젝트 요청 글과 기본 템플릿도 이 언어로 나갑니다 (내가 쓴 질문 · 내 템플릿 · 스킬은 그대로).',
   'transfer.key.lang': '언어',
   'page.err.no-input': '입력창을 찾지 못했습니다',
+  'page.err.logged-out': '로그인 필요 — 이 패널의 "로그인 탭"을 눌러 로그인하면 저절로 다시 연결됩니다',
+  'page.err.needs-consent': '처음 사용 — 패널 안의 동의 버튼을 누른 뒤 다시 보내 주세요',
   'page.err.attach-rejected': '사이트가 파일을 받지 않았습니다',
   'page.err.no-files': '첨부 파일을 받지 못했습니다',
   'page.err.attach-empty': '첨부하지 못해 보낼 내용이 없습니다 ({error})',

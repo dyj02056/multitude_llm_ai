@@ -63,7 +63,7 @@
 
 - From the Chrome Web Store: *(link will be added after review)*
 - Or load it yourself: download this repository (**Code → Download ZIP**) → open `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → choose the `extension` folder.
-- Pin **Multitude LLM** in the toolbar and click it to open the app tab. For services that are not signed in, click **Login tab** in the panel header, sign in, then press ↻.
+- Pin **Multitude LLM** in the toolbar and click it to open the app tab. For services that are not signed in, click **Login tab** in the panel header and sign in — the panel reconnects by itself.
 - Side panel: `Alt+Shift+S`.
 
 **Windows app** — run `MultitudeLLM-Setup-<version>.exe` from [Releases](https://github.com/dyj02056/multitude_llm_ai/releases). The installer is not code-signed yet, so SmartScreen may warn: choose **More info → Run anyway**. The app tells you when a new version is out.

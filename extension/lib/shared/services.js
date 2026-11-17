@@ -1,10 +1,13 @@
 // 자동 생성 파일 — 직접 고치지 말고 원본을 고친 뒤 npm run build:ext (원본: src/shared/services.js)
 // 서비스 목록. Electron 앱(require)과 크롬 확장 프로그램(<script>, 전역 MLA.services)이 같이 쓴다.
 //
-// 로그인은 Electron 앱에서는 "Google로 계속하기"로 자동으로 하고, 확장 프로그램에서는 크롬에 이미 로그인된 계정을 그대로 쓴다.
+// 로그인은 Electron 앱에서는 "Google로 계속하기"로 자동으로 하고, 확장 프로그램에서는 크롬에 로그인된 계정을 그대로 쓴다
+// (로그아웃 상태면 "로그인 탭"으로 일반 탭에서 로그인 → 쿠키가 바뀌면 패널이 저절로 다시 열린다, v0.38.2).
 // hosts: 이 서비스 페이지로 보는 도메인 (확장 프로그램의 iframe 허용 규칙·페이지 연결에 쓴다).
 // authHosts: 이 서비스의 로그인 화면 도메인 (Electron 자동 로그인이 버튼을 눌러도 되는 곳. 보안상 원격 셀렉터로 바꾸지 않는다).
 // loggedOut: 로그아웃 상태를 알아보는 단서 (url 정규식 / CSS 셀렉터 / 버튼 문구 정규식).
+// consent: 처음 열면 뜨는 이용 동의 화면의 단서 { text: 버튼 문구 정규식, selectors }. 버튼이 대화 상자 안에 있거나
+//   입력창이 안 보일 때만 "동의 필요"로 본다. 동의는 사용자가 직접 누른다 (확장이 대신 누르지 않는다, v0.38.2).
 // loginButton: Google 버튼이 바로 보이지 않을 때 먼저 눌러야 하는 "로그인" 버튼.
 // input / send: 질문 입력창과 보내기 버튼 후보 셀렉터 (앞에서부터 처음 보이는 것을 쓴다).
 // sendText: 셀렉터로 못 찾을 때 버튼 글자로 찾는 정규식.
@@ -243,7 +246,8 @@
       url: 'https://duck.ai/chat',
       // duckduckgo.com/?ia=chat 주소로도 열린다.
       hosts: ['duck.ai', 'duckduckgo.com'],
-      // 로그인이 없다. 처음 열면 이용 동의 화면이 한 번 뜬다 (직접 누른다).
+      // 로그인이 없다. 지역 · 시기에 따라 처음 열면 이용 동의 화면이 한 번 뜬다 (사용자가 직접 누른다 — 화면에 안내만 한다).
+      consent: { text: '^(i agree|agree|agree and continue|accept|get started|got it|동의|동의합니다|동의하고 계속(하기)?|시작하기|확인)$' },
       input: ['textarea[name="user-prompt"]', 'form textarea', 'textarea[placeholder]', 'textarea'],
       send: ['button[type="submit"][aria-label*="Send" i]', 'button[type="submit"][aria-label*="보내기"]', 'form button[type="submit"]'],
       submitKey: 'Enter',
@@ -373,6 +377,18 @@
     return SERVICES.find((s) => s.hosts.some((h) => host === h || host.endsWith(`.${h}`))) || null;
   }
 
+  /**
+   * 쿠키가 바뀐 도메인들이 어느 서비스의 것인지 → 서비스 id 목록 (v0.38.2, 로그인 뒤 패널 자동 다시 열기).
+   * 상위 도메인 쿠키(google.com → gemini.google.com)와 하위 도메인 쿠키(auth.chatgpt.com → chatgpt.com)를 모두 그 서비스로 본다.
+   */
+  function servicesForCookieDomains(domains) {
+    const ds = (Array.isArray(domains) ? domains : [])
+      .filter((d) => typeof d === 'string')
+      .map((d) => d.replace(/^\./, '').toLowerCase())
+      .filter((d) => d.includes('.')); // 최상위 도메인(com 등)만 있는 값은 버린다
+    return SERVICES.filter((s) => s.hosts.some((h) => ds.some((d) => h === d || h.endsWith(`.${d}`) || d.endsWith(`.${h}`)))).map((s) => s.id);
+  }
+
   return {
     SERVICES,
     MAX_SELECTED,
@@ -380,6 +396,7 @@
     ATTACH_LIMITS,
     normalizeSelected,
     serviceForHost,
+    servicesForCookieDomains,
     isServiceUrl,
     isLoginUrl,
     COMMON_AUTH_HOSTS,

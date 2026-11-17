@@ -373,16 +373,23 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 });
 
 // 사이트가 쿠키를 바꾸면(로그인·토큰 갱신) 열려 있는 앱 탭의 WebSocket 쿠키 규칙과 화면 스크립트용 복사본을 다시 맞춘다.
+// 앱 탭 · 사이드탭에도 "이 도메인의 쿠키가 바뀌었다"고 알린다 — "로그인 탭"에서 로그인을 마치면 그 패널이 저절로 다시 열린다 (v0.38.2).
+// 쿠키 값은 보내지 않고 도메인 이름만 보낸다.
 let cookieTimer = null;
+const changedDomains = new Set();
 chrome.cookies.onChanged.addListener(({ cookie }) => {
   if (cookie.partitionKey) return; // 우리가 만든 복사본(또는 다른 칸) 변화
   const domain = cookie.domain.replace(/^\./, '');
   if ((!owners.size && !sidePages.size) || !DOMAINS.some((h) => h === domain || h.endsWith(`.${domain}`) || domain.endsWith(`.${h}`))) return;
+  changedDomains.add(domain);
   clearTimeout(cookieTimer);
   cookieTimer = setTimeout(() => {
     serial(mirrorJsCookies);
     for (const tabId of owners.keys()) serial(() => syncWsCookies(tabId));
     if (sidePages.size) serial(() => syncWsCookies(SIDE_TAB));
+    const domains = [...changedDomains];
+    changedDomains.clear();
+    chrome.runtime.sendMessage({ type: 'mla:cookieChanged', domains }).catch(() => {}); // 받을 화면이 없으면 실패 — 괜찮다
   }, 300);
 });
 

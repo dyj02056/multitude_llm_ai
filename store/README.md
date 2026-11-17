@@ -40,7 +40,7 @@ npx electron scripts/store-tile.js
 ```
 Ask several AI chats the same question at once — then compare, merge and apply.
 
-Multitude LLM opens up to 6 AI chat websites side by side in one tab and sends your question to all of them at once. Type once, every panel answers. It uses each service's own website with the account you are already signed in to, so no API keys are needed. The full list of supported services is on the project page.
+Multitude LLM opens up to 6 AI chat websites side by side in one tab and sends your question to all of them at once. Type once, every panel answers. It uses each service's own website and your own account there, so no API keys are needed. Panels that need sign-in show a "Login tab" button: sign in in the new tab and the panel reconnects by itself. Duck.ai works without an account. The full list of supported services is on the project page.
 
 WHAT YOU CAN DO
 • Ask all at once — one input box, file attachments, prompt templates with variables, reusable skills
@@ -66,7 +66,7 @@ NOTES
 ```
 여러 AI 채팅에 같은 질문을 한 번에 — 비교하고, 종합하고, 적용까지.
 
-Multitude LLM은 한 탭에 AI 채팅 사이트를 최대 6개 나란히 띄우고, 같은 질문을 한 번에 보냅니다. 한 번 입력하면 모든 패널이 답합니다. 각 서비스 사이트를 이미 로그인된 계정 그대로 쓰므로 API 키가 필요 없습니다. 지원하는 서비스 목록은 프로젝트 페이지에 있습니다.
+Multitude LLM은 한 탭에 AI 채팅 사이트를 최대 6개 나란히 띄우고, 같은 질문을 한 번에 보냅니다. 한 번 입력하면 모든 패널이 답합니다. 각 서비스 사이트를 내 계정 그대로 쓰므로 API 키가 필요 없습니다. 로그인이 필요한 패널에는 "로그인 탭" 버튼이 나오고, 새 탭에서 로그인하면 패널이 저절로 다시 연결됩니다. Duck.ai는 계정 없이 됩니다. 지원하는 서비스 목록은 프로젝트 페이지에 있습니다.
 
 할 수 있는 것
 • 동시 질문 — 입력창 하나, 파일 첨부, 변수 템플릿, 스킬
@@ -130,11 +130,31 @@ Send one question to several AI chat websites that the user opens side by side i
 ## 3. 심사 담당자에게 (Test instructions, Distribution 탭 또는 제출 메모)
 
 ```
-No account on our side is needed. To test:
-1. Click the toolbar icon to open the app tab.
-2. Pick 2–3 services (e.g. Duck.ai needs no sign-in; Gemini/ChatGPT use the Google account signed in to Chrome).
-3. Type a question in the bottom input box and press Enter. Each panel answers; "cmp" compares them.
-4. Side panel: press Alt+Shift+S on any web page.
+No account on our side is needed. Duck.ai works without any account, so it is the quickest way to test.
+
+A. Send without signing in (Duck.ai)
+1. Click the toolbar icon. The app tab opens with a model picker.
+2. In the model picker select "Duck.ai" (others are optional) and confirm. Each selected model opens as a panel.
+3. If Duck.ai shows a one-time consent screen inside its panel, the panel header says
+   "First use — press the agree button inside the panel". Press that button inside the panel.
+   (The extension never accepts a site's terms for you.)
+4. Type a question in the bottom input box (e.g. "What is 2+2?") and press Enter.
+   The answer appears in the Duck.ai panel.
+
+B. Sign in & send (any service that needs an account, e.g. Gemini with a Google account)
+1. Open a panel that is not signed in. Its header shows "Sign-in needed" and a "Login tab" button.
+2. Click "Login tab". The service opens in a normal Chrome tab. Sign in there.
+   (Sign-in pages such as Google's refuse to load inside another page, so sign-in always happens in a normal tab.)
+3. Come back to the app tab. The panel reloads by itself and is now signed in (no need to press ↻;
+   press ↻ in the panel header if it did not reload within a few seconds).
+4. Type a question and press Enter. The panel answers.
+   If you send while a panel is still signed out, that panel shows "Sign-in needed — press Login tab …"
+   instead of failing silently.
+
+C. Side panel
+1. On any web page press Alt+Shift+S (or right-click > "Ask Multitude LLM — this page's text").
+2. The side panel opens with two AI panels. Steps A/B work the same way there.
+
 The header-removal and cookie rules apply only to frames of the 11 listed AI sites inside the extension's own app tab / side panel and are removed when it closes. Source: https://github.com/dyj02056/multitude_llm_ai
 ```
 
@@ -146,6 +166,7 @@ The header-removal and cookie rules apply only to frames of the 11 listed AI sit
 - **넓은 선택 권한**(`http(s)://*/*`)과 많은 호스트 권한 때문에 심사가 며칠 더 걸릴 수 있습니다.
 - 각 AI 서비스의 **이용 약관**(자동 입력 · 화면 읽기)은 스토어 심사와 별개로 사용자 · 개발자가 지켜야 할 부분입니다.
 - 화면이 한국어라 영어 사용자 평점이 낮을 수 있습니다 — 설명에 적어 두었습니다.
+- **설명에 쓴 기능은 심사자가 그대로 해 볼 수 있어야 합니다** (실제 반려: v0.30.0 "Red Potassium" — "Sign in & send"가 재현되지 않음). 심사자 Chrome에는 AI 서비스 계정이 없을 수 있으므로 계정 없이 되는 Duck.ai 길(A)을 먼저 적고, 로그인 길(B)은 버튼 이름 · 화면에 보이는 글까지 적습니다. v0.38.2에서 로그인 뒤 자동 다시 연결 · 로그아웃/동의 화면 안내를 넣었습니다.
 
 ## 5. 업데이트 올리기
 

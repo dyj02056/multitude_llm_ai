@@ -242,6 +242,44 @@
     return false;
   }
 
+  /**
+   * 처음 열면 뜨는 이용 동의 화면이 떠 있는지 (v0.38.2). 읽기만 하고 누르지 않는다 — 동의는 사용자가 직접 한다.
+   * cfg: { consent: { text, selectors }, input: [입력창 셀렉터] }
+   * 동의 버튼(문구 · 셀렉터)이 보이고, 그 버튼이 대화 상자 안에 있거나 입력창이 안 보일 때만 → 버튼 문구(40자 이내) | false
+   */
+  function pageNeedsConsent(cfg) {
+    const c = (cfg && cfg.consent) || {};
+    if (!c.text && !(c.selectors || []).length) return false;
+    const visible = (el) =>
+      !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length) && getComputedStyle(el).visibility !== 'hidden';
+    const label = (el) => String(el.innerText || el.value || el.getAttribute('aria-label') || '').trim();
+    let re = null;
+    try {
+      re = c.text ? new RegExp(c.text, 'i') : null;
+    } catch {
+      re = null;
+    }
+    const pick = (list) => list.find((el) => visible(el)) || null;
+    let btn = null;
+    for (const s of c.selectors || []) {
+      try {
+        btn = pick([...document.querySelectorAll(s)]);
+      } catch {}
+      if (btn) break;
+    }
+    if (!btn && re) btn = pick([...document.querySelectorAll('button,a,[role="button"]')].filter((el) => re.test(label(el))));
+    if (!btn) return false;
+    const inDialog = !!btn.closest('[role="dialog"],[role="alertdialog"],dialog,[aria-modal="true"]');
+    const inputShown = ((cfg && cfg.input) || []).some((s) => {
+      try {
+        return [...document.querySelectorAll(s)].some(visible);
+      } catch {
+        return false;
+      }
+    });
+    return inDialog || !inputShown ? label(btn).slice(0, 40) || true : false;
+  }
+
   /** 셀렉터 자가진단용 살펴보기: 입력창이 보이는지. cfg: { input } → { input: boolean } */
   function pageProbe(cfg) {
     const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
@@ -312,5 +350,5 @@
     };
   }
 
-  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe, pageLimitCheck, pageSelectorReport };
+  return { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageNeedsConsent, pageProbe, pageLimitCheck, pageSelectorReport };
 });

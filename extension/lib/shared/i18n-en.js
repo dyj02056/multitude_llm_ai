@@ -641,6 +641,8 @@
   'settings.langNote': 'Language of the app\'s own text. Automatic shows Korean when Windows (or Chrome, for the extension) is set to Korean, otherwise English. Changes apply right away; a few texts such as panel status lines switch the next time they update. The requests the app writes for the AIs (synthesis, analysis, debate, project mode) and the built-in templates use this language too; your own questions, templates and skills are sent as written.',
   'transfer.key.lang': 'Language',
   'page.err.no-input': 'Could not find the input box',
+  'page.err.logged-out': 'Sign-in needed — press "Login tab" on this panel and sign in; the panel reconnects by itself',
+  'page.err.needs-consent': 'First use — press the agree button inside the panel, then send again',
   'page.err.attach-rejected': 'The site did not accept the files',
   'page.err.no-files': 'The attached files did not arrive',
   'page.err.attach-empty': 'Nothing to send because attaching failed ({error})',

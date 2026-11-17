@@ -144,6 +144,7 @@
   'ui.loginButton': 'G 로그인',
   'ui.loginButtonTitle': 'Google로 다시 로그인 시도',
   'ui.login.needed': '로그인 필요',
+  'ui.login.consent': '처음 사용 — 패널 안의 동의 버튼을 눌러 주세요',
   'ui.login.loggingIn': 'Google로 로그인 중…',
   'ui.login.google': 'Google 화면에서 계속해 주세요',
   'ui.login.captcha': '사람 확인(캡차)을 직접 풀어 주세요',

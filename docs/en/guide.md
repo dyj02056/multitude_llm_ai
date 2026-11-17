@@ -19,7 +19,7 @@ Since v0.31.0 the requests the app writes for the AIs (**synthesis, analysis, de
 On first launch you see a checklist of 11 AIs (`[x] Gemini` …). Choose up to **6**. Only the chosen ones open as panels.
 
 - **Windows app:** sign in once with Google; the app signs in to each service with "Continue with Google".
-- **Chrome extension:** each service uses the account already signed in to Chrome. If a panel is not signed in, click **로그인 탭** (login tab) in its header, sign in in the normal tab, then press **↻** in the panel. Google sign-in pages cannot open inside another page, so always sign in in a normal tab.
+- **Chrome extension:** each service uses the account already signed in to Chrome. If a panel is not signed in, click **Login tab** in its header and sign in in the normal tab — when you finish (the service's cookies change, or you come back to the app tab) the panel reconnects by itself (it waits up to 10 minutes; press **↻** if it does not). Google sign-in pages cannot open inside another page, so always sign in in a normal tab. **Duck.ai** needs no sign-in; if it shows a one-time consent screen, the panel says so and you press the agree button yourself.
 
 Change the selection later with **models** in the toolbar.
 

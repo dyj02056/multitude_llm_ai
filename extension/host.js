@@ -338,6 +338,9 @@
     send: svc.send || [],
     sendText: svc.sendText || null,
     submitKey: svc.submitKey || 'Enter',
+    // 입력창을 못 찾았을 때 원인(로그아웃 · 이용 동의)을 알려 주는 단서 (v0.38.2)
+    loggedOut: svc.loggedOut || null,
+    consent: svc.consent || null,
   });
   const snapCfg = (svc) => ({ stop: svc.stop || [], response: svc.response || [], messages: svc.messages || null });
 
@@ -418,6 +421,9 @@
         upload = { nonce, cfg: uploadOf(svc) };
       }
       const res = await callFrame(id, { type: 'mla:send', cfg: sendCfg(svc), text, upload, fallbackText });
+      // 로그아웃 · 이용 동의 때문에 못 보냈으면 패널 머리줄에도 그 상태와 "로그인 탭" 버튼을 띄운다 (v0.38.2)
+      if (res?.code === 'logged-out') sendPanel(id, { login: 'needs-login' });
+      else if (res?.code === 'needs-consent') sendPanel(id, { login: 'needs-consent' });
       return res || { ok: false, error: MLA.i18n.t('ext.side.paneNoReply') };
     },
     snapshot: (id, opts) => (isLocal(id) ? (localChats.has(id) ? localChats.get(id).snapshot() : null) : snapshot(id, opts)),
@@ -512,7 +518,11 @@
         navigate(pid, svc.url);
       }
       else if (action === 'back') callFrame(pid, { type: 'mla:back' }).catch(() => {});
-      else if (action === 'login') chrome.tabs.create({ url: svc.url }); // 일반 탭에서 로그인 → 돌아와서 ↻
+      else if (action === 'login') {
+        // 일반 탭에서 로그인 → 쿠키가 바뀌거나 이 탭으로 돌아오면 패널이 저절로 다시 열린다 (v0.38.2, host-panels.js)
+        X.armLogin(pid);
+        chrome.tabs.create({ url: svc.url });
+      }
       else if (action === 'newchat') {
         rounds.cancelWatch(pid);
         rounds.resetPanel(pid);

@@ -11,7 +11,7 @@
 //     그 탭의 글을 읽어 storage.session에 두고, 이 화면이 가져갑니다. 그 패널에 처음 보낼 때만 page.md로 첨부합니다.
 //   - 모든 사이트 권한은 받지 않습니다. ↻(가져오기)는 단축키 · 메뉴로 받은 그 탭 한 번 권한이 남아 있을 때만 됩니다.
 (() => {
-  const { SERVICES, serviceForHost, uploadOf } = MLA.services;
+  const { SERVICES, serviceForHost, servicesForCookieDomains, uploadOf } = MLA.services;
   const SP = MLA.sidePanel;
   const W = MLA.webAsk;
   const { scanSecrets, describeSecrets } = MLA.secretScan;
@@ -38,6 +38,11 @@
   const NONCE = crypto.randomUUID(); // 이 사이드 패널 화면의 번호 — 다른 창의 사이드 패널과 연결선이 섞이지 않게
   const HELLO_TIMEOUT_MS = 8000;
   const LOGIN_CHECK_MS = 1500;
+  const LOGIN_ARM_MS = 10 * 60 * 1000; // "로그인 탭"을 누른 뒤 자동 다시 열기를 기다리는 시간 (v0.38.2)
+  const AUTO_SETTLE_MS = 8000; // 패널을 연 직후의 쿠키 변화는 그 페이지가 스스로 심은 것일 수 있어 무시
+  const AUTO_GAP_MS = 10000; // 자동 다시 열기 최소 간격
+  const COOKIE_QUIET_MS = 2000; // 쿠키 변화가 잠잠해진 뒤 한 번만
+  const CONSENT_RECHECK_MS = 3000;
   const CALL_TIMEOUT_MS = 90000; // 첨부 업로드를 기다리는 보내기도 있어 넉넉히
   const ANSWER_MAX_MS = 20 * 60 * 1000;
   const FALLBACK_MAX = 50000; // 첨부에 실패했을 때 본문에 넣어 보내는 페이지 글의 최대 글자 수
@@ -160,7 +165,11 @@
     const dot = span('dot loading');
     const url = span('url', svc.url);
     const status = span('status');
-    const loginBtn = button(t('ext.side.loginTab'), t('ext.side.loginTabTitle'), () => chrome.tabs.create({ url: svc.url }));
+    // 일반 탭에서 로그인 → 그 서비스 쿠키가 바뀌면 이 패널이 저절로 다시 열린다 (v0.38.2, 아래 autoReconnect)
+    const loginBtn = button(t('ext.side.loginTab'), t('ext.side.loginTabTitle'), () => {
+      p.loginArmedUntil = Date.now() + LOGIN_ARM_MS;
+      chrome.tabs.create({ url: svc.url });
+    });
     loginBtn.className = 'login-btn';
     loginBtn.hidden = true;
     head.append(
@@ -185,7 +194,7 @@
     iframe.name = SP.portName(NONCE, svc.id); // content.js가 이 이름으로 이 화면에 연결한다
     iframe.allow = 'clipboard-write; microphone';
     el.append(head, iframe);
-    const p = { el, iframe, dot, url, status, loginBtn, port: null, pending: new Map(), seq: 0, helloTimer: null, loginTimer: null, retried: false, sentKey: '', skillSent: '', watch: 0, curUrl: svc.url };
+    const p = { el, iframe, dot, url, status, loginBtn, port: null, pending: new Map(), seq: 0, helloTimer: null, loginTimer: null, retried: false, sentKey: '', skillSent: '', watch: 0, curUrl: svc.url, loginArmedUntil: 0, loadedAt: 0, autoAt: 0, cookieTimer: null };
     iframe.addEventListener('load', () => {
       clearTimeout(p.helloTimer);
       p.helloTimer = setTimeout(() => {
@@ -208,6 +217,7 @@
     const p = panes.get(id);
     clearTimeout(p.helloTimer);
     clearTimeout(p.loginTimer);
+    clearTimeout(p.cookieTimer);
     p.watch++;
     try {
       p.port?.disconnect();
@@ -227,6 +237,7 @@
     if (!p) return;
     p.port = null;
     p.curUrl = url;
+    p.loadedAt = Date.now();
     setDot(p, 'loading');
     p.url.textContent = url;
     p.loginBtn.hidden = true;
@@ -363,16 +374,50 @@
     clearTimeout(p.loginTimer);
     p.loginTimer = setTimeout(async () => {
       try {
-        const out = await call(id, { type: 'mla:loggedOut', cfg: { loggedOut: svcOf(id).loggedOut || {} } }, 10000);
-        setDot(p, out ? 'error' : 'ready');
+        const svc = svcOf(id);
+        const out = await call(id, { type: 'mla:loggedOut', cfg: { loggedOut: svc.loggedOut || {} } }, 10000);
+        // 처음 쓰는 서비스의 이용 동의 화면: 누르지 않고 안내만 한다 (v0.38.2)
+        const consent = !out && svc.consent ? await call(id, { type: 'mla:consent', cfg: { consent: svc.consent, input: svc.input || [] } }, 10000) : false;
+        setDot(p, out ? 'error' : consent ? 'loading' : 'ready');
         p.loginBtn.hidden = !out;
-        if (out) p.status.textContent = t('ext.side.loginNeeded');
-        else if (p.status.textContent === t('ext.side.loginNeeded')) p.status.textContent = '';
+        if (!out) p.loginArmedUntil = 0;
+        const notes = [t('ext.side.loginNeeded'), t('ext.side.consentNeeded')];
+        if (out) p.status.textContent = notes[0];
+        else if (consent) p.status.textContent = notes[1];
+        else if (notes.includes(p.status.textContent)) p.status.textContent = '';
+        // 동의 버튼을 누르면 주소가 바뀌지 않고 화면만 사라질 수 있다 — 떠 있는 동안 잠깐씩 다시 본다
+        if (consent && panes.get(id) === p) p.loginTimer = setTimeout(() => scheduleLoginCheck(id), CONSENT_RECHECK_MS);
       } catch {}
     }, LOGIN_CHECK_MS);
   }
 
-  const sendCfg = (svc) => ({ input: svc.input || [], send: svc.send || [], sendText: svc.sendText || null, submitKey: svc.submitKey || 'Enter' });
+  // ---------- 로그인 뒤 자동 다시 열기 (v0.38.2, 앱 탭의 host-panels.js와 같은 방식) ----------
+  // "로그인 탭"을 누른 패널은 10분 동안, 그 서비스 도메인의 쿠키가 바뀌면(background.js 알림) 처음 주소로 다시 열린다.
+  // 로그아웃 화면이 스스로 심는 쿠키로 되풀이되지 않게 연 직후의 변화는 무시하고 간격을 둔다.
+  function autoReconnect(id) {
+    const p = panes.get(id);
+    const now = Date.now();
+    if (!p || p.loginArmedUntil < now || now - p.loadedAt < AUTO_SETTLE_MS || now - p.autoAt < AUTO_GAP_MS) return;
+    p.autoAt = now;
+    p.retried = false;
+    navigate(id, svcOf(id).url);
+  }
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    if (msg?.type !== 'mla:cookieChanged' || sender.id !== chrome.runtime.id || sender.tab) return;
+    for (const id of servicesForCookieDomains(msg.domains)) {
+      const p = panes.get(id);
+      if (!p || p.loginArmedUntil < Date.now()) continue;
+      clearTimeout(p.cookieTimer);
+      p.cookieTimer = setTimeout(() => autoReconnect(id), COOKIE_QUIET_MS);
+    }
+  });
+  // 사이드 패널 창으로 돌아왔을 때도 한 번 (쿠키 알림을 놓쳤을 때 대비)
+  window.addEventListener('focus', () => {
+    for (const id of panes.keys()) autoReconnect(id);
+  });
+
+  // loggedOut · consent: 입력창을 못 찾았을 때 원인을 알려 주는 단서 (v0.38.2)
+  const sendCfg = (svc) => ({ input: svc.input || [], send: svc.send || [], sendText: svc.sendText || null, submitKey: svc.submitKey || 'Enter', loggedOut: svc.loggedOut || null, consent: svc.consent || null });
   const snapCfg = (svc) => ({ stop: svc.stop || [], response: svc.response || [], messages: svc.messages || null });
   const snapshot = (id, markdown = false) => call(id, { type: 'mla:snapshot', cfg: snapCfg(svcOf(id)), markdown }, 15000).catch(() => null);
 
@@ -582,6 +627,10 @@
     if (!res.ok) {
       p.status.dataset.state = 'send-error';
       p.status.textContent = t('ext.side.sendFailed', { error: res.error });
+      if (res.code === 'logged-out') {
+        p.loginBtn.hidden = false; // 로그인 탭 버튼을 바로 보여 준다 (v0.38.2)
+        setDot(p, 'error');
+      }
       sideHistory.setAnswer(hid, id, { state: 'send-error', error: String(res.error || '') });
       return { id, ok: false, error: res.error };
     }

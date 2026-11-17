@@ -172,7 +172,7 @@ test('pageError: AI 사이트 안 코드가 준 실패 code를 지금 언어의 
   for (const v of [null, undefined, true, 'x', { ok: true }]) assert.deepEqual(i18n.pageError(v), v);
   // 페이지 안 코드가 붙이는 code마다 사전에 글이 있고, 받는 쪽이 pageError를 거친다
   const codes = new Set([...`${read('src/shared/page.js')}${read('extension/content.js')}`.matchAll(/error: [^\n]*?, code: '([\w-]+)'/g)].map((m) => m[1]));
-  assert.deepEqual([...codes].sort(), ['attach-empty', 'attach-rejected', 'no-files', 'no-input', 'no-text']);
+  assert.deepEqual([...codes].sort(), ['attach-empty', 'attach-rejected', 'logged-out', 'needs-consent', 'no-files', 'no-input', 'no-text']); // logged-out · needs-consent: v0.38.2
   for (const c of codes) for (const lang of i18n.LANGS) assert.ok(i18n.strings[lang][`page.err.${c}`], `${lang}: ${c}`);
   assert.match(require('./helpers/ext-host').readHost(), /MLA\.i18n\.pageError\(await chrome\.tabs\.sendMessage/);
   assert.match(read('extension/sidepanel.js'), /job\.resolve\(MLA\.i18n\.pageError\(m\.result\)\)/);

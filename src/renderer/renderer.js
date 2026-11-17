@@ -44,6 +44,7 @@ Object.defineProperties(UI, Object.getOwnPropertyDescriptors(host.ui || {}));
 
 const LOGIN_TEXT = {
   get 'needs-login'() { return t('ui.login.needed'); },
+  get 'needs-consent'() { return t('ui.login.consent'); }, // 처음 쓰는 서비스의 이용 동의 화면 (v0.38.2)
   get 'logging-in'() { return t('ui.login.loggingIn'); },
   get google() { return t('ui.login.google'); },
   get captcha() { return t('ui.login.captcha'); },

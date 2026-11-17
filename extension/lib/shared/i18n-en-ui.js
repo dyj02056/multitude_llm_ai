@@ -144,6 +144,7 @@
   'ui.loginButton': 'G sign-in',
   'ui.loginButtonTitle': 'Try signing in with Google again',
   'ui.login.needed': 'Sign-in needed',
+  'ui.login.consent': 'First use — press the agree button inside the panel',
   'ui.login.loggingIn': 'Signing in with Google…',
   'ui.login.google': 'Please continue on the Google page',
   'ui.login.captcha': 'Please solve the human check (CAPTCHA) yourself',

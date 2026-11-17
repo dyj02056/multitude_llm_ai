@@ -19,7 +19,7 @@
   } catch {}
   if (!embedded) return;
 
-  const { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageProbe, pageLimitCheck } = MLA.page;
+  const { pageFocusInput, pageRefocusInput, pageAttachFiles, pageClickSend, pageSnapshot, pageIsLoggedOut, pageNeedsConsent, pageProbe, pageLimitCheck } = MLA.page;
   const { htmlToMarkdown } = MLA.markdown;
   const { shortcutFor } = MLA.shortcuts;
 
@@ -125,9 +125,15 @@
   /** 질문을 보낸다. upload가 있으면 먼저 첨부하고, 첨부에 실패해도 글은 보낸다. */
   // 질문 보내기: 입력창 찾기 → (파일 첨부) → 글 넣기 → 보내기 버튼 누르기 → 없으면 Enter
   async function send({ cfg, text, upload, fallbackText }) {
+    // 이용 동의 화면이 떠 있으면 글을 넣지 않고 알린다 (동의는 사용자가 직접 누른다, v0.38.2)
+    if (cfg.consent && pageNeedsConsent(cfg)) return { ok: false, error: '이용 동의가 필요합니다', code: 'needs-consent' };
     const focus = pageFocusInput(cfg);
     let el = findInput(cfg);
-    if (!el) return { ok: false, error: focus.error || '입력창을 찾지 못했습니다', code: 'no-input' }; // 셀렉터 자가진단용
+    if (!el) {
+      // 입력창이 없으면 대개 로그아웃 상태다. 조용히 실패하지 않고 "로그인 필요"로 알린다 (v0.38.2)
+      if (cfg.loggedOut && pageIsLoggedOut(cfg)) return { ok: false, error: '로그인이 필요합니다', code: 'logged-out' };
+      return { ok: false, error: focus.error || '입력창을 찾지 못했습니다', code: 'no-input' }; // 셀렉터 자가진단용
+    }
 
     let attach;
     if (upload) {
@@ -175,6 +181,7 @@
     'mla:send': send,
     'mla:snapshot': ({ cfg, markdown }) => pageSnapshot(cfg, markdown ? htmlToMarkdown : null),
     'mla:loggedOut': ({ cfg }) => pageIsLoggedOut(cfg),
+    'mla:consent': ({ cfg }) => pageNeedsConsent(cfg), // 이용 동의 화면이 떠 있는지 (읽기만, v0.38.2)
     'mla:probe': ({ cfg }) => pageProbe(cfg), // 셀렉터 자가진단: 입력창이 보이는지
     'mla:limit': ({ cfg }) => pageLimitCheck(cfg), // 사용 한도 안내 찾기 (응답 통계)
     'mla:focus': ({ cfg }) => {
