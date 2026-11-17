@@ -22,22 +22,22 @@
 // ---------- 필요한 도구(모듈) 불러오기 ----------
 // require는 다른 파일이나 라이브러리의 기능을 가져오는 명령입니다.
 const path = require('path');
-const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, Menu, clipboard, dialog, net, Notification } = require('electron');
-const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, isAuthPopupUrl, isServiceUrl, limitTextOf } = require('../shared/services');
-const { LAYOUTS, normalizeLayout, placeCells, barRows } = require('../shared/layout');
-const autologin = require('./autologin');
+const { app, BrowserWindow, ipcMain, shell, Menu, clipboard, dialog, net, Notification } = require('electron');
+const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, limitTextOf } = require('../shared/services');
+const { LAYOUTS, normalizeLayout, placeCells, barRows, normalizeZoom, zoomStep, zoomKey, scaleRect } = require('../shared/layout');
+const { createViews } = require('./views'); // 세션 · 뷰 · 셀렉터 자가진단 (v0.31.0)
 const { sendPrompt, cleanupTemp } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
 const { dev, log } = require('./dev');
 const { createRounds } = require('../shared/rounds');
-const { createDiag } = require('../shared/diag');
 const L = require('../shared/local-llm');
 const watchCore = require('../shared/watch');
-const { pageProbe, pageLimitCheck } = require('../shared/page');
+const { pageLimitCheck } = require('../shared/page');
 const history = require('./history');
 const { normalizeMax, MAX_CHOICES } = require('../shared/history-core');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
+const { wasOnboarded } = require('../shared/onboarding');
 const project = require('./project');
 const guard = require('./ipc-guard'); // 화면이 넘긴 값 다시 검사 (첨부 파일 · 읽기 옵션 · 로컬 LLM 주소)
 const { setupGitConsole } = require('./gitconsole');
@@ -136,6 +136,7 @@ function applyLang() {
 function loadPrefs() {
   const saved = secure.store().readJson(prefsFile(), null);
   if (saved && typeof saved === 'object') prefs = { ...prefs, ...saved };
+  prefs.onboarded = wasOnboarded(saved); // 첫 사용 안내 (v0.31.0): 새로 설치한 사람만 한 번, 예전부터 쓰던 사람에게는 띄우지 않는다
   // 예전 설정(Groq 등 없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
   prefs.local = normalizeLocalPrefs(prefs.local);
   const hadLocal = Array.isArray(prefs.selected) && prefs.selected.includes(L.LOCAL_ID);
@@ -150,8 +151,26 @@ function loadPrefs() {
   prefs.retryOnce = prefs.retryOnce !== false;
   prefs.autoRecommend = prefs.autoRecommend === true;
   prefs.commitOffer = prefs.commitOffer !== false;
+  prefs.uiZoom = normalizeZoom(prefs.uiZoom);
   prefs.lang = i18n.normalizeLangPref(prefs.lang);
   applyLang(); // 창 · 대화상자 · 알림을 만들기 전에
+}
+
+// ---------- 화면 확대 (v0.31.0 접근성) ----------
+// Ctrl + / − / 0 으로 앱 화면(툴바 · 입력창 · 목록 · 창)만 키운다. AI 사이트 패널은 다른 세션이라 그 사이트의 크기 그대로다.
+const uiZoom = () => normalizeZoom(prefs.uiZoom);
+/** dir: 1 키우기 · -1 줄이기 · 0 처음으로 */
+function setUiZoom(dir) {
+  const next = zoomStep(uiZoom(), dir);
+  if (next === uiZoom() && win?.webContents.getZoomFactor() === next) return;
+  prefs.uiZoom = next;
+  savePrefs();
+  applyUiZoom();
+}
+function applyUiZoom() {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.setZoomFactor(uiZoom());
+  pushState(); // 툴바 · 입력창 크기가 바뀌었으니 패널 자리를 다시 잡는다
 }
 
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
@@ -206,181 +225,18 @@ function savePrefs() {
   prefsSaver.save(prefs);
 }
 
-// ---------- 세션 ----------
-
-// 세션 = 쿠키·로그인 정보가 저장되는 "지갑". 모든 패널이 같은 지갑을 써서 Google 로그인을 같이 씁니다.
-const ses = () => session.fromPartition(PARTITION);
-
-/**
- * 세션(지갑)의 기본 규칙을 정합니다.
- *   - 사이트가 요청하는 권한(카메라·위치 등)은 "복사"와 "전체 화면"만 허락하고 나머지는 거절합니다.
- *   - Google 로그인 페이지에는 Firefox인 척하는 정보를 보내 "안전하지 않은 브라우저" 차단을 피합니다.
- */
-function setupSession() {
-  const s = ses();
-  s.setUserAgent(CHROME_UA);
-
-  const allowed = new Set(['clipboard-sanitized-write', 'fullscreen']);
-  s.setPermissionRequestHandler((_wc, permission, cb) => cb(allowed.has(permission)));
-  s.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
-
-  s.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*'] }, (details, cb) => {
-    const headers = details.requestHeaders;
-    headers['User-Agent'] = FIREFOX_UA;
-    for (const key of Object.keys(headers)) {
-      if (/^sec-ch-ua/i.test(key)) delete headers[key];
-    }
-    cb({ requestHeaders: headers });
-  });
-}
-
-/** Google에 로그인돼 있는지: 로그인하면 생기는 쿠키(SID 등)가 있는지 봅니다. async = 결과를 기다려야 하는 함수 */
-async function isGoogleLoggedIn() {
-  const cookies = await ses().cookies.get({ domain: 'google.com' });
-  return cookies.some((c) => c.name === 'SID' || c.name === '__Secure-1PSID');
-}
-
-// ---------- 뷰 ----------
-
-/** 허용 밖 주소는 앱 안에서 열지 않고 기본 브라우저로 보냅니다 (http/https만). */
-function openOutside(url) {
-  if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-}
-
-/**
- * 웹 내용(패널·로그인 팝업)이 새 창을 열려고 할 때의 규칙을 붙입니다.
- *   - 로그인 팝업(허용 목록의 호스트와 정확히 같은 https 주소, 또는 곧 이동할 about:blank)만 같은 세션의 자식 창으로 엽니다.
- *   - 나머지 링크는 기본 브라우저로 엽니다.
- * 열린 팝업 안에서 다른 주소로 이동(링크·스크립트·리다이렉트)할 때도 같은 검사를 하고, 허용 밖이면 막고 기본 브라우저로 엽니다.
- * svc: 그 패널의 서비스 (없으면 공용 로그인 도메인만 허용)
- */
-function guardPopups(wc, svc) {
-  wc.setWindowOpenHandler(({ url }) => {
-    log('popup', url.slice(0, 160));
-    if (url === 'about:blank' || isAuthPopupUrl(svc, url)) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 520,
-          height: 720,
-          parent: win,
-          autoHideMenuBar: true,
-          webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false },
-        },
-      };
-    }
-    openOutside(url);
-    return { action: 'deny' };
-  });
-  wc.on('did-create-window', (child) => {
-    const cwc = child.webContents;
-    // e: Electron 이벤트(e.url · e.isMainFrame). 예전 방식의 두 번째 인자(url)도 받는다. 팝업 안 iframe 이동은 보지 않는다.
-    const check = (e, url) => {
-      url = e?.url || url;
-      if (e?.isMainFrame === false || isAuthPopupUrl(svc, url)) return;
-      log('popup', 'navigation blocked', String(url).slice(0, 160));
-      e.preventDefault();
-      openOutside(url);
-      // 로그인 도중 허용 밖 주소(회사 SSO 등)로 가면 로그인이 끊기므로 패널에 알린다
-      let host = '';
-      try {
-        host = new URL(url).host;
-      } catch {}
-      if (svc) sendPanel(svc.id, { notice: t('main.popupBlocked', { host: host || t('main.unknownHost') }) });
-    };
-    cwc.on('will-navigate', (e, url) => check(e, url));
-    cwc.on('will-redirect', (e, url) => check(e, url));
-    guardPopups(cwc, svc); // 팝업이 또 여는 창에도 같은 규칙
-  });
-}
-
-/**
- * AI 서비스 페이지를 띄울 "작은 브라우저 창(패널)"을 하나 만듭니다.
- * 보안 설정: 페이지가 컴퓨터 파일 등에 손대지 못하게 격리(sandbox)합니다.
- * 페이지가 새 창을 열려고 하면: 로그인 팝업만 앱 안에서 열고, 나머지 링크는 기본 브라우저로 보냅니다 (guardPopups).
- * svc: 이 패널의 서비스 (Google 로그인 화면이면 없음)
- */
-function newView(svc = null) {
-  const view = new WebContentsView({
-    webPreferences: {
-      partition: PARTITION,
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      backgroundThrottling: false, // 화면에 안 보이는 패널도 답변 스트리밍이 멈추지 않도록
-    },
-  });
-  guardPopups(view.webContents, svc);
-  return view;
-}
-
-/** 패널 하나를 창에서 떼어 내고 완전히 닫습니다 (메모리 정리). */
-function destroyView(view) {
-  if (!view) return;
-  win?.contentView.removeChildView(view);
-  if (!view.webContents.isDestroyed()) view.webContents.close();
-}
-
-/** 패널의 상태(불러오는 중, 답변 중, 답변 완료 등)를 화면에 알립니다. 화면은 이걸 받아 머리줄 글자를 바꿉니다. */
-function sendPanel(id, patch) {
-  if (win && !win.isDestroyed()) win.webContents.send('panel:status', { id, ...patch });
-}
-
-/**
- * 서비스 하나(svc)의 패널을 새로 열고, 페이지가 움직일 때마다(불러오기 시작·끝, 주소 이동, 실패) 화면에 알립니다.
- * 자동 로그인 도우미(autologin)도 여기서 붙입니다.
- */
-function openPanel(svc) {
-  const view = newView(svc);
-  const wc = view.webContents;
-
-  wc.on('did-start-loading', () => {
-    loadFailed.delete(svc.id);
-    sendPanel(svc.id, { loading: true });
-  });
-  wc.on('did-stop-loading', () => sendPanel(svc.id, { loading: false, url: wc.getURL() }));
-  wc.on('did-navigate', (_e, url, code) => {
-    log('nav', svc.id, code, url.slice(0, 160));
-    sendPanel(svc.id, { url });
-  });
-  wc.on('did-redirect-navigation', (d) => d.isMainFrame && log('nav', svc.id, 'redirect', d.url.slice(0, 160)));
-  wc.on('did-navigate-in-page', (_e, url) => sendPanel(svc.id, { url }));
-  wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
-    if (!isMainFrame || code === -3) return;
-    loadFailed.add(svc.id); // 오류 페이지에서는 셀렉터 자가진단을 하지 않는다 (입력창이 없는 게 당연하다)
-    sendPanel(svc.id, { error: `${desc} (${code})`, url });
-  });
-
-  const login = autologin.attach(wc, svc, (state) => {
-    sendPanel(svc.id, { login: state });
-    if (state === 'ready') probePanel(svc.id); // 로그인된 화면에서 입력창이 보이는지 살펴본다 (셀렉터 자가진단)
-  });
-  win.contentView.addChildView(view);
-  wc.loadURL(svc.url);
-  panels.set(svc.id, { view, login });
-}
-
-// ---------- 셀렉터 자가진단 ----------
-// 패널마다 입력창 · 보내기 버튼 · 답변 영역을 찾았는지 기록한다 (shared/diag.js). 바뀌면 그 패널 머리줄에 알린다.
-const diag = createDiag({ onChange: (id, st) => sendPanel(id, { diag: st }) });
-const PROBE_GAP_MS = 30 * 1000; // 같은 패널을 이보다 자주 살펴보지 않는다 (로그인 확인은 대화 중에도 반복된다)
-const lastProbe = new Map();
-const loadFailed = new Set(); // 페이지 불러오기에 실패한 패널 (네트워크 오류 · 오프라인) — 다시 불러오기 시작하면 지운다
-
-/** 로그인된 패널 페이지에서 입력창이 보이는지 살펴본다. 페이지가 다 그려지도록 잠깐 기다린 뒤 */
-function probePanel(id) {
-  const now = Date.now();
-  if (now - (lastProbe.get(id) || 0) < PROBE_GAP_MS) return;
-  lastProbe.set(id, now);
-  setTimeout(async () => {
-    const wc = panels.get(id)?.view.webContents;
-    const svc = SERVICES.find((s) => s.id === id);
-    if (!wc || wc.isDestroyed() || !svc || loadFailed.has(id) || !isServiceUrl(svc, wc.getURL())) return;
-    try {
-      diag.fromProbe(id, await wc.executeJavaScript(`(${pageProbe.toString()})(${JSON.stringify({ input: svc.input || [] })})`, true));
-    } catch {} // 페이지가 바뀌는 중
-  }, 2500);
-}
+// ---------- 세션 · 뷰 · 셀렉터 자가진단 (v0.31.0: views.js로 떼어 냄) ----------
+// AI 패널(웹페이지 창)을 만들고 없애기, 로그인 팝업 규칙, 세션 설정, 입력창을 찾았는지 살펴보기는 views.js에 있다.
+// 이 파일의 것(패널 목록 · 창 등)은 views.js가 쓸 때 여기서 찾는다 — win은 값이 바뀌므로 읽을 때마다 지금 값을 준다.
+const { destroyView, diag, isGoogleLoggedIn, lastProbe, newView, openPanel, probePanel, sendPanel, ses, setupSession } = createViews({
+  CHROME_UA,
+  FIREFOX_UA,
+  PARTITION,
+  panels,
+  get win() {
+    return win;
+  },
+});
 
 // ---------- 화면 전환 ----------
 
@@ -482,7 +338,8 @@ async function logout() {
  * 결과의 frame은 머리줄을 포함한 칸 전체, content는 머리줄 아래 실제 웹페이지가 들어갈 자리입니다.
  */
 function computeRects() {
-  const [w, h] = win.getContentSize();
+  // 화면(CSS) 픽셀로 계산한다: 확대하면(v0.31.0) 같은 창이 화면 픽셀로는 더 작다. 웹페이지를 얹을 때 창 픽셀로 바꾼다 (pushState의 toWin).
+  const [w, h] = win.getContentSize().map((n) => Math.floor(n / uiZoom()));
   const side = mode === 'chat' && sidebarOpen ? SIDEBAR_W : 0;
   const area = { x: side, y: TOOLBAR_H, width: w - side, height: h - TOOLBAR_H };
   if (mode === 'login') return { login: area, panels: [] };
@@ -522,13 +379,14 @@ function pushState() {
   // 최소화된 동안에는 창 크기가 0으로 잡혀 패널 배치가 깨진다. 복원될 때('restore') 다시 배치한다.
   if (win.isMinimized()) return;
   const rects = computeRects();
-  if (loginView && rects.login) loginView.setBounds(rects.login);
+  const toWin = (r) => scaleRect(r, uiZoom()); // 화면 픽셀 → 창 픽셀
+  if (loginView && rects.login) loginView.setBounds(toWin(rects.login));
   // 비교·기록·도움말 화면에서는 웹 패널을 화면 밖으로 옮겨 둔다.
   // setVisible(false)로 숨기면 키보드 포커스가 숨은 패널에 갇혀 단축키가 먹지 않는다.
   // 크기는 그대로라서 페이지 배치가 바뀌지 않고 답변 감시도 계속된다.
   const showPanels = mode === 'chat' && chatView === 'panels';
   for (const r of rects.panels) {
-    panels.get(r.id)?.view.setBounds(showPanels && !r.hidden ? r.content : { ...r.content, x: -20000 });
+    panels.get(r.id)?.view.setBounds(showPanels && !r.hidden ? toWin(r.content) : { ...toWin(r.content), x: -20000 });
   }
   if (!showPanels && [...panels.values()].some((p) => p.view.webContents.isFocused())) win.webContents.focus();
   win.webContents.send('state', {
@@ -555,6 +413,7 @@ function pushState() {
     retryOnce: prefs.retryOnce,
     autoRecommend: prefs.autoRecommend,
     commitOffer: prefs.commitOffer,
+    onboarded: prefs.onboarded, // 첫 사용 안내를 봤는지 (v0.31.0, renderer/onboarding.js)
     lang: prefs.lang, // 언어 설정 (v0.30.0) · uiLang = 지금 쓰는 언어
     uiLang: i18n.getLang(),
     update: updater?.status() || null,
@@ -619,6 +478,7 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.webContents.once('did-finish-load', async () => {
+    if (uiZoom() !== 1) win.webContents.setZoomFactor(uiZoom()); // 지난번 확대 그대로 (v0.31.0)
     if (dev.start === 'chat') showChat(prefs.selected);
     else if (dev.start === 'pick' || (await isGoogleLoggedIn())) showPick();
     else showLogin();
@@ -961,6 +821,13 @@ function runShortcut(action) {
 app.on('web-contents-created', (_e, wc) => {
   wc.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.control || input.alt)) log('key', input.key, input.code, input.control ? 'ctrl' : 'alt');
+    // 화면 확대 (v0.31.0): 메뉴를 없애 Electron 기본 확대 키가 듣지 않으므로 직접 받는다
+    const zoomDir = zoomKey(input);
+    if (zoomDir !== null && win && !win.isDestroyed()) {
+      setUiZoom(zoomDir);
+      event.preventDefault();
+      return;
+    }
     const action = shortcutFor(input, { canEscape: mode === 'chat' && chatView !== 'panels' });
     if (action && runShortcut(action)) event.preventDefault();
   });

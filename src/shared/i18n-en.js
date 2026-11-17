@@ -458,7 +458,7 @@
   'transfer.key.local': 'Local LLM',
   'settings.lang': 'Language (언어)',
   'settings.lang.auto': 'Automatic (system language)',
-  'settings.langNote': 'Language of the app\'s own text. Automatic shows Korean when Windows (or Chrome, for the extension) is set to Korean, otherwise English. Changes apply right away; a few texts such as panel status lines switch the next time they update. The synthesis, analysis and debate prompts sent to the AIs are still written in Korean, so those answers may come back in Korean.',
+  'settings.langNote': 'Language of the app\'s own text. Automatic shows Korean when Windows (or Chrome, for the extension) is set to Korean, otherwise English. Changes apply right away; a few texts such as panel status lines switch the next time they update. The requests the app writes for the AIs (synthesis, analysis, debate, project mode) and the built-in templates use this language too; your own questions, templates and skills are sent as written.',
   'transfer.key.lang': 'Language',
   'page.err.no-input': 'Could not find the input box',
   'page.err.attach-rejected': 'The site did not accept the files',

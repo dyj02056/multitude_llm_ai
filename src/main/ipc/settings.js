@@ -24,8 +24,9 @@ function register(ctx) {
 
   // 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 기록 최대 개수, 사이트 셀렉터 자동 갱신, 새 버전 자동 확인,
   // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0)
-  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, commitOffer, lang } = {}) => {
+  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, commitOffer, lang, onboarded } = {}) => {
     const prefs = ctx.prefs();
+    if (typeof onboarded === 'boolean') prefs.onboarded = onboarded; // 첫 사용 안내를 봤는지 (v0.31.0)
     // 화면 언어 (v0.30.0): 'auto' · 'ko' · 'en'만. 본체 글(창 · 알림 · 오류)은 바로 바뀌고, 화면은 state.uiLang을 보고 다시 그린다
     if (LANG_PREFS.includes(lang) && lang !== prefs.lang) {
       prefs.lang = lang;

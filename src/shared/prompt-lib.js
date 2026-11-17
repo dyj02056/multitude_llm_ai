@@ -24,9 +24,10 @@
   'use strict';
 
   // 화면 문구 (i18n-*-library.js). 부를 때마다 사전을 찾고, 사전이 없으면 키 이름을 그대로 쓴다 (부서지지 않게).
-  const tr = (key) => {
+  // AI에게 보내는 글(지침 머리글 · 압축 요청)은 i18n-*-prompt.js (v0.31.0 — 화면 언어를 따른다).
+  const tr = (key, vars) => {
     const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
-    return i18n ? i18n.t(key) : key;
+    return i18n ? i18n.t(key, vars) : key;
   };
 
   const LIMITS = {
@@ -195,15 +196,11 @@
   /** AI에게 보낼 압축 요청 글 */
   function compressRequest(skill, target) {
     return [
-      `아래는 AI에게 줄 지침("${skill.name}")이야. 이 지침을 ${target.toLocaleString()}자 이내로 압축해 줘.`,
-      '- 반드시 지켜야 하는 규칙·절차·조건·금지 사항·출력 형식은 하나도 빠뜨리지 마.',
-      '- 설명·배경·예시·인사말·반복은 빼고, 짧은 명령문 목록으로 써.',
-      '- 지침을 따르는 AI가 읽는 글이야. 원문과 같은 언어로 써.',
-      '- 결과는 코드 블록 하나에만 넣고, 다른 말은 쓰지 마.',
+      tr('prompt.skill.compress', { name: skill.name, n: target.toLocaleString() }),
       '',
-      '----- 지침 원문 -----',
+      tr('prompt.skill.compressOpen'),
       cleanSkill(skill.body),
-      '----- 끝 -----',
+      tr('prompt.skill.compressClose'),
     ].join('\n');
   }
 
@@ -231,37 +228,35 @@
 
   // ---------- 질문 앞에 붙일 지침 ----------
 
-  const QUESTION_TAIL = ['', '### 질문', '', ''];
+  const questionTail = () => ['', tr('prompt.skill.question'), '', ''];
 
   /** 질문 앞에 붙일 스킬 지침 글 (스킬 하나 또는 여러 개 — 앞에 있는 것이 우선) */
   function skillPrefix(skills) {
     const list = (Array.isArray(skills) ? skills : [skills]).filter(Boolean);
     if (list.length === 1) {
       return [
-        `### 지침 (스킬: ${list[0].name})`,
-        '이 대화가 끝날 때까지 아래 지침을 따라 답해 줘. 지침 자체를 다시 설명하거나 요약하지는 마.',
+        tr('prompt.skill.one', { name: list[0].name }),
         '',
         sendBody(list[0]),
-        ...QUESTION_TAIL,
+        ...questionTail(),
       ].join('\n');
     }
     return [
-      `### 지침 (스킬 ${list.length}개 — 위에 있는 것이 우선)`,
-      '이 대화가 끝날 때까지 아래 지침을 모두 따라 답해 줘. 서로 부딪히면 먼저 나온 지침을 따라. 지침 자체를 다시 설명하거나 요약하지는 마.',
+      tr('prompt.skill.many', { n: list.length }),
       ...list.flatMap((s, i) => ['', `#### ${i + 1}. ${s.name}`, sendBody(s)]),
-      ...QUESTION_TAIL,
+      ...questionTail(),
     ].join('\n');
   }
 
   /** 대화 중간에 스킬을 바꿨을 때 붙일 글: 새로 켠 스킬은 본문, 끈 스킬은 "따르지 마" */
   function skillChangeNote(added, removed) {
-    const lines = ['### 지침 변경'];
-    if (removed.length) lines.push(`지금부터 다음 지침은 따르지 마: ${removed.map((s) => `"${s.name}"`).join(', ')}`);
+    const lines = [tr('prompt.skill.change')];
+    if (removed.length) lines.push(tr('prompt.skill.drop', { names: removed.map((s) => `"${s.name}"`).join(', ') }));
     if (added.length) {
-      lines.push(`지금부터 아래 지침${added.length > 1 ? '들' : ''}도 따라 줘 (이전 지침과 부딪히면 이것을 따라).`);
+      lines.push(tr(added.length > 1 ? 'prompt.skill.addMany' : 'prompt.skill.addOne'));
       for (const s of added) lines.push('', `#### ${s.name}`, sendBody(s));
     }
-    return [...lines, ...QUESTION_TAIL].join('\n');
+    return [...lines, ...questionTail()].join('\n');
   }
 
   /**
@@ -270,7 +265,7 @@
    * → { text, ids } | null(붙일 것 없음)
    */
   function prefixFor(active, sent, mode, nameOf = () => '') {
-    const gone = (id) => ({ id, name: nameOf(id) || '이전 스킬' });
+    const gone = (id) => ({ id, name: nameOf(id) || tr('prompt.skill.gone') });
     const ids = active.map((s) => s.id);
     if (!active.length) {
       if (!sent?.length || mode === 'every') return null;

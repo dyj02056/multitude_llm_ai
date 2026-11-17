@@ -21,7 +21,7 @@
   'use strict';
 
   const PC = projectContext || require('./project-context');
-  // 화면 문구 (i18n-*-project.js) — 부를 때 찾는다 (Electron 앱 require · 화면 전역 MLA.i18n). AI에게 보내는 글은 옮기지 않는다.
+  // 화면 문구 (i18n-*-project.js) — 부를 때 찾는다 (Electron 앱 require · 화면 전역 MLA.i18n). AI에게 보내는 글은 i18n-*-prompt.js (v0.31.0).
   const tr = (key, vars) => {
     const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
     return i18n ? i18n.t(key, vars) : key;
@@ -177,7 +177,7 @@
     // 머리글·울타리·조각 안내가 들어갈 자리를 빼고 내용을 나눈다
     const overhead = bytesOf(`${PC.fileBlock(file.path, '')}\n`) + 160;
     const parts = splitBytes(file.text, Math.max(1024, limit - overhead));
-    return parts.map((p, i) => `(${file.path} — 파일이 커서 ${parts.length}조각으로 나눔: ${i + 1}/${parts.length}, 이어 붙이면 한 파일)\n${PC.fileBlock(file.path, p)}\n`);
+    return parts.map((p, i) => `${tr('prompt.up.part', { path: file.path, total: parts.length, i: i + 1 })}\n${PC.fileBlock(file.path, p)}\n`);
   }
 
   /** 묶음 파일: 내용을 바이트 한도(chunkLimit)씩, 파일 경계에서 나눈다. 한 파일이 한도보다 크면 그 파일도 나눈다. */
@@ -205,7 +205,7 @@
     chunks.push(cur);
     if (chunks.length === 1) return [md(baseFile, chunks[0])];
     const stem = baseFile.replace(/\.md$/, '');
-    return chunks.map((c, i) => md(`${stem}-${i + 1}.md`, `(${chunks.length}개 중 ${i + 1}번째)\n\n${c}`));
+    return chunks.map((c, i) => md(`${stem}-${i + 1}.md`, `${tr('prompt.up.chunk', { total: chunks.length, i: i + 1 })}\n\n${c}`));
   }
 
   /** 첨부 한도 안에 드는지: budget { files: 남은 개수, bytes: 남은 용량, fileBytes: 파일당 한도 } */
@@ -229,11 +229,14 @@
     return { attachments, map };
   }
 
-  const FILES_RULE =
-    '올린 파일 이름의 "__"는 폴더 구분이고 끝의 ".txt"는 업로드용으로 붙인 것이야. 답변의 "파일: 경로"·NEED_FILES·DELETE_FILES에는 실제 경로(목록의 오른쪽)를 써 줘.';
-  const skippedLines = (skipped) => (skipped.length ? ['[보내지 않은 파일]', ...skipped.map((s) => `- ${s.path}: ${s.reason}`), ''] : []);
-  const cutInline = (text) =>
-    text.length <= PC.INLINE_LIMIT ? text : `${text.slice(0, PC.INLINE_LIMIT - 100)}\n… (분량이 많아 여기까지만 넣었습니다)`;
+  const filesRule = () => tr('prompt.up.filesRule');
+  const skippedLines = (skipped) => (skipped.length ? [tr('prompt.proj.skipped'), ...skipped.map((s) => `- ${s.path}: ${s.reason}`), ''] : []);
+  const cutInline = (text) => (text.length <= PC.INLINE_LIMIT ? text : `${text.slice(0, PC.INLINE_LIMIT - 100)}\n${tr('prompt.proj.cut')}`);
+  // 여러 곳에서 쓰는 조각
+  const projHead = (project, files) => tr('prompt.proj.head', { name: project.name, total: project.paths.length, n: files.length });
+  const treeBlockOf = (tree) => `${tr('prompt.proj.tree')}\n${tree}`;
+  const requestTail = (request) => `${tr('prompt.proj.request')}\n${request || tr('prompt.proj.noRequestAttached')}\n\n${PC.RULES}`;
+  const mapBlock = (files, map) => (files.length ? `${tr('prompt.up.mapHead', { n: files.length })}\n${map}` : tr('prompt.up.noFiles'));
 
   /**
    * 첫 질문. project: { name, paths }, files: [{ path, text }], request, mode, budget
@@ -241,32 +244,23 @@
    */
   function packContext({ project, files, request, mode = DEFAULT_MODE, budget }) {
     const legacy = PC.buildContext({ project, files, request });
-    const head = `[프로젝트: ${project.name}] (제외 규칙을 통과한 파일 ${project.paths.length}개 중 ${files.length}개 내용 포함)`;
+    const head = projHead(project, files);
     const tree = PC.buildTree(project.paths);
-    const tail = `[요청]\n${request || '(요청 없음 — 첨부한 내용을 검토해 줘)'}\n\n${PC.RULES}`;
+    const tail = requestTail(request);
     const inlineText = legacy.inlineText;
 
     if (mode === 'files') {
       const { attachments, map } = eachFile(files);
       const treeInBody = tree.length <= TREE_IN_BODY;
-      if (!treeInBody) attachments.push(md('project-structure.md', `${head}\n\n[프로젝트 구조]\n${tree}\n`));
+      if (!treeInBody) attachments.push(md('project-structure.md', `${head}\n\n${treeBlockOf(tree)}\n`));
       if (fits(attachments, budget)) {
-        const text = [
-          head,
-          '',
-          files.length ? `[올린 파일 ${files.length}개 → 실제 경로]\n${map}` : '(내용을 올린 파일 없음)',
-          FILES_RULE,
-          '',
-          treeInBody ? `[프로젝트 구조]\n${tree}` : '[프로젝트 구조] 첨부한 project-structure.md에 있습니다.',
-          '',
-          tail,
-        ].join('\n');
+        const text = [head, '', mapBlock(files, map), filesRule(), '', treeInBody ? treeBlockOf(tree) : tr('prompt.up.treeAttached'), '', tail].join('\n');
         return { mode: 'files', text, attachments, inlineText };
       }
     }
-    const attachments = bundle(PC.CONTEXT_FILE, `${head}\n\n[프로젝트 구조]\n${tree}\n`, files, budget);
+    const attachments = bundle(PC.CONTEXT_FILE, `${head}\n\n${treeBlockOf(tree)}\n`, files, budget);
     const names = attachments.map((a) => a.name).join(', ');
-    const text = `${head}\n첨부한 ${names}에 프로젝트 구조와 파일 ${files.length}개의 내용이 있습니다.\n\n${tail}`;
+    const text = `${head}\n${tr('prompt.up.attachedHas', { names, n: files.length })}\n\n${tail}`;
     const note = mode === 'files' ? tr('project.upload.bundledNote') : undefined;
     return { mode: 'bundle', text, attachments, inlineText, note };
   }
@@ -274,17 +268,17 @@
   /** NEED_FILES 요청에 답하기. files: [{ path, text }], skipped: [{ path, reason }] */
   function packFollowUp({ files, skipped = [], mode = DEFAULT_MODE, budget }) {
     const inlineText = cutInline(PC.buildFollowUp(files, skipped));
-    const tail = ['같은 답변 규칙으로 이어서 답해 줘.', '', PC.RULES];
+    const tail = [tr('prompt.proj.sameRules'), '', PC.RULES];
     if (mode === 'files') {
       const { attachments, map } = eachFile(files);
       if (fits(attachments, budget)) {
-        const text = [`요청한 파일 ${files.length}개를 올렸습니다.`, '', `[올린 파일 → 실제 경로]\n${map}`, FILES_RULE, '', ...skippedLines(skipped), ...tail].join('\n');
+        const text = [tr('prompt.up.followFiles', { n: files.length }), '', `${tr('prompt.up.mapHeadPlain')}\n${map}`, filesRule(), '', ...skippedLines(skipped), ...tail].join('\n');
         return { mode: 'files', text, attachments, inlineText };
       }
     }
     const attachments = bundle('requested-files.md', '', files, budget);
     const names = attachments.map((a) => a.name).join(', ');
-    const text = [`요청한 파일 ${files.length}개의 내용을 첨부한 ${names}에 넣었습니다.`, '', ...skippedLines(skipped), ...tail].join('\n');
+    const text = [tr('prompt.up.followBundle', { n: files.length, names }), '', ...skippedLines(skipped), ...tail].join('\n');
     return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? tr('project.upload.bundledNote') : undefined };
   }
 
@@ -293,22 +287,22 @@
    * files: [{ path, text }] 바뀐 파일의 지금 내용, deleted: [경로] 지워진 파일
    */
   function packUpdate({ files, deleted = [], mode = DEFAULT_MODE, budget }) {
-    const intro = `내가 로컬에서 프로젝트 파일을 고쳤어. 이전에 보낸 내용 대신 아래 내용을 기준으로 해 줘.`;
-    const gone = deleted.length ? ['[지워진 파일]', ...deleted.map((p) => `- ${p}`), ''] : [];
-    const ack = '지금은 수정하지 말고 무엇이 바뀌었는지 3줄 이내로 확인만 해 줘. 다음 요청부터 같은 답변 규칙을 지켜 줘.';
+    const intro = tr('prompt.up.editedIntro');
+    const gone = deleted.length ? [tr('prompt.up.gone'), ...deleted.map((p) => `- ${p}`), ''] : [];
+    const ack = tr('prompt.up.editedAck');
     const blocks = files.map((f) => `${PC.fileBlock(f.path, f.text)}\n`);
     const inlineText = cutInline([intro, '', ...gone, ...blocks, ack].join('\n'));
     if (!files.length) return { mode, text: [intro, '', ...gone, ack].join('\n'), attachments: [], inlineText };
     if (mode === 'files') {
       const { attachments, map } = eachFile(files);
       if (fits(attachments, budget)) {
-        const text = [intro, '', `[올린 파일 ${files.length}개 → 실제 경로]\n${map}`, FILES_RULE, '', ...gone, ack].join('\n');
+        const text = [intro, '', mapBlock(files, map), filesRule(), '', ...gone, ack].join('\n');
         return { mode: 'files', text, attachments, inlineText };
       }
     }
     const attachments = bundle('updated-files.md', '', files, budget);
     const names = attachments.map((a) => a.name).join(', ');
-    const text = [intro, `바뀐 파일 ${files.length}개의 지금 내용을 첨부한 ${names}에 넣었습니다.`, '', ...gone, ack].join('\n');
+    const text = [intro, tr('prompt.up.editedBundle', { n: files.length, names }), '', ...gone, ack].join('\n');
     return { mode: 'bundle', text, attachments, inlineText, note: mode === 'files' ? tr('project.upload.bundledNote') : undefined };
   }
 
@@ -320,20 +314,16 @@
   function packRefetch({ path, text: content, mode = DEFAULT_MODE, reason = 'diff' }) {
     const inlineText = cutInline(PC.buildRefetch(path, content));
     const long = String(content).split('\n').length > PC.EDIT_LINES;
-    const why = reason === 'truncated' ? '네 답변이 길어서 중간에 잘려 적용하지 못했어' : '네가 준 수정안이 현재 내용과 맞지 않아 적용하지 못했어';
-    const ask = (where) =>
-      [
-        `${where} 파일(${path})은 ${why}. 첨부한 것이 지금 내용이야.`,
-        long
-          ? `이 파일은 길어서 전체를 다시 쓰지 말고, "파일: ${path}" 줄 다음 코드 블록 하나에 바꿀 곳만 찾기/바꾸기(<<<<<<< 찾기 / ======= / >>>>>>> 바꾸기)로 줘. 찾을 부분은 지금 내용 그대로, 파일 안에서 한 곳만 맞게.`
-          : `수정한 "전체" 파일 내용을 "파일: ${path}" 줄 다음에 코드 블록 하나로 다시 줘.`,
-      ].join('\n');
+    const why = reason === 'truncated' ? 'trunc' : 'diff';
+    // kind: 'File'(파일 그대로 올림) | 'Bundle'(묶음 파일 안에 넣음)
+    const ask = (kind, name) =>
+      [tr(`prompt.up.refetch.${why}${kind}`, { name, path }), long ? tr('prompt.up.refetch.long', { path }) : tr('prompt.proj.refetchFull', { path })].join('\n');
     if (mode === 'files') {
       const name = uploadName(path);
-      return { mode: 'files', text: `${ask(`첨부한 ${name}`)}\n${FILES_RULE}`, attachments: [{ name, type: 'text/plain', text: content }], inlineText };
+      return { mode: 'files', text: `${ask('File', name)}\n${filesRule()}`, attachments: [{ name, type: 'text/plain', text: content }], inlineText };
     }
     const name = `refetch-${baseName(path).replace(/[<>:"|?*\\/\x00-\x1f]/g, '_')}.md`;
-    return { mode: 'bundle', text: ask(`첨부한 ${name}의`), attachments: [md(name, `${PC.fileBlock(path, content)}\n`)], inlineText };
+    return { mode: 'bundle', text: ask('Bundle', name), attachments: [md(name, `${PC.fileBlock(path, content)}\n`)], inlineText };
   }
 
   const CHANGED_FILE = 'changed-files.md';
@@ -348,17 +338,17 @@
   function packIncremental({ project, files, same = [], gone = [], includeTree = false, showLines = false, first = false, request, mode = DEFAULT_MODE, budget }) {
     // first: 이 패널에는 처음 보냄 (다른 패널은 이어지는 질문이라 같은 첨부를 함께 쓴다)
     const head = first
-      ? `[프로젝트: ${project.name}] (제외 규칙을 통과한 파일 ${project.paths.length}개 중 ${files.length}개 내용 포함)`
-      : `[프로젝트: ${project.name}] (이어지는 질문 — 바뀌었거나 처음 보내는 파일 ${files.length}개만 올림${same.length ? ` · ${same.length}개는 앞서 보낸 그대로` : ''})`;
+      ? projHead(project, files)
+      : tr('prompt.up.inc.head', { name: project.name, n: files.length, same: same.length ? tr('prompt.up.inc.headSame', { n: same.length }) : '' });
     // 첨부 안의 머리글은 패널마다 같아야 한다 (같은 첨부를 여러 패널에 보낸다)
-    const fileHead = `[프로젝트: ${project.name}] (제외 규칙을 통과한 파일 ${project.paths.length}개의 구조 · 파일 ${files.length}개 내용)`;
+    const fileHead = tr('prompt.up.inc.fileHead', { name: project.name, total: project.paths.length, n: files.length });
     const tree = includeTree ? PC.buildTree(project.paths) : '';
     const sameLines = same.length
-      ? ['[앞서 보낸 그대로] (내용이 바뀌지 않아 다시 올리지 않음 — 이전에 받은 내용을 그대로 써 줘)', ...same.map((f) => `- ${f.path}${showLines ? ` (${f.lines}줄)` : ''}`), '']
+      ? [tr('prompt.up.inc.same'), ...same.map((f) => `- ${f.path}${showLines ? tr('prompt.up.inc.lines', { n: f.lines }) : ''}`), '']
       : [];
-    const goneLines = gone.length ? ['[지워진 파일] (앞서 보냈지만 지금은 없음)', ...gone.map((p) => `- ${p}`), ''] : [];
-    const tail = `[요청]\n${request || '(요청 없음 — 첨부한 내용을 검토해 줘)'}\n\n${PC.RULES}`;
-    const treeBlock = includeTree ? [`[프로젝트 구조]\n${tree}`, ''] : [];
+    const goneLines = gone.length ? [tr('prompt.up.inc.gone'), ...gone.map((p) => `- ${p}`), ''] : [];
+    const tail = requestTail(request);
+    const treeBlock = includeTree ? [treeBlockOf(tree), ''] : [];
     const inlineText = cutInline(
       [head, '', ...treeBlock, ...files.map((f) => `${PC.fileBlock(f.path, f.text)}\n`), ...sameLines, ...goneLines, tail].join('\n'),
     );
@@ -369,15 +359,15 @@
     if (mode === 'files') {
       const { attachments, map } = eachFile(files);
       const treeInBody = tree.length <= TREE_IN_BODY;
-      if (includeTree && !treeInBody) attachments.push(md('project-structure.md', `${fileHead}\n\n[프로젝트 구조]\n${tree}\n`));
+      if (includeTree && !treeInBody) attachments.push(md('project-structure.md', `${fileHead}\n\n${treeBlockOf(tree)}\n`));
       if (fits(attachments, budget)) {
         const text = [
           head,
           '',
-          files.length ? `[올린 파일 ${files.length}개 → 실제 경로]\n${map}` : '(내용을 올린 파일 없음)',
-          files.length ? FILES_RULE : '',
+          mapBlock(files, map),
+          files.length ? filesRule() : '',
           '',
-          ...(includeTree ? [treeInBody ? `[프로젝트 구조]\n${tree}` : '[프로젝트 구조] 첨부한 project-structure.md에 있습니다.', ''] : []),
+          ...(includeTree ? [treeInBody ? treeBlockOf(tree) : tr('prompt.up.treeAttached'), ''] : []),
           ...sameLines,
           ...goneLines,
           tail,
@@ -385,10 +375,11 @@
         return { mode: 'files', text, attachments, inlineText };
       }
     }
-    const attachments = bundle(includeTree ? PC.CONTEXT_FILE : CHANGED_FILE, includeTree ? `${fileHead}\n\n[프로젝트 구조]\n${tree}\n` : '', files, budget);
+    const attachments = bundle(includeTree ? PC.CONTEXT_FILE : CHANGED_FILE, includeTree ? `${fileHead}\n\n${treeBlockOf(tree)}\n` : '', files, budget);
     const names = attachments.map((a) => a.name).join(', ');
-    const what = [includeTree ? '프로젝트 구조' : '', files.length ? `${first ? '' : '바뀐 '}파일 ${files.length}개의 지금 내용` : ''].filter(Boolean).join('와 ');
-    const text = [head, `첨부한 ${names}에 ${what}${files.length ? '이' : '가'} 있습니다.`, '', ...sameLines, ...goneLines, tail].join('\n');
+    // 첨부에 무엇이 들었는지: 구조만 · 구조 + (바뀐) 파일 · (바뀐) 파일만
+    const whatKey = !files.length ? 'treeOnly' : includeTree ? (first ? 'treeFiles' : 'treeChanged') : first ? 'files' : 'changed';
+    const text = [head, tr(`prompt.up.inc.${whatKey}`, { names, n: files.length }), '', ...sameLines, ...goneLines, tail].join('\n');
     const note = mode === 'files' ? tr('project.upload.bundledNote') : undefined;
     return { mode: 'bundle', text, attachments, inlineText, note };
   }

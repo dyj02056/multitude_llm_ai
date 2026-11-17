@@ -78,7 +78,7 @@
       const u = new URL(String(raw.url || ''));
       if (u.protocol === 'http:' || u.protocol === 'https:') url = u.href;
     } catch {}
-    const title = String(raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 200) || url || '웹페이지';
+    const title = String(raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 200) || url || tr('prompt.web.page');
     return {
       title,
       url,
@@ -113,7 +113,7 @@
   /** 본문을 질문 글에 그대로 넣은 글 (출처 · 본문 · 질문) */
   function inlinePrompt(ctx, q) {
     const src = ctx.url ? `「${ctx.title}」(${ctx.url})` : `「${ctx.title}」`;
-    return [`다음은 내가 지금 보고 있는 웹페이지 ${src}의 본문입니다. 이 내용을 바탕으로 답해 주세요.`, '', '---', ctx.text, '---', '', `질문: ${q}`].join('\n');
+    return [tr('prompt.web.inline', { src }), '', '---', ctx.text, '---', '', `${tr('prompt.web.question')}${q}`].join('\n');
   }
 
   /**

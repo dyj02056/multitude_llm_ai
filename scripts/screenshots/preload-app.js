@@ -25,7 +25,10 @@ const all = LOCAL || LOCAL_JUDGE ? [...SERVICES, localSvc] : SERVICES;
 const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
-const PROJ = ['36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore'].includes(scene);
+// v0.31.0: 09 · 10 · 16 · 21 · 22 · 23(예전 디자인이던 프로젝트 장면)과 47(파일 나무 키보드)도 같은 가짜 프로젝트로 찍는다
+const PROJ = ['36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
+const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
+let onboarded = !ONBOARD;
 const SIDEBAR_W = 300;
 let sidebar = false;
 const barRows = new Map();
@@ -49,6 +52,16 @@ const NAMES4 = ['Gemini', 'ChatGPT', 'DeepSeek', 'Perplexity'];
 const analysis2 = { judge: 'Gemini', at: now - 10 * 60e3, text: S.ANALYSIS_MD2, md: S.ANALYSIS_MD2, mode: 'analysis', names: NAMES4 };
 if (scene === '30-analysis-compare') answers.analyses = [analysis2, answers.analysis];
 if (PROJ) for (const a of answers.answers) if (S.PROJECT_ANSWERS[a.id]) Object.assign(a, { text: S.PROJECT_ANSWERS[a.id], md: S.PROJECT_ANSWERS[a.id] });
+// 잘린 답 (21 · 22): Gemini의 답이 출력 한도로 마지막 파일 중간에서 끊겼다 (코드 블록이 닫히지 않음)
+if (['21-truncation-guard', '22-continue'].includes(scene)) {
+  const cut = S.PROJECT_ANSWERS.gemini.split('\n').slice(0, -3).join('\n');
+  Object.assign(answers.answers.find((a) => a.id === 'gemini'), { text: cut, md: cut });
+}
+// 계획 답 (23): ChatGPT가 코드 없이 고칠 파일 목록만 답했다 → 변경 바에 "파일별로 받기 시작"
+if (scene === '23-plan-split') {
+  const plan = ['실패 응답 처리와 캐시를 나눠 넣고 테스트를 더합니다.', '', '- src/user.js: 상태 코드 확인, 캐시 사용', '- src/cache.js: 메모리 캐시 새로 만들기', '- test/user.test.js: 실패 응답 테스트', '', 'PLAN_FILES: src/user.js, src/cache.js, test/user.test.js'].join('\n');
+  Object.assign(answers.answers.find((a) => a.id === 'chatgpt'), { text: plan, md: plan });
+}
 if (scene === '29-debate-result') {
   answers.chain = S.CHAIN(now);
   answers.debates = [{ judge: 'Gemini', at: now - 60e3, text: S.DEBATE_RESULT, md: S.DEBATE_RESULT, mode: 'debate', names: ['ChatGPT', 'DeepSeek', 'Perplexity'], rounds: 2 }];
@@ -120,7 +133,7 @@ function push() {
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL || LOCAL_JUDGE, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b', contextTokens: 8192 },
     autoUpdate: true,
-    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip', commitOffer: true, lang: LANG, uiLang: LANG,
+    notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip', commitOffer: true, lang: LANG, uiLang: LANG, onboarded,
     update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
     storage: { encrypted: true },
     rects: rs,
@@ -162,7 +175,7 @@ window.host = {
   local: { setPrefs: async () => ({ ok: true }), models: async () => ({ ok: true, models: ['qwen2.5:7b', 'llama3.1:8b'] }), ask: async () => ({ ok: true, text: '- 버그 먼저' }) },
   shortcuts: async () => shortcutList({}),
   runSynth: async () => ({ ok: true }),
-  setSynth() {}, setSettings() {}, refreshRemote: async () => ({}),
+  setSynth() {}, setSettings: (o) => (typeof o?.onboarded === 'boolean' ? ((onboarded = o.onboarded), push()) : undefined), refreshRemote: async () => ({}),
   setLayout: (v) => ((layout = v), push()),
   setFocus() {},
   setSidebar: (on) => ((sidebar = PROJ && !!on), push()),
@@ -367,10 +380,30 @@ window.addEventListener('DOMContentLoaded', async () => {
     for (const id of ['gemini', 'chatgpt']) emit('panel:status', { id, answer: 'done', chars: 900 });
     await sleep(600);
   }
-  if (scene === '36-check-scripts') {
+  if (scene === '10-changes') {
+    click('#changesBtn');
+    await sleep(700);
+  }
+  if (scene === '21-truncation-guard') {
+    btnIn(document.querySelector('.change-bar:not([hidden])'), '변경 보기')?.click(); // Gemini: 끊긴 파일은 체크가 풀려 있다
+    await sleep(500);
+  }
+  if (scene === '47-file-tree') {
+    // 파일 나무를 키보드로: 첫 줄(src/)에 포커스 → → 로 펼치고 ↓ 로 안의 파일로
+    const key = (k) => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+    document.querySelector('#psTree .ps-row')?.focus();
+    key('ArrowRight');
+    await sleep(300);
+    key('ArrowDown');
+    key('ArrowDown');
+    // 숨긴 창에서는 :focus-visible이 안 그려져 같은 모양(.ps-row:focus-visible)을 직접 붙인다
+    Object.assign(document.activeElement.style, { outline: '2px solid var(--accent)', outlineOffset: '-2px' });
+    await sleep(200);
+  }
+  if (scene === '36-check-scripts' || scene === '16-test-run') {
     btnIn(document.querySelector('.change-bar:not([hidden])'), '변경 보기')?.click();
     await sleep(500);
-    document.querySelector('#patchChecks input[data-check="lint"]')?.click();
+    if (scene === '36-check-scripts') document.querySelector('#patchChecks input[data-check="lint"]')?.click();
     click('#patchTest');
     await sleep(600);
   }

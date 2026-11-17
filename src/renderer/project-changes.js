@@ -1,17 +1,31 @@
 'use strict';
 
-// 프로젝트 모드 — 변경 제안 화면 · 패널 변경 바 · 큰 작업(파일별로 받기) · 이어서 받기 · 미리보기 · 적용 · 되돌리기 · 파일 모아보기.
-// project.js 다음, project-editor.js 앞에 읽힌다. project.js의 것은 MLA.projectUI(P)에서 꺼내 쓴다 (v0.24.0에서 나눔).
+// 프로젝트 모드 — 변경 제안 화면 · 패널 변경 바 · 미리보기 · 적용 · 되돌리기 · 적용 기록.
+// project.js 다음에 읽힌다. project.js의 것은 MLA.projectUI(P)에서 꺼내 쓴다 (v0.24.0에서 나눔).
+// v0.31.0에서 세 파일을 더 떼어 냈다 (이 파일 바로 다음에 차례로 읽힌다):
+//   project-runs.js    큰 작업(파일별로 받기) · 이어서 받기
+//   project-devtest.js 검사 실행(test · lint · typecheck · build) 버튼과 결과 그리기
+//   project-collect.js 파일 모아보기
+// 그 파일들의 함수는 P에 실린 것을 "부를 때" 찾는다 (아래 renderRunBar 등 — 이 파일이 먼저 읽히므로 읽는 시점에는 아직 없다).
 //
 // [쉽게 말하면] AI 답변에 들어 있는 코드 수정안을 골라 보고, 미리 보고, 내 파일에 쓰고, 되돌리는 화면입니다.
 (() => {
   const P = MLA.projectUI;
-  const { project, has, MAX_LOG, allowedFor, answerMd, listLines, notice, remember, rescan, saveState, sendProjectFollowUp } = P;
-  const PI = MLA.projectIgnore;
+  const { project, has, MAX_LOG, allowedFor, answerMd, remember, rescan, saveState, sendProjectFollowUp } = P;
+const PI = MLA.projectIgnore;
   const { scanSecrets, describeSecrets } = MLA.secretScan;
-  const PC = MLA.projectContext;
-  const PU = MLA.projectUpload;
-  const PX = MLA.patch;
+const PC = MLA.projectContext;
+const PU = MLA.projectUpload;
+const PX = MLA.patch;
+
+  // 뒤에 읽히는 파일의 함수 (부를 때 P에서 찾는다)
+  const renderRunBar = (...a) => P.renderRunBar(...a); // project-runs.js
+  const continueFile = (...a) => P.continueFile(...a); // project-runs.js
+  const setupTestRun = (...a) => P.setupTestRun(...a); // project-devtest.js
+
+  // 패널마다의 진행 상태 — 변경 바(renderBar)가 보고, project-runs.js가 채운다
+  const runs = new Map(); // 패널 id -> { status: 'offer' | 'running', files: [{ path, note }], index, changes: Map(경로 -> 수정안), skip }
+  const continuing = new Map(); // 패널 id -> { path, cont, changes: 원래 답의 수정안들, rounds }
 
   // ---------- 변경 제안 ----------
 
@@ -94,177 +108,6 @@
     const plans = await planAnswer(md ?? (await answerMd(id)));
     bars.set(id, { ai: { id, name: svc.name, color: svc.color, plans }, applied: null });
     return renderBar(id);
-  }
-
-  // ---------- 큰 작업: 파일별로 받기 (v0.18.0) ----------
-  // 계획 답(PLAN_FILES)이 오면 바에 "파일별로 받기 시작"을 띄운다. 시작하면 "1/5: a.js만"을 보내고,
-  // 그 답이 끝날 때마다(onPanelAnswerDone) 수정안을 모으고 다음 파일을 보낸다. 다 받거나 멈추면 한 묶음으로 바를 그린다.
-  // 답이 시간 초과 · 답변 없음으로 끝나면 다음으로 넘어가지 않는다 — 바의 "건너뛰기"나 "멈추기"를 누른다.
-  const runs = new Map(); // 패널 id -> { status: 'offer' | 'running', files: [{ path, note }], index, changes: Map(경로 -> 수정안), skip }
-  P.splitSuggested = false; // "큰 작업"을 한 번만 권한다
-
-  /** 계획만 온 답이면 파일별로 받기를 제안한다 → 제안했으면 true */
-  function offerRun(id, md) {
-    const planned = PC.parsePlanFiles(md)
-      .map((f) => ({ ...f, path: PX.safeRelPath(f.path) }))
-      .filter((f) => f.path && !writeBlocked(f.path) && !PX.isGitInternal(f.path));
-    const changes = PX.extractChanges(md);
-    if (!planned.length || changes.some((c) => !c.isDelete)) return false; // 코드가 함께 왔으면 평소대로
-    runs.set(id, { status: 'offer', files: planned, index: 0, changes: new Map(changes.map((c) => [c.path, c])), skip: false });
-    renderBar(id);
-    // 계획이 오면 바로 시작 (v0.22.0) — 사이트가 다음 질문을 받을 준비가 되도록 잠깐 둔다
-    if (project.autoRun) {
-      notice(t('project.split.planStart', { n: planned.length }));
-      setTimeout(() => {
-        const run = runs.get(id);
-        if (!run || run.status !== 'offer') return; // 그사이 버렸거나 직접 시작함
-        run.status = 'running';
-        sendStep(id);
-      }, 800);
-    }
-    return true;
-  }
-
-  async function sendStep(id) {
-    const run = runs.get(id);
-    if (!run) return;
-    if (run.index >= run.files.length) return finishRun(id);
-    saveState(); // 어디까지 받았는지 적어 둔다 (v0.28.0 — 앱을 다시 켜도 이어서 계속)
-    const res = await host.sendFollowUp(id, PC.stepPrompt(run.files[run.index], run.index, run.files.length));
-    if (!res?.ok) {
-      notice(t('project.split.sendStopped', { error: res?.error || t('project.unknownError') }));
-      return finishRun(id);
-    }
-    renderBar(id);
-  }
-
-  async function runAnswer(id, md) {
-    const run = runs.get(id);
-    if (run.skip) run.skip = false;
-    else for (const c of PX.extractChanges(md)) run.changes.set(c.path, c); // 같은 경로는 새것 (잘렸으면 끝나고 이어서 받기)
-    run.index++;
-    renderBar(id);
-    setTimeout(() => sendStep(id), 600); // 사이트가 다음 질문을 받을 준비가 되도록 잠깐 둔다
-  }
-
-  async function finishRun(id) {
-    const run = runs.get(id);
-    if (!run) return;
-    runs.delete(id);
-    saveState();
-    const svc = state.services.find((s) => s.id === id);
-    const plans = await planChanges([...run.changes.values()]);
-    const got = run.files.filter((f) => run.changes.has(f.path)).length;
-    bars.set(id, { ai: { id, name: svc?.name || id, color: svc?.color, plans }, applied: null, split: { got, total: run.files.length } });
-    renderBar(id);
-    notice(t('project.split.done', { got, total: run.files.length }));
-    // 되살린 진행이면: 앱을 다시 켜기 전에 받은 파일은 이 묶음에 없다 (내용은 저장하지 않으므로)
-    const missed = (run.prevGot || []).filter((p) => !run.changes.has(p));
-    if (missed.length) setTimeout(() => notice(t('restore.prevGot', { files: missed.join(', ') })), 2500);
-  }
-
-  /** 제안 · 진행 중 바 */
-  function renderRunBar(id) {
-    const p = panels.get(id);
-    const run = runs.get(id);
-    if (!p || !run) return false;
-    const bar = p.changeBar;
-    bar.className = 'change-bar run';
-    const total = run.files.length;
-    const list = run.files.map((f, i) => `${i + 1}. ${f.path}${f.note ? ` — ${f.note}` : ''}`).join('\n');
-    if (run.status === 'paused') {
-      // 되살린 파일별로 받기 (v0.28.0): 앱을 다시 켜거나 프로젝트를 다시 열었다 — 누르면 멈춘 파일부터 이어서 보낸다
-      const at = Math.min(run.index + 1, total);
-      const text = span('cb-text', '');
-      text.append(span('cb-count', t('restore.runBar', { at, total })), span('cb-files', ` · ${run.files[Math.min(run.index, total - 1)].path}`));
-      text.title = `${list}${run.prevGot?.length ? `\n\n${t('restore.prevGot', { files: run.prevGot.join(', ') })}` : ''}`;
-      const go = button(t('restore.resume'), t('restore.resumeTitle', { at, total }), () => {
-        run.status = 'running';
-        sendStep(id);
-      });
-      go.className = 'cb-apply';
-      const again = button(t('restore.restart'), t('restore.restartTitle'), () => {
-        run.index = 0;
-        run.prevGot = [];
-        run.status = 'running';
-        sendStep(id);
-      });
-      const drop = button('✕', t('project.split.dropTitle'), () => {
-        runs.delete(id);
-        setChangeBar(id, false);
-        saveState();
-      });
-      drop.className = 'cb-close';
-      bar.replaceChildren(span('cb-icon', '»'), text, again, go, drop);
-    } else if (run.status === 'offer') {
-      const text = span('cb-text', '');
-      text.append(span('cb-count', t('project.split.planCount', { n: total })), span('cb-files', ` · ${run.files.map((f) => f.path).join(', ')}`));
-      text.title = t('project.split.planTitle', { list });
-      const start = button(t('project.split.start'), t('project.split.startTitle', { n: total }), () => {
-        run.status = 'running';
-        sendStep(id);
-      });
-      start.className = 'cb-apply';
-      const drop = button('✕', t('project.split.dropTitle'), () => {
-        runs.delete(id);
-        setChangeBar(id, false);
-      });
-      drop.className = 'cb-close';
-      bar.replaceChildren(span('cb-icon', '»'), text, start, drop);
-    } else {
-      const cur = run.files[Math.min(run.index, total - 1)];
-      const text = span('cb-text', '');
-      text.append(span('cb-count', t('project.split.progress', { i: Math.min(run.index + 1, total), total })), span('cb-files', ` · ${cur.path}${run.skip ? t('project.split.skipped') : ''}`));
-      text.title = `${list}\n\n${t('project.split.received', { list: [...run.changes.keys()].join(', ') || t('project.split.none') })}`;
-      const skip = button(t('project.split.skip'), t('project.split.skipTitle'), () => {
-        run.skip = true;
-        renderBar(id);
-      });
-      const stop = button(t('project.split.stop'), t('project.split.stopTitle'), () => finishRun(id));
-      bar.replaceChildren(span('cb-icon', '…'), text, skip, stop);
-    }
-    setChangeBar(id, true);
-    return true;
-  }
-
-  // ---------- 이어서 받기 (v0.17.1) ----------
-  // 끊긴 파일을 버리지 않고 같은 AI에게 "끊긴 곳부터 나머지만" 부탁한다 (shared/patch.js continuationOf · continuePrompt).
-  // 답이 끝나면(onPanelAnswerDone) 앞부분과 겹치는지 보고 이어 붙여, 원래 답의 다른 수정안과 함께 바를 다시 그린다.
-  const continuing = new Map(); // 패널 id -> { path, cont, changes: 원래 답의 수정안들, rounds }
-
-  async function continueFile(id, path, { auto = false } = {}) {
-    const b = bars.get(id);
-    const item = b?.ai.plans.find((x) => x.change.path === path);
-    const cont = item && PX.continuationOf(item.change);
-    if (!cont) return notice(t('project.cont.cannot'));
-    const rounds = (b.continued?.path === path ? b.continued.rounds : 0) + 1;
-    if (rounds > PX.MAX_CONTINUE) {
-      const msg = t('project.cont.maxed', { path, n: PX.MAX_CONTINUE });
-      return auto ? notice(msg) : alert(msg);
-    }
-    if (auto && continuing.has(id)) return; // 이미 이어 받는 중
-    if (!allowedFor(id)) return;
-    const res = await host.sendFollowUp(id, PX.continuePrompt(cont));
-    if (!res?.ok) return alert(t('project.sendFailed', { error: res?.error || t('project.unknownError') }));
-    continuing.set(id, { path, cont, changes: b.ai.plans.map((x) => x.change), rounds });
-    saveState(); // 이어 받는 중이라는 것만 적어 둔다 (v0.28.0)
-    notice(t('project.cont.asked', { ai: b.ai.name, path, i: rounds, n: PX.MAX_CONTINUE }));
-  }
-
-  async function finishContinue(id, md) {
-    const st = continuing.get(id);
-    continuing.delete(id);
-    const svc = state.services.find((s) => s.id === id);
-    const got = PX.extractChanges(md);
-    const r = PX.stitchContinuation(st.cont, got.find((c) => c.path === st.path));
-    // 원래 답의 수정안 목록에서 끊긴 파일을 합친 것으로 바꾸고, 이어 받은 답에 다른 파일이 더 있으면 더한다 (같은 경로는 새것)
-    const byPath = new Map(st.changes.map((c) => [c.path, c]));
-    if (r.change) byPath.set(st.path, r.change);
-    for (const c of got) if (c.path !== st.path) byPath.set(c.path, c);
-    const plans = await planChanges([...byPath.values()]);
-    bars.set(id, { ai: { id, name: svc?.name || id, color: svc?.color, plans }, applied: null, continued: { path: st.path, rounds: st.rounds, error: r.error || null } });
-    renderBar(id);
-    notice(r.error ? t('project.cont.failed', { error: r.error }) : t('project.cont.joined', { path: st.path }) + (r.change.truncated ? t('project.cont.notYet') : ''));
   }
 
   /** 적용하거나 되돌린 뒤: 아직 적용하지 않은 다른 패널의 바를 지금 파일 기준으로 다시 계산한다 */
@@ -528,7 +371,7 @@
       $('#patchChecks').hidden = true;
       $('#patchTestOut').hidden = true;
       $('#patchTestOut').replaceChildren();
-      if (testRunning) host.devtest?.stop(); // 창을 닫으면 실행 중인 테스트도 멈춘다 (파일은 메인이 되돌린다)
+      if (testState.running) host.devtest?.stop(); // 창을 닫으면 실행 중인 테스트도 멈춘다 (파일은 메인이 되돌린다)
       const back = modal.view === 'dialog';
       modal.view = null;
       modal.pending = false;
@@ -599,7 +442,7 @@
     return pre;
   }
 
-  let testRunning = false;
+  const testState = { running: false }; // 테스트 실행 중인지 (project-devtest.js가 바꾸고, 이 창을 닫을 때 본다)
 
   /**
    * 미리보기·적용 창: 파일마다 바뀌는 줄을 보여 주고, 체크한 파일만 씁니다. 실행에 영향을 주는 파일과 삭제는 기본으로 체크하지 않습니다.
@@ -686,7 +529,7 @@
     $('#patchApply').textContent = t('project.preview.applyChosen');
     $('#patchApply').focus(); // Enter(또는 Ctrl+Enter)로 바로 적용
     $('#patchApply').onclick = async () => {
-      if (testRunning) return ($('#patchStatus').textContent = t('project.preview.waitTest'));
+      if (testState.running) return ($('#patchStatus').textContent = t('project.preview.waitTest'));
       const chosen = chosenPlans();
       if (!chosen.length) return ($('#patchStatus').textContent = t('project.preview.pickApply'));
       $('#patchApply').disabled = true;
@@ -700,72 +543,6 @@
 
     // 테스트 실행 (Windows 앱 전용: host.devtest) — v0.28.0: lint · typecheck · build도 골라서
     setupTestRun(chosenPlans);
-  }
-
-  // ---------- 검사 실행 (test · lint · typecheck · build, Windows 앱) ----------
-
-  let testChecks = null; // 지난번 고른 검사 이름 (창을 다시 열어도 유지, 처음은 test만)
-
-  /** 창 아래 검사 체크 칸: package.json에 있는 스크립트만 보인다. 고른 이름을 돌려주는 함수를 돌려준다 */
-  function renderCheckBoxes(info) {
-    const box = $('#patchChecks');
-    const checks = info?.ok && Array.isArray(info.checks) ? info.checks : [];
-    if (!testChecks) testChecks = new Set(checks.some((c) => c.name === 'test') ? ['test'] : checks.slice(0, 1).map((c) => c.name));
-    box.replaceChildren(
-      ...checks.map((c) => {
-        const l = document.createElement('label');
-        l.className = 'check-label patch-check';
-        l.title = [c.pre && `pre${c.name}: ${c.pre}`, `${c.name}: ${c.script}`, c.post && `post${c.name}: ${c.post}`].filter(Boolean).join('\n');
-        const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: testChecks.has(c.name) });
-        cb.dataset.check = c.name;
-        cb.addEventListener('change', () => (cb.checked ? testChecks.add(c.name) : testChecks.delete(c.name)));
-        l.append(cb, span('', c.name));
-        return l;
-      }),
-    );
-    box.hidden = checks.length < 2; // test 하나뿐이면 예전처럼 체크 칸 없이
-    return () => checks.map((c) => c.name).filter((n) => testChecks.has(n));
-  }
-
-  /** 창의 [테스트 실행]: 체크한 수정안을 잠깐 쓰고 고른 검사를 적용 전 · 후로 돌려 나란히 보여 준다. getChosen() → 적용할 plan 목록 */
-  function setupTestRun(getChosen) {
-    if (!host.devtest) return;
-    const btn = $('#patchTest');
-    btn.hidden = false;
-    btn.textContent = t('devtest.run');
-    let picked = () => ['test'];
-    host.devtest.info().then((info) => {
-      if ($('#patchModal').hidden || btn.hidden) return;
-      picked = renderCheckBoxes(info);
-    }).catch(() => {});
-    btn.onclick = async () => {
-      if (testRunning) {
-        btn.disabled = true;
-        await host.devtest.stop();
-        return;
-      }
-      const chosen = getChosen();
-      if (!chosen.length) return ($('#patchStatus').textContent = t('project.test.pick'));
-      const scripts = picked();
-      if (!scripts.length) return ($('#patchStatus').textContent = t('devtest.pickScript'));
-      testRunning = true;
-      btn.textContent = t('project.test.stop');
-      $('#patchApply').disabled = true;
-      const out = $('#patchTestOut');
-      out.hidden = false;
-      out.replaceChildren(span('muted-label', t('devtest.running', { names: scripts.join(' · ') })));
-      try {
-        const r = await host.devtest.trial(chosen.map((p) => ({ path: p.path, after: p.op === 'delete' ? null : p.after })), scripts);
-        renderTestResult(out, r);
-      } catch (err) {
-        renderTestResult(out, { ok: false, error: err.message });
-      } finally {
-        testRunning = false;
-        btn.disabled = false;
-        btn.textContent = t('project.test.rerun');
-        $('#patchApply').disabled = false;
-      }
-    };
   }
 
   /**
@@ -787,83 +564,6 @@
       modal.hide();
       if (state?.chatView === 'changes') window.renderChanges();
     }, 900);
-  }
-
-  const fmtMs = (ms) => (ms >= 60000 ? t('project.test.minSec', { m: Math.floor(ms / 60000), s: Math.round((ms % 60000) / 1000) }) : t('project.test.sec', { s: (ms / 1000).toFixed(1) }));
-
-  /**
-   * 검사 결과: 스크립트마다 한 줄 머리(이름 · 판정)와 적용 전 | 적용 후를 나란히 (상태 · 통과/실패 수 · 걸린 시간 · 출력).
-   * v0.28.0: r.results에 고른 스크립트(test · lint · typecheck · build)가 차례로 온다. 예전 모양(r.before · r.after)도 받는다.
-   */
-  function renderTestResult(box, r) {
-    if (!r?.ok) {
-      box.replaceChildren(span(r?.cancelled ? 'muted-label' : 'test-err', r?.error || t('project.test.failedToRun')));
-      return;
-    }
-    const col = (title, x) => {
-      const c = document.createElement('div');
-      c.className = 'test-col';
-      const head = document.createElement('div');
-      head.className = 'test-col-head';
-      head.append(span('', title));
-      if (!x) {
-        head.append(span('test-badge skip', t('project.test.notRun')));
-        c.append(head);
-        return c;
-      }
-      const [cls, label] = x.stopped
-        ? ['skip', t('project.test.stopped')]
-        : x.timedOut
-          ? ['bad', t('project.test.timeout')]
-          : x.error
-            ? ['bad', t('project.test.runError')]
-            : x.ok
-              ? ['good', t('project.test.pass')]
-              : ['bad', t('project.test.fail', { code: x.code })];
-      head.append(span(`test-badge ${cls}`, label));
-      if (x.summary) head.append(span('muted-label', t('project.test.summary', { pass: x.summary.pass, fail: x.summary.fail })));
-      if (x.ms) head.append(span('muted-label', fmtMs(x.ms)));
-      c.append(head);
-      if (x.error) c.append(span('test-err', x.error));
-      const pre = document.createElement('pre');
-      pre.className = 'test-output';
-      pre.textContent = x.output || t('project.test.noOutput');
-      c.append(pre);
-      requestAnimationFrame(() => (pre.scrollTop = pre.scrollHeight)); // 요약이 있는 끝부분부터 보이게
-      return c;
-    };
-    const verdictOf = (x) =>
-      x.before?.ok && x.after && !x.after.ok
-        ? ['bad', t('devtest.verdictBreaks', { name: x.name })]
-        : !x.before?.ok && x.after?.ok
-          ? ['good', t('devtest.verdictFixes', { name: x.name })]
-          : x.after?.ok
-            ? ['good', t('devtest.verdictPasses', { name: x.name })]
-            : ['skip', t('devtest.verdictNeither', { name: x.name })];
-    const results = Array.isArray(r.results) && r.results.length ? r.results : [{ name: 'test', script: r.script, before: r.before, after: r.after }];
-    const head = document.createElement('div');
-    head.className = 'test-head';
-    const bad = results.filter((x) => verdictOf(x)[0] === 'bad').length;
-    head.append(
-      span('muted-label', results.map((x) => x.name).join(' · ')),
-      span(`test-badge ${bad ? 'bad' : results.every((x) => x.after?.ok) ? 'good' : 'skip'}`, bad ? t('devtest.sumBad', { n: bad }) : t('devtest.sumOk', { n: results.length })),
-      span('muted-label', t('project.test.restored')),
-    );
-    const restoreFailed = r.restoreFailed || r.after?.restoreFailed;
-    const blocks = results.map((x) => {
-      const b = document.createElement('div');
-      b.className = 'test-script';
-      const h = document.createElement('div');
-      h.className = 'test-script-head';
-      const v = verdictOf(x);
-      h.append(span('test-name', x.name === 'test' ? 'npm test' : `npm run ${x.name}`), span('muted-label', x.script ? `(${x.script})` : ''), span(`test-badge ${v[0]}`, v[1]));
-      const cols = document.createElement('div');
-      cols.className = 'test-cols';
-      cols.append(col(t('project.test.before'), x.before), col(t('project.test.after'), x.after));
-      b.append(h, cols);
-      return b;
-    });
-    box.replaceChildren(head, ...(restoreFailed?.length ? [span('test-err', t('project.test.restoreFailed', { list: restoreFailed.join(', ') }))] : []), ...blocks);
   }
 
   /**
@@ -942,146 +642,6 @@
     return { entry, text: t('project.apply.done', { n: done.length }) + (failed.length ? t('project.apply.someFailed', { n: failed.length }) : '') };
   }
 
-  // ---------- 파일 모아보기 ----------
-  // 답변에서 찾은 파일 수정안을 "경로 + 전체 코드"로 모아, 직접 복사해 붙여 넣기 좋게 보여 준다. 파일은 쓰지 않는다.
-  // 프로젝트를 열지 않아도 쓴다. 그때는 새 파일·수정을 구분하지 못하고, diff는 전체 코드로 바꾸지 못해 diff 그대로 보여 준다.
-
-  // 화면 이름 — 부를 때 사전에서. 순서가 모아보기 요약 순서다.
-  const COLLECT_OP = Object.fromEntries(['create', 'modify', 'full', 'diff', 'edit', 'same', 'delete'].map((op) => [op, null]));
-  for (const op of Object.keys(COLLECT_OP)) Object.defineProperty(COLLECT_OP, op, { get: () => t(`project.collect.op.${op}`), enumerable: true });
-
-  const hunkText = (change) => change.hunks.map((h) => [`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`, ...h.lines].join('\n')).join('\n');
-
-  /** 답변 → [{ path, op, code, note }]. 프로젝트가 열려 있으면 지금 파일과 비교해 새 파일·수정을 나누고 diff는 전체 코드로 바꾼다 */
-  async function collectItems(md) {
-    const items = [];
-    for (const change of PX.extractChanges(md)) {
-      const { path } = change;
-      if (change.isDelete) {
-        items.push({ path, op: 'delete', code: '' });
-        continue;
-      }
-      let before; // undefined: 모름 (프로젝트가 없거나 읽지 못함)
-      if (has()) before = await currentText(path).catch(() => undefined);
-      if (change.type === 'full') {
-        const same = typeof before === 'string' && before.replace(/\r\n/g, '\n').trimEnd() === change.content.replace(/\r\n/g, '\n').trimEnd();
-        // 잘린 답변이면 코드는 보여 주되 뒷부분이 없다고 알린다 (그대로 붙여 넣으면 나머지가 사라짐)
-        const note = change.truncated ? t('project.collect.truncatedFull') : undefined;
-        items.push({ path, op: before === undefined ? 'full' : before === null ? 'create' : same ? 'same' : 'modify', code: change.content, note });
-        continue;
-      }
-      let note = t('project.collect.openForFull');
-      if (before !== undefined || change.isNew) {
-        const plan = PX.planChange(change, before ?? null);
-        if (plan.ok) {
-          items.push({ path, op: plan.op, code: plan.after.replace(/\r\n/g, '\n') });
-          continue;
-        }
-        note = t('project.collect.mergeFailed', { error: plan.error });
-      }
-      if (change.type === 'edit') {
-        // 찾기/바꾸기 블록 (v0.17.0): 프로젝트가 없으면 전체 코드로 합칠 수 없어 블록 그대로 보여 준다
-        const code = change.edits.map((e) => `<<<<<<< 찾기\n${e.search}\n=======\n${e.replace}\n>>>>>>> 바꾸기`).join('\n\n');
-        items.push({ path, op: 'edit', code, note: change.truncated ? t('project.collect.truncatedEdit') : note });
-        continue;
-      }
-      items.push({ path, op: 'diff', code: hunkText(change), note });
-    }
-    return items;
-  }
-
-  /** 답변이 끝나면 수정안 개수를 세어 패널 머리줄 버튼을 띄운다 (눈에 띄게 잠깐 움직임) */
-  async function showCollectBtn(id, md) {
-    const p = panels.get(id);
-    if (!p) return;
-    const changes = PX.extractChanges(md);
-    p.collectBtn.hidden = !changes.length;
-    p.collectBtn.classList.remove('attn');
-    if (!changes.length) return;
-    p.collectBtn.textContent = t('project.collect.count', { n: changes.length });
-    p.collectBtn.title = t('project.collect.countTitle', { list: listLines(changes, (c) => `- ${c.path}`) });
-    void p.collectBtn.offsetWidth; // 애니메이션을 처음부터 다시 돌린다
-    p.collectBtn.classList.add('attn');
-  }
-
-  const fenceFor = (code) => '`'.repeat(Math.max(3, ...[...code.matchAll(/`{3,}/g)].map((m) => m[0].length + 1)));
-  const langOf = (path) => (/\.([\w]+)$/.exec(path)?.[1] || '').toLowerCase();
-
-  /** 전체 복사용 Markdown: 파일 목록 + 파일마다 "파일: 경로" 와 코드 블록, 지울 파일은 DELETE_FILES */
-  function collectMarkdown(items) {
-    const out = items.map((it) => `- [${COLLECT_OP[it.op]}] ${it.path}`);
-    for (const it of items.filter((x) => x.op !== 'delete')) {
-      const fence = fenceFor(it.code);
-      out.push('', `파일: ${it.path} (${COLLECT_OP[it.op]})`, `${fence}${it.op === 'diff' ? 'diff' : langOf(it.path)}`, it.code.replace(/\n$/, ''), fence);
-    }
-    const del = items.filter((x) => x.op === 'delete').map((x) => x.path);
-    if (del.length) out.push('', `DELETE_FILES: ${del.join(', ')}`);
-    return out.join('\n');
-  }
-
-  async function copyWithFeedback(btn, text, label) {
-    await host.copyText(text);
-    btn.textContent = t('project.collect.copied');
-    btn.classList.add('copied');
-    setTimeout(() => {
-      btn.textContent = label;
-      btn.classList.remove('copied');
-    }, 1200);
-  }
-
-  window.onCollectClick = async (id) => {
-    const p = panels.get(id);
-    p?.collectBtn.classList.remove('attn');
-    const name = state.services.find((s) => s.id === id)?.name || id;
-    const items = await collectItems(await answerMd(id).catch(() => ''));
-    const counts = Object.entries(COLLECT_OP)
-      .map(([op, label]) => [label, items.filter((x) => x.op === op).length])
-      .filter(([, n]) => n)
-      .map(([label, n]) => `${label} ${n}`)
-      .join(' · ');
-    modal.show(
-      t('project.collect.title', { name, n: items.length }),
-      t('project.collect.note', { counts, base: has() ? t('project.collect.base', { name: project.info.name }) : t('project.collect.noBase') }),
-    );
-    $('#patchBody').replaceChildren(
-      ...(items.length
-        ? items.map((it) => {
-            const pf = document.createElement('div');
-            pf.className = 'pf collect';
-            const head = document.createElement('div');
-            head.className = 'pf-head';
-            const tag = span(`op ${it.op}`, COLLECT_OP[it.op]);
-            if (it.op === 'full') tag.title = t('project.collect.fullTitle');
-            head.append(tag, span('path', it.path));
-            if (it.note) head.append(span('muted-label', it.note));
-            const pathBtn = button(t('project.collect.copyPath'), t('project.collect.copyPathTitle'), () => copyWithFeedback(pathBtn, it.path, t('project.collect.copyPath')));
-            head.append(pathBtn);
-            if (it.op !== 'delete') {
-              const codeBtn = button(t('project.collect.copyCode'), t('project.collect.copyCodeTitle'), () => copyWithFeedback(codeBtn, it.code, t('project.collect.copyCode')));
-              codeBtn.className = 'primary';
-              head.append(codeBtn);
-            }
-            pf.append(head);
-            if (it.op === 'diff') pf.append(diffPre(it.code));
-            else if (it.op !== 'delete') {
-              const pre = document.createElement('pre');
-              pre.className = 'code';
-              pre.textContent = it.code;
-              pf.append(pre);
-            } else pf.append(span('muted-label collect-del', t('project.collect.deleteReq')));
-            return pf;
-          })
-        : [span('change-empty', t('project.collect.empty'))]),
-    );
-    $('#patchAll').hidden = true;
-    $('#patchApply').hidden = !items.length;
-    $('#patchApply').textContent = t('project.collect.copyAll');
-    $('#patchApply').onclick = async () => {
-      await host.copyText(collectMarkdown(items));
-      $('#patchStatus').textContent = t('project.collect.copiedAll', { n: items.length });
-    };
-  };
-
   const fmtAt = (ms) => new Date(ms).toLocaleString(MLA.i18n.getLang() === 'en' ? 'en-US' : 'ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   $('#changesLog').addEventListener('click', () => {
@@ -1132,8 +692,10 @@
   }
 
   Object.assign(P, {
-    clearBars, continuing, currentText, finishContinue, offerRun, refreshBar, runAnswer, runs, showCollectBtn, writeBlocked, revert, modal,
+    clearBars, continuing, currentText, refreshBar, runs, writeBlocked, revert, modal,
     // v0.28.0: 섞어서 적용(project-mix.js) · 커밋(project-commit.js) · 이어 하기(project-restore.js)가 쓴다
-    applyPlans, afterApplied, isQuick, bars, renderBar, setupTestRun, diffPre, OP_TEXT, plansByAi: () => plansByAi,
+    applyPlans, afterApplied, isQuick, bars, renderBar, diffPre, OP_TEXT, plansByAi: () => plansByAi,
+    // v0.31.0: 떼어 낸 파일(project-runs.js · project-devtest.js)이 쓴다
+    planChanges, testState,
   });
 })();

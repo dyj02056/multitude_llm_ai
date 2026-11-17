@@ -21,8 +21,11 @@
     const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
     return i18n ? i18n.t(key, vars) : key;
   };
-  // 머리글 이름은 AI 답을 읽는 데 쓰므로(프롬프트도 한국어) 번역하지 않는다
+  // 머리글 이름은 AI 답을 읽는 데 쓴다. 요청 글이 화면 언어를 따르므로(v0.31.0) 두 언어 이름을 모두 받는다
+  // — 요청을 보낸 뒤 언어를 바꿔도, 예전 기록의 분석도 읽을 수 있게. 이름은 i18n-<언어>-prompt.js의 prompt.analysis.*와 같아야 한다.
   const SECTIONS = { common: '공통 의견', disagree: '이견', unsupported: '근거 부족', final: '최종 답변' };
+  const SECTIONS_EN = { common: 'Common ground', disagree: 'Disagreements', unsupported: 'Weak evidence', final: 'Final answer' };
+  const SECTION_NAMES = Object.keys(SECTIONS).map((key) => [key, [SECTIONS[key], SECTIONS_EN[key]].map((n) => n.toLowerCase().replace(/ /g, ''))]);
   const NONE_RE = /^(없음|없습니다|해당\s*없음|none|n\/a|-)\.?$/i;
   const VERDICT_RE = /^(판단|결론|평가|판정|verdict)$/i;
 
@@ -34,7 +37,8 @@
       .replace(/^\d+\s*[.)]\s*/, '')
       .replace(/^[*_[\]【】\s]+|[*_[\]【】:：\s]+$/g, '')
       .replace(/\s+/g, ' ');
-    for (const [key, name] of Object.entries(SECTIONS)) if (t === name || t.replace(/ /g, '') === name.replace(/ /g, '')) return key;
+    const bare = t.toLowerCase().replace(/ /g, '');
+    for (const [key, names] of SECTION_NAMES) if (names.includes(bare)) return key;
     return null;
   }
 
@@ -60,7 +64,7 @@
       .split(/(?<!\\)\|/)
       .map((c) => c.trim().replace(/\\\|/g, '|'));
   const isSepRow = (cells) => cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c));
-  const norm = (s) => String(s || '').toLowerCase().replace(/\(당신\)|\(나\)|\*|_|`/g, '').replace(/\s+/g, '');
+  const norm = (s) => String(s || '').toLowerCase().replace(/\(당신\)|\(나\)|\(you\)|\(me\)|\*|_|`/g, '').replace(/\s+/g, '');
 
   /** 표 머리글 이름을 알고 있는 AI 이름으로 맞춘다 (대소문자·띄어쓰기·"(당신)" 무시, 앞부분 일치 허용) */
   function matchName(label, names) {

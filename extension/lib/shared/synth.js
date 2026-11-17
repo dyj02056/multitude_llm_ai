@@ -13,12 +13,18 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // AI에게 보내는 글 (i18n-<언어>-prompt.js, v0.31.0 — 화면 언어를 따른다). 부를 때 찾는다.
+  const t = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   const MAX_ANSWER_CHARS = 6000; // 답변 하나가 너무 길면 잘라서 입력 한도를 넘지 않게 한다
   const MAX_CODE_ANSWER_CHARS = 40000; // 코드 수정안 합치기는 파일 전체 내용이 잘리면 안 돼서 더 길게 둔다
 
   function clip(text, max = MAX_ANSWER_CHARS) {
     if (text.length <= max) return text;
-    return `${text.slice(0, max)}\n…(이하 생략)`;
+    return `${text.slice(0, max)}\n${t('prompt.clipped')}`;
   }
 
   /**
@@ -32,36 +38,18 @@
   function buildSynthPrompt({ question, answers, judgeAnswered, mode, judgeName }) {
     if (mode === 'analysis') return buildAnalysisPrompt({ question, answers, judgeAnswered, judgeName });
     const max = mode === 'code' ? MAX_CODE_ANSWER_CHARS : MAX_ANSWER_CHARS;
-    const blocks = answers.map((a) => `[${a.name}의 답변]\n${clip(a.text, max)}`).join('\n\n');
-    const compare = judgeAnswered ? '당신의 이전 답변과 위 답변들을 비교해서' : '위 답변들을 비교해서';
-    if (mode === 'code') {
-      return [
-        '같은 코드 작업 요청에 대해 다른 AI들이 아래와 같은 수정안을 냈습니다.',
-        '',
-        '[원래 질문]',
-        question,
-        '',
-        blocks,
-        '',
-        `${compare} 다음을 해 주세요.`,
-        '1) 각 수정안의 문제점(버그·빠진 처리)을 짧게 정리',
-        '2) 가장 좋은 부분을 합친 최종 수정안을 diff가 아니라, 바꾸거나 새로 만든 파일마다 "파일: 경로" 줄 다음에 그 파일의 "전체" 내용을 코드 블록 하나로 제시 (줄임 없이 처음부터 끝까지)',
-        '   150줄보다 긴 기존 파일은 전체 대신 바꿀 곳만 같은 코드 블록 안에 "<<<<<<< 찾기" / (지금 코드 그대로) / "=======" / (바꾼 코드) / ">>>>>>> 바꾸기"로 (답이 길어져 잘리지 않게)',
-        '3) 지워야 하는 파일은 한 줄로: DELETE_FILES: 경로1, 경로2',
-      ].join('\n');
-    }
+    const blocks = answers.map((a) => `${t('prompt.answerOf', { name: a.name })}\n${clip(a.text, max)}`).join('\n\n');
+    const key = mode === 'code' ? 'prompt.synth.code' : 'prompt.synth';
     return [
-      '같은 질문에 대해 다른 AI들이 아래와 같이 답했습니다.',
+      t(`${key}.head`),
       '',
-      '[원래 질문]',
+      t('prompt.origQuestion'),
       question,
       '',
       blocks,
       '',
-      `${compare} 다음을 정리해 주세요.`,
-      '1) 오류나 부정확한 부분',
-      '2) 서로 놓친 중요한 내용',
-      '3) 가장 정확하고 완성도 높은 최종 답변',
+      t(judgeAnswered ? `${key}.askSelf` : `${key}.ask`),
+      t(`${key}.steps`),
     ].join('\n');
   }
 
@@ -76,35 +64,29 @@
    * 답변 일치·이견 분석 요청. 머리글 이름(공통 의견 · 이견 · 근거 부족 · 최종 답변)은 shared/analysis.js의 SECTIONS와 같아야 한다.
    */
   function buildAnalysisPrompt({ question, answers, judgeAnswered, judgeName }) {
-    const blocks = answers.map((a) => `[${a.name}의 답변]\n${clip(a.text)}`).join('\n\n');
+    const blocks = answers.map((a) => `${t('prompt.answerOf', { name: a.name })}\n${clip(a.text)}`).join('\n\n');
     const names = analysisNames({ answers, judgeAnswered, judgeName });
-    const self = judgeAnswered && judgeName ? [`당신(${judgeName})이 이전에 같은 질문에 한 답변도 "${judgeName}" 열로 함께 비교해 주세요.`] : [];
+    const self = judgeAnswered && judgeName ? [t('prompt.analysis.self', { name: judgeName })] : [];
     return [
-      '같은 질문에 대해 여러 AI가 아래와 같이 답했습니다.',
+      t('prompt.analysis.head'),
       '',
-      '[원래 질문]',
+      t('prompt.origQuestion'),
       question,
       '',
       blocks,
       '',
-      '답변들이 어디서 일치하고 어디서 갈리는지 분석해, 아래 형식 그대로 답해 주세요.',
-      '머리글 네 개(## 공통 의견, ## 이견, ## 근거 부족, ## 최종 답변)의 이름과 순서를 바꾸지 말고, 형식 앞뒤에 다른 말을 쓰지 마세요. 전체를 코드 블록으로 감싸지 마세요.',
+      t('prompt.analysis.ask'),
       ...self,
       '',
-      '## 공통 의견',
-      '- 대부분의 AI가 같은 내용 (한 줄에 하나)',
+      t('prompt.analysis.common'),
       '',
-      '## 이견',
-      `| 쟁점 | ${names.join(' | ')} | 판단 |`,
+      t('prompt.analysis.disagree'),
+      `| ${t('prompt.analysis.colTopic')} | ${names.join(' | ')} | ${t('prompt.analysis.colVerdict')} |`,
       `|${' --- |'.repeat(names.length + 2)}`,
-      `| 갈리는 점 한 줄 | ${names.map(() => '그 AI의 입장 (언급 없으면 -)').join(' | ')} | 어느 쪽이 맞는지와 이유 한 줄 |`,
-      '(이견이 없으면 표 대신 "- 없음" 한 줄)',
+      `| ${t('prompt.analysis.cellTopic')} | ${names.map(() => t('prompt.analysis.cellPosition')).join(' | ')} | ${t('prompt.analysis.cellVerdict')} |`,
+      t('prompt.analysis.noDisagree'),
       '',
-      '## 근거 부족',
-      '- [AI 이름] 근거 없이 주장했거나 사실 확인이 필요한 내용 (없으면 "- 없음")',
-      '',
-      '## 최종 답변',
-      '위 분석을 반영한 가장 정확하고 완성도 높은 최종 답변',
+      t('prompt.analysis.rest'),
     ].join('\n');
   }
 

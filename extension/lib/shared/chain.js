@@ -26,43 +26,25 @@
 
   function clip(text, max) {
     const s = String(text || '');
-    return s.length <= max ? s : `${s.slice(0, max)}\n…(이하 생략)`;
+    return s.length <= max ? s : `${s.slice(0, max)}\n${t('prompt.clipped')}`;
   }
 
-  const INTENT_ASK = {
-    review: [
-      '위 답변을 꼼꼼히 검토해 주세요.',
-      '1) 틀린 내용 · 부정확한 부분 (어디가 왜 틀렸는지)',
-      '2) 빠진 중요한 내용',
-      '3) 근거가 약하거나 확인이 필요한 주장',
-      '4) 위를 고친 더 나은 답변',
-    ],
-    counter: [
-      '위 답변에 반박해 주세요.',
-      '1) 가장 약한 논리 · 반례 · 다른 관점을 근거와 함께',
-      '2) 그래도 맞는 부분은 인정',
-      '3) 반박을 반영한 당신의 결론',
-    ],
-    continue: [
-      '위 답변을 이어받아 더 발전시켜 주세요.',
-      '빠진 단계를 채우고, 더 깊이 들어가거나 다음에 할 일을 구체적으로 써 주세요. 이미 쓴 내용은 되풀이하지 마세요.',
-    ],
-  };
+  // AI에게 보내는 글은 i18n-<언어>-prompt.js에 있다 (v0.31.0 — 화면 언어를 따른다). 보낼 때마다 찾아야 언어를 바꾼 뒤에도 맞는다.
+  const intentAsk = (intent) => t(`prompt.handoff.${INTENTS.includes(intent) ? intent : 'review'}`);
 
   /**
    * 넘기기 요청 글. intent: 'review' | 'counter' | 'continue', question: 원래 질문(없으면 빼고), fromName: 답변을 쓴 AI, answer: 그 답변(Markdown)
    */
   function buildHandoffPrompt({ intent, question, fromName, answer }) {
-    const ask = INTENT_ASK[intent] || INTENT_ASK.review;
     const q = String(question || '').trim();
     return [
-      `다른 AI(${fromName})가 쓴 답변을 보여 드립니다.`,
+      t('prompt.handoff.intro', { name: fromName }),
       '',
-      ...(q ? ['[원래 질문]', q, ''] : []),
-      `[${fromName}의 답변]`,
+      ...(q ? [t('prompt.origQuestion'), q, ''] : []),
+      t('prompt.answerOf', { name: fromName }),
       clip(answer, MAX_SOURCE_CHARS),
       '',
-      ...ask,
+      intentAsk(intent),
     ].join('\n');
   }
 
@@ -71,44 +53,33 @@
    * round · rounds: 몇 번째 라운드 / 모두 몇 라운드
    */
   function buildDebatePrompt({ question, round, rounds, selfName, others }) {
-    const blocks = (others || []).map((o) => `[${o.name}의 최신 답변]\n${clip(o.text, MAX_DEBATE_CHARS)}`).join('\n\n');
+    const blocks = (others || []).map((o) => `${t('prompt.debate.latestOf', { name: o.name })}\n${clip(o.text, MAX_DEBATE_CHARS)}`).join('\n\n');
     const last = round >= rounds;
     return [
-      `[토론 ${round}/${rounds}라운드] 같은 질문에 대해 다른 AI들이 아래와 같이 답했습니다.`,
+      t('prompt.debate.head', { round, rounds }),
       '',
-      '[원래 질문]',
-      String(question || '').trim() || '(질문 없음)',
+      t('prompt.origQuestion'),
+      String(question || '').trim() || t('prompt.noQuestion'),
       '',
       blocks,
       '',
-      `${selfName ? `${selfName}(당신)의 ` : '당신의 '}이전 답변과 비교해 다음을 해 주세요.`,
-      '1) 다른 답변에서 틀렸거나 근거가 약한 점을 구체적으로 반박',
-      '2) 다른 답변이 옳은 점은 받아들여 당신의 답을 고치기',
-      `3) 고친 입장을 처음 보는 사람도 이해할 수 있는 완성된 답변으로 다시 쓰기${last ? ' (이번이 마지막 라운드입니다)' : ''}`,
+      selfName ? t('prompt.debate.askSelf', { name: selfName }) : t('prompt.debate.ask'),
+      `${t('prompt.debate.steps')}${last ? t('prompt.debate.last') : ''}`,
     ].join('\n');
   }
 
   /** 토론 판정 요청 글. positions: [{ name, text }] — 참가 AI의 마지막 입장 */
   function buildDebateJudgePrompt({ question, positions, rounds }) {
-    const blocks = (positions || []).map((p) => `[${p.name}의 마지막 입장]\n${clip(p.text, MAX_DEBATE_CHARS)}`).join('\n\n');
+    const blocks = (positions || []).map((p) => `${t('prompt.judge.finalOf', { name: p.name })}\n${clip(p.text, MAX_DEBATE_CHARS)}`).join('\n\n');
     return [
-      `여러 AI가 같은 질문을 두고 ${rounds}라운드 동안 서로 반박 · 보완하며 토론했습니다. 아래는 각 AI의 마지막 입장입니다.`,
+      t('prompt.judge.head', { rounds }),
       '',
-      '[원래 질문]',
-      String(question || '').trim() || '(질문 없음)',
+      t('prompt.origQuestion'),
+      String(question || '').trim() || t('prompt.noQuestion'),
       '',
       blocks,
       '',
-      '판정자로서 아래 형식 그대로 정리해 주세요. 머리글 이름과 순서를 바꾸지 마세요.',
-      '',
-      '## 합의한 점',
-      '- 참가 AI들이 같은 결론에 이른 내용 (한 줄에 하나)',
-      '',
-      '## 남은 이견',
-      '- [쟁점] AI별 입장과, 어느 쪽이 맞는지와 이유 (없으면 "- 없음")',
-      '',
-      '## 최종 답변',
-      '토론을 반영한 가장 정확하고 완성도 높은 최종 답변',
+      t('prompt.judge.format'),
     ].join('\n');
   }
 

@@ -51,7 +51,7 @@ test('화면 뼈대: 모든 버튼 · 입력칸 · 고르기 칸에 이름이 �
 test('창(dialog): role="dialog" · aria-modal · 제목으로 이름표, 그리고 포커스를 가두고 돌려주는 코드가 붙어 있다', () => {
   const html = read('src/renderer/index.html');
   const r = A.scan(html);
-  assert.deepEqual(r.dialogs.map((d) => d.id).sort(), ['debateModal', 'diagModal', 'patchModal', 'previewModal', 'transferModal']);
+  assert.deepEqual(r.dialogs.map((d) => d.id).sort(), ['debateModal', 'diagModal', 'onboardModal', 'patchModal', 'previewModal', 'transferModal']);
   for (const d of r.dialogs) assert.ok(d.ok, d.id);
   assert.equal((html.match(/class="modal"/g) || []).length, r.dialogs.length); // 훑어보기가 놓친 창이 없다
   const js = read('src/renderer/a11y.js');
@@ -61,6 +61,7 @@ test('창(dialog): role="dialog" · aria-modal · 제목으로 이름표, 그리
   assert.match(js, /prev\.focus\(/);
   // 화면 스크립트 맨 끝에 읽히고, 크롬 확장에도 들어간다
   assert.ok(html.indexOf('src="a11y.js"') > html.indexOf('src="settings-transfer-ui.js"'));
+  assert.ok(html.indexOf('src="a11y.js"') > html.indexOf('src="onboarding.js"')); // 첫 사용 안내 창(v0.31.0)도 포커스 관리를 받는다
   assert.match(read('scripts/build-extension.js'), /'a11y\.js'/);
   assert.match(read('extension/app.html'), /lib\/renderer\/a11y\.js/);
 });
@@ -165,8 +166,6 @@ test('키보드: 포커스 테두리가 보이고, 버튼이 아닌 누르는 �
   assert.match(r, /function keyClick\(el, onClick, role\) \{\s+el\.tabIndex = 0;/);
   assert.match(read('src/renderer/library.js'), /keyClick\(row, onClick\)/);
   assert.match(read('src/renderer/library-presets.js'), /keyClick\(r, pick\)/);
-  assert.match(read('src/renderer/project.js'), /keyClick\(name, \(\) => toggleDir\(e\), 'button'\)\.setAttribute\('aria-expanded'/);
-  assert.match(read('src/renderer/project.js'), /keyClick\(name, \(\) => P\.openEditor\(e\.path\), 'button'\)/);
   assert.match(read('src/renderer/renderer-views.js'), /keyClick\(c, jump\)/);
   assert.match(read('src/renderer/history-view.js'), /row\.tabIndex = 0;/);
   // 기호만 있는 버튼을 만드는 도우미는 설명을 aria-label로도 단다

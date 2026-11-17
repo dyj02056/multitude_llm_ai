@@ -64,11 +64,11 @@ npm start
 |---|---|
 | `src/shared/` | Windows 앱과 확장 프로그램이 **같이 쓰는** 코드: 서비스 목록·셀렉터(`services.js`), 패널 배치(`layout.js`), 템플릿 변수·스킬(`prompt-lib.js`), 질문 보내기·종합(`rounds.js` · `synth.js`), 답변 감시(`watch.js`), 페이지 주입 함수(`page.js` · `markdown.js`), 기록(`history-core.js`), 셀렉터 원격 갱신(`remote-core.js`), 단축키(`shortcuts.js`), 분석 · 차이 강조(`analysis.js`), 셀렉터 자가진단(`diag.js`), 내보내기(`export.js`), 로컬 LLM(`local-llm.js`), 웹페이지로 질문(`web-ask.js`), 사이드탭 계산(`side-panel.js`), 프로젝트 모드(`project-ignore.js` 제외 규칙, `secret-scan.js`, `project-context.js`, `project-upload.js` 업로드 파일 만들기, `patch.js`) |
 | `src/shared/vendor/` | 포함한 외부 라이브러리: [ignore](https://github.com/kaelzhang/node-ignore) 7.0.12 (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) 9.0.0 (BSD-3-Clause) — 라이선스 파일 함께 |
-| `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`project.js`: 프로젝트 폴더 읽기·쓰기, `git-rules.js`·`gitconsole.js`: git 콘솔 명령 검사·실행, `history.js`: 기록 저장(색인 + 기록별 파일), `ipc/`: 화면 요청 처리 — 기록 · 프로젝트 · 설정) |
-| `src/renderer/` | 화면 (두 쪽이 같은 파일을 씀). 읽는 순서: `templates.js` → `renderer.js`(도우미 · 패널) → `renderer-views.js`(비교 · 기록 · 설정) → `renderer-compose.js`(보내기 · 상태) → `project.js` → `project-changes.js` → `project-editor.js` → `library.js` |
+| `src/main/`, `src/preload/` | Windows 앱(Electron) 전용 (`views.js`: 세션 · AI 패널 뷰 · 로그인 팝업 규칙 · 셀렉터 자가진단(v0.31.0에서 `main.js`에서 나눔), `project.js`: 프로젝트 폴더 읽기·쓰기, `git-rules.js`·`gitconsole.js`: git 콘솔 명령 검사·실행, `history.js`: 기록 저장(색인 + 기록별 파일), `ipc/`: 화면 요청 처리 — 기록 · 프로젝트 · 설정) |
+| `src/renderer/` | 화면 (두 쪽이 같은 파일을 씀). 읽는 순서: `templates.js` → `renderer.js`(도우미 · 패널) → `renderer-views.js`(비교 · 기록 · 설정) → `renderer-compose.js`(보내기 · 상태) → `project.js` → `project-changes.js`(변경 제안 · 미리보기 · 적용 · 되돌리기) → `project-runs.js`(큰 작업 · 이어서 받기) → `project-devtest.js`(검사 실행) → `project-collect.js`(파일 모아보기) → `project-mix.js` → `project-commit.js` → `project-restore.js` → `project-editor.js` → `library.js` → `library-presets.js` → `settings-transfer-ui.js` → `onboarding.js`(첫 사용 안내) → `a11y.js`. 위 `project-*.js`는 `MLA.projectUI`(P)로 서로의 함수를 주고받습니다 |
 | `src/shared/i18n*.js` | 화면 문구 다국어 (v0.24.0 틀, v0.30.0부터 설정 › 언어를 따름): `t('키', { 이름: 값 })`, 사전 `i18n-ko.js` · `i18n-en.js`(공통) + `i18n-<언어>-<영역>.js`(ui · project · library · ext · main — 키는 영역 이름으로 시작). 키 짝 · 없는 키는 테스트가 검사. 새 화면 글은 여기에 넣는다 (AI에게 보내는 글은 아직 코드에 한국어로) |
 | `test/` | 공통 모듈 단위 테스트 (`npm test`) |
-| `extension/` | 크롬 확장 프로그램. 직접 고치는 파일은 `host.js`·`project-fs.js`·`content.js`·`cookie-shim.js`·`cookie-bridge.js`·`background.js`·`ext.css`와 사이드탭 `sidepanel.html`·`sidepanel.js`·`sidepanel.css`뿐이고, 나머지(`manifest.json`, `app.html`, `lib/`, `icons/`)는 생성 파일 |
+| `extension/` | 크롬 확장 프로그램. 직접 고치는 파일은 `host.js`(+ 먼저 읽히는 `host-panels.js` iframe · `host-remote.js` 원격 셀렉터 · 업데이트, v0.31.0에서 나눔 — 서로 `MLA.extHost`로 주고받음)·`project-fs.js`·`content.js`·`cookie-shim.js`·`cookie-bridge.js`·`background.js`·`ext.css`와 사이드탭 `sidepanel.html`·`sidepanel.js`·`sidepanel.css`뿐이고, 나머지(`manifest.json`, `app.html`, `lib/`, `icons/`)는 생성 파일 |
 
 `src/shared/`나 `src/renderer/`를 고친 뒤에는 확장 프로그램 폴더를 다시 만들어 함께 커밋합니다. `npm install` 때 커밋 전 훅(`scripts/hooks/pre-commit`)이 연결되어, 잊으면 커밋을 멈춥니다.
 
@@ -87,7 +87,7 @@ npm run screenshots -- 02-ask-all 24-side-panel   # 일부만
 
 - [scripts/screenshots/](../scripts/screenshots)가 실제 화면 코드(`src/renderer` · `extension/sidepanel.html`)에 가짜 본체와 예시 데이터를 붙여 Electron 창(화면 밖 렌더링)에 띄우고 장면마다 저장합니다. 장면 목록은 `run.js`의 `SCENES`, 예시 질문 · 답은 `sample.js`.
 - 패널 안은 실제 AI 사이트가 아니라 **테스트용 채팅 페이지**입니다. 실제 사이트에는 접속하지 않습니다 (서비스 주소 요청은 이 도구 안에서 가짜 페이지로 바뀜).
-- 디자인을 바꾼 뒤 다시 찍으면 문서 그림이 한 번에 맞춰집니다. 프로젝트 폴더가 필요한 장면(09 · 10 · 16 · 21~23)은 아직 없습니다.
+- 디자인을 바꾼 뒤 다시 찍으면 문서 그림이 한 번에 맞춰집니다. 프로젝트 장면(09 · 10 · 16 · 21~23 · 36~40 · 47)은 가짜 프로젝트 폴더(`demo-app`)로 찍습니다 (v0.31.0). 크롬 확장 탭(08)만 이 도구로 찍을 수 없습니다.
 - `MLA_SHOT_OUT=<폴더>`를 주면 문서 그림을 바꾸지 않고 그 폴더에 찍습니다. 화면 스크립트 오류는 `console error:`로 출력됩니다.
 - `MLA_SHOT_LANG=en`을 주면 **영어 화면**으로 찍습니다 (v0.30.0, 예시 질문 · 답은 한국어 그대로). 영어 문서가 쓰는 그림은 `docs/screenshots/en/`에 있습니다 — `MLA_SHOT_LANG=en MLA_SHOT_OUT=docs/screenshots/en npm run screenshots -- 01-model-picker 02-ask-all …`.
 

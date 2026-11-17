@@ -10,6 +10,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // AI에게 보내는 글 (i18n-*-prompt.js, v0.31.0 — 화면 언어를 따른다). 부를 때 찾는다.
+  const t = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   const MAX_LIST = 5; // 제목에 늘어놓는 파일 이름 수
   const MAX_SUMMARY = 200;
 
@@ -42,8 +48,7 @@
   /** AI에게 보내는 부탁: 바꾼 파일 목록만 (내용은 보내지 않음 — 그 AI가 낸 수정안이라 이미 안다) */
   function summaryPrompt(paths) {
     return [
-      '방금 제안해 준 수정안을 아래 파일에 적용했습니다. 이 변경을 설명하는 git 커밋 메시지를 영어 한 줄(72자 이내, 명령형, 예: "Fix null check in user loader")로만 써 주세요.',
-      '다른 설명 · 따옴표 · 코드 블록 없이 메시지 한 줄만 답해 주세요.',
+      t('prompt.commit.ask'),
       '',
       ...paths.slice(0, 50).map((p) => `- ${p}`),
       ...(paths.length > 50 ? [`- … (${paths.length - 50} more)`] : []),

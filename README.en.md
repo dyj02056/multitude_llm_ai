@@ -3,7 +3,7 @@
 [한국어](README.md) · **English**
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.30.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.31.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-not%20needed-3fb950)
@@ -14,7 +14,7 @@
 
 <img src="docs/screenshots/en/02-ask-all.png" width="100%" alt="Four AI chats answering the same question side by side">
 
-> **Interface language (v0.30.0):** the app's screens are available in **English and Korean**. It follows your Windows (or Chrome) language automatically — Korean on a Korean system, English otherwise — and you can switch any time in **?** (Settings) › **Language**. The prompts the app writes for synthesis, analysis and debate are still in Korean, so those answers may come back in Korean.
+> **Interface language (v0.30.0):** the app's screens are available in **English and Korean**. It follows your Windows (or Chrome) language automatically — Korean on a Korean system, English otherwise — and you can switch any time in **?** (Settings) › **Language**. Since v0.31.0 the requests the app writes for the AIs (synthesis, analysis, debate, project mode) and the built-in templates follow the same language; your own questions, templates and skills are sent as written.
 
 ## At a glance
 
@@ -82,8 +82,8 @@ npm run build:ext  # rebuild extension/ from src/
 
 - **When a site changes its layout**, typing or reading answers can break. The panel shows `⚠`; selectors are fixed remotely through a signed `remote/selectors.json` without a new release.
 - Each service's **own usage limits and terms** apply. When a limit is hit the panel shows `[limit]`.
-- The interface is English or Korean (v0.30.0), but the **prompts sent to the AIs for synthesis, analysis, debate and project mode are still Korean**, so those answers may come back in Korean. Sample text in screenshots is Korean.
-- Accessibility: keyboard focus, dialog focus handling, labels and text contrast were reviewed against WCAG AA (v0.30.0), but not tested with a real screen reader — see [docs/accessibility.md](docs/accessibility.md) (Korean).
+- The interface is English or Korean (v0.30.0), and since v0.31.0 so are the **requests the app writes for the AIs** (synthesis, analysis, debate, project mode) and the built-in templates. Your own questions, templates and skills are sent exactly as you wrote them. Sample text in screenshots is Korean.
+- Accessibility: keyboard focus, dialog focus handling, labels, text and control-border contrast, a keyboard-navigable file tree and app zoom were reviewed against WCAG AA (v0.30.0 – v0.31.0), but not tested with a real screen reader — see [docs/accessibility.md](docs/accessibility.md) (Korean).
 - The extension must be re-granted folder access each time the app tab opens a project, and has no git console or test run.
 - History and settings stay **on this PC only**. The Windows app encrypts them with Windows DPAPI; the extension stores them unencrypted in Chrome's extension storage.
 

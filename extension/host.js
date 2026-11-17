@@ -15,6 +15,10 @@
 //   - 각 iframe 안의 content.js와 메시지를 주고받아 입력·보내기·답변 읽기를 시킴
 // 덕분에 화면 코드(renderer.js 등)는 Windows 앱과 확장에서 똑같은 파일을 씁니다.
 (() => {
+  // 패널(iframe) · 원격 셀렉터 · 새 버전 알림은 host-panels.js · host-remote.js에 있다 (v0.31.0, 이 파일보다 먼저 읽힌다).
+  // 그 파일들이 X에 실어 둔 함수를 꺼내 쓰고, 이 파일의 것은 맨 아래에서 X에 실어 준다.
+  const X = (MLA.extHost = MLA.extHost || {});
+  const { UPD, allowFraming, callFrame, checkUpdate, closePanel, loadRemoteCache, navigate, openPanel, refreshRemote, resetRemote, svcOf } = X;
   const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, serviceForHost, uploadOf, fileBytesOf, limitTextOf } =
     MLA.services;
   const { watchAnswer } = MLA.watch;
@@ -186,173 +190,6 @@
   framesEl.id = 'frames';
   document.body.append(framesEl);
 
-  // ---------- iframe 허용 규칙 ----------
-  // 서비스 사이트들은 다른 페이지 안(iframe)에 뜨지 않도록 X-Frame-Options·CSP(frame-ancestors) 헤더를 보낸다.
-  // 이 탭 안의 서비스 iframe에서만 그 두 헤더를 지우는 규칙을 background.js가 건다.
-  // 이 화면이 연결선을 열어 두는 동안만 규칙이 있고, 화면이 사라지면(다른 주소로 이동·닫기·새로고침) 바로 지워진다.
-  const PAGE_ID = crypto.randomUUID(); // 이 화면의 번호 (새로고침하면 바뀐다)
-  const PING_MS = 25000; // 백그라운드가 잠들지 않게 보내는 신호 간격
-  let port = null;
-
-  /** 백그라운드에 연결하고 규칙이 걸릴 때까지 기다린다. 연결이 끊기면(확장 업데이트 등) 다시 연결한다. */
-  // AI 사이트는 보통 "다른 페이지 안에 띄우지 마"라는 표시를 보냅니다. 이 앱 탭 안에서만 그 표시를 무시하도록
-  // background.js에 부탁합니다 (앱 탭을 떠나면 바로 해제).
-  function allowFraming() {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(MLA.i18n.t('ext.side.bgNoAnswer'))), 10000);
-      port = chrome.runtime.connect({ name: 'mla-app' });
-      port.onMessage.addListener((msg) => {
-        if (msg?.type !== 'ready') return;
-        clearTimeout(timer);
-        resolve();
-      });
-      port.onDisconnect.addListener(() => {
-        port = null;
-        // 화면은 그대로인데 연결만 끊겼다(백그라운드 재시작 등). 다시 연결해 규칙을 되살린다.
-        setTimeout(() => allowFraming().catch((err) => console.warn('[host] 다시 연결하지 못했습니다:', err.message)), 500);
-      });
-      port.postMessage({ type: 'hello', pageId: PAGE_ID });
-    });
-  }
-  setInterval(() => {
-    try {
-      port?.postMessage({ type: 'ping' });
-    } catch {}
-  }, PING_MS);
-
-  // ---------- 패널 (iframe) ----------
-
-  const svcOf = (id) => SERVICES.find((s) => s.id === id);
-
-  /** 서비스 하나의 iframe 패널을 엽니다. 처음에는 화면 밖에 두고, pushState가 제자리로 옮깁니다. */
-  function openPanel(svc) {
-    const iframe = document.createElement('iframe');
-    iframe.className = 'svc-frame';
-    iframe.dataset.id = svc.id;
-    // 답변 복사 버튼·음성 입력이 iframe 안에서도 동작하도록 권한을 넘긴다 (마이크는 쓸 때 크롬이 따로 묻는다).
-    // 클립보드 읽기는 넘기지 않는다 — Ctrl+V 붙여넣기는 이 권한 없이도 된다.
-    iframe.allow = 'clipboard-write; microphone';
-    const p = { iframe, frameId: null, origin: null, url: svc.url, retried: false, helloTimer: null, loginTimer: null };
-    iframe.addEventListener('load', () => {
-      sendPanel(svc.id, { loading: false });
-      // content.js가 연결되지 않으면 사이트가 iframe을 막았거나 로그인 화면(다른 도메인)으로 넘어간 것이다.
-      clearTimeout(p.helloTimer);
-      p.helloTimer = setTimeout(() => {
-        if (p.frameId !== null) return;
-        // 사이트의 서비스 워커가 그사이 다시 생겨 막혔을 수 있다. 한 번은 지우고 다시 열어 본다.
-        if (!p.retried) {
-          p.retried = true;
-          log('retry', svc.id, 'no hello — clearing service worker and reloading');
-          navigate(svc.id, p.url || svc.url);
-          return;
-        }
-        sendPanel(svc.id, { login: 'needs-login' });
-        sendPanel(svc.id, { error: MLA.i18n.t('ext.host.notLinked') });
-      }, HELLO_TIMEOUT_MS);
-    });
-    framesEl.append(iframe);
-    panels.set(svc.id, p);
-    navigate(svc.id, svc.url);
-  }
-
-  // 사이트가 서비스 워커(PWA)를 등록해 두면 iframe 페이지를 그 서비스 워커가 대신 받아 온다.
-  // 서비스 워커의 요청은 이 탭 소속이 아니라서 iframe 허용 규칙(allowFraming)이 적용되지 않고,
-  // 원래의 X-Frame-Options·CSP가 남아 크롬이 iframe을 막는다 (회색 "연결 거부" 화면 — Perplexity에서 확인).
-  // 그래서 패널을 열 때마다 그 서비스의 서비스 워커 등록만 지운다. 로그인(쿠키)·저장된 데이터는 지우지 않는다.
-  async function clearServiceWorkers(svc) {
-    try {
-      await chrome.browsingData.removeServiceWorkers({ origins: svc.hosts.map((h) => `https://${h}`) });
-    } catch (err) {
-      console.warn(`[sw] ${svc.id} 서비스 워커를 지우지 못했습니다:`, err.message);
-    }
-  }
-
-  async function navigate(id, url) {
-    const p = panels.get(id);
-    if (!p) return;
-    p.frameId = null; // 새 페이지의 content.js가 다시 연결한다
-    p.url = url;
-    sendPanel(id, { loading: true, url });
-    await clearServiceWorkers(svcOf(id));
-    if (panels.get(id) === p) p.iframe.src = url;
-  }
-
-  function closePanel(id) {
-    const p = panels.get(id);
-    clearTimeout(p.helloTimer);
-    clearTimeout(p.loginTimer);
-    p.iframe.remove();
-    panels.delete(id);
-    barIds.delete(id);
-    rounds.resetPanel(id);
-  }
-
-  /** 패널 페이지의 content.js에 요청을 보낸다. */
-  // 패널 iframe 안의 content.js에 일을 시키고 답을 받습니다 (예: 질문 넣기, 지금 상태 읽기).
-  async function callFrame(id, msg) {
-    const p = panels.get(id);
-    if (!p || p.frameId === null) throw new Error(MLA.i18n.t('ext.side.notLinked'));
-    // content.js는 사전이 없어 실패 이유를 code로 준다 → 지금 언어의 글로 (v0.30.0)
-    return MLA.i18n.pageError(await chrome.tabs.sendMessage(tabId, msg, { frameId: p.frameId }));
-  }
-
-  function scheduleLoginCheck(id) {
-    const p = panels.get(id);
-    clearTimeout(p.loginTimer);
-    p.loginTimer = setTimeout(async () => {
-      try {
-        const out = await callFrame(id, { type: 'mla:loggedOut', cfg: { loggedOut: svcOf(id).loggedOut || {} } });
-        sendPanel(id, { login: out ? 'needs-login' : 'ready' });
-        if (!out) probePanel(id); // 로그인된 화면에서 입력창이 보이는지 살펴본다
-      } catch {}
-    }, LOGIN_CHECK_MS);
-  }
-
-  // 이 확장의 background.js에서 오는 알림: 오른쪽 클릭 메뉴 "Multitude LLM에 묻기" (v0.15.0) — 화면(renderer.js)이 요청을 가져간다
-  chrome.runtime.onMessage.addListener((msg, sender) => {
-    if (msg?.type !== 'mla:ask' || sender.id !== chrome.runtime.id || sender.tab) return;
-    window.dispatchEvent(new Event('mla:web-ask'));
-  });
-
-  // 서비스 페이지(content.js)에서 오는 메시지
-  chrome.runtime.onMessage.addListener((msg, sender) => {
-    if (!msg || typeof msg.type !== 'string' || sender.tab?.id !== tabId) return;
-    if (msg.type === 'mla:key') {
-      if (typeof msg.action === 'string') runShortcut(msg.action);
-      return;
-    }
-    // 보낸 프레임의 주소는 메시지 내용이 아니라 크롬이 알려 주는 sender.url로 본다.
-    let from;
-    try {
-      from = new URL(sender.url);
-    } catch {
-      return;
-    }
-    const svc = from.protocol === 'https:' ? serviceForHost(from.hostname) : null;
-    const p = svc && panels.get(svc.id);
-    // 이 탭의 패널 iframe에서 온 것만 받는다.
-    if (!p || !sender.frameId) return;
-    // 화면에 보여 줄 지금 주소(사이트 안 이동 반영)는 메시지의 url을 쓰되, 보낸 프레임과 같은 origin일 때만 믿는다.
-    let url = sender.url;
-    try {
-      if (typeof msg.url === 'string' && new URL(msg.url).origin === from.origin) url = msg.url;
-    } catch {}
-    if (msg.type === 'mla:hello') {
-      log('hello', svc.id, sender.frameId, sender.url);
-      p.frameId = sender.frameId;
-      p.origin = from.origin; // 첨부 파일은 이 주소의 페이지에만 넘긴다
-      p.url = url;
-      p.retried = false;
-      clearTimeout(p.helloTimer);
-      sendPanel(svc.id, { url, loading: false });
-      scheduleLoginCheck(svc.id);
-    } else if (msg.type === 'mla:nav' && p.frameId === sender.frameId) {
-      p.url = url;
-      sendPanel(svc.id, { url });
-      scheduleLoginCheck(svc.id);
-    }
-  });
-
   // ---------- 화면 전환 · 배치 ----------
 
   function showPick() {
@@ -435,7 +272,7 @@
       historyMax: prefs.historyMax,
       historyMaxChoices: MAX_CHOICES,
       remoteSelectors: prefs.remoteSelectors,
-      remote: remoteStatus,
+      remote: X.remoteStatus,
       diag: diag.all(SERVICES.map((s) => s.id)),
       services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
       local: { ...prefs.local },
@@ -444,9 +281,10 @@
       sendPreview: prefs.sendPreview,
       retryOnce: prefs.retryOnce,
       autoRecommend: prefs.autoRecommend,
+      onboarded: prefs.onboarded, // 첫 사용 안내를 봤는지 (v0.31.0)
       lang: prefs.lang, // 언어 설정 (v0.30.0) · uiLang = 지금 쓰는 언어
       uiLang: MLA.i18n.getLang(),
-      update: updateStatus,
+      update: X.updateStatus,
       storage: { encrypted: false, extension: true }, // 크롬 확장은 OS 열쇠 보관소가 없어 암호화하지 않는다 (v0.22.1)
       rects,
     });
@@ -639,113 +477,6 @@
         navigate(pid, svc.newChatUrl);
       }
     }
-  }
-
-  // ---------- 사이트 셀렉터 원격 갱신 ----------
-
-  const remoteBase = remoteCore.snapshotBase(SERVICES);
-  let remoteStatus = { source: 'builtin' };
-  // 서명 확인 (remote-core.js에 공개 키가 있을 때만). 이 크롬이 Ed25519를 지원하지 않으면 실패로 보고 지금 값을 유지한다.
-  const remoteVerifier = remoteCore.subtleVerifier(crypto.subtle);
-  const sigFailed = () => MLA.i18n.t('ext.host.sigFailed');
-
-  // 바이트 그대로 받는다 (서명은 JSON으로 읽기 전에 확인). 리다이렉트는 따라가지 않는다 (정해 둔 주소의 파일만 받는다)
-  async function fetchRemoteBytes(url, signal) {
-    const res = await fetch(url, { cache: 'no-store', redirect: 'error', signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return new Uint8Array(await res.arrayBuffer());
-  }
-
-  // 시작할 때: 저장해 둔 바이트 · 서명을 다시 확인하고 적용한다. 서명 없는 예전 캐시는 공개 키가 있으면 버린다 (내장 값).
-  async function loadRemoteCache() {
-    if (!prefs.remoteSelectors) return;
-    try {
-      const packed = remoteCore.unpackCache(await load('remoteSelectors', null));
-      if (!packed) return;
-      const check = await remoteCore.verify(packed.bytes, packed.sig, remoteVerifier);
-      if (!check.ok) return console.warn('[remote] 저장해 둔 셀렉터 서명 확인 실패', check.detail || '');
-      const cached = remoteCore.sanitize(remoteCore.parseBytes(packed.bytes), SERVICES);
-      if (!cached) return;
-      remoteCore.apply(SERVICES, remoteBase, cached.overrides);
-      remoteStatus = { source: 'cache', version: cached.version, updated: cached.updated };
-    } catch {}
-  }
-
-  // 사이트 셀렉터 원격 갱신 (Windows 앱의 remote.js와 같은 일). 받은 값은 확장 저장소에 기억합니다.
-  async function refreshRemote() {
-    if (!prefs.remoteSelectors) return remoteStatus;
-    const checkedAt = Date.now();
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-    try {
-      const bytes = await fetchRemoteBytes(remoteCore.DEFAULT_URL, ctrl.signal);
-      const sig = remoteCore.SELECTORS_PUBLIC_KEY
-        ? new TextDecoder().decode(await fetchRemoteBytes(remoteCore.SIG_URL, ctrl.signal)).trim()
-        : '';
-      const check = await remoteCore.verify(bytes, sig, remoteVerifier);
-      if (!check.ok) {
-        // 서명이 틀리면 적용하지 않고 저장해 둔 값도 그대로 둔다
-        console.warn('[remote]', sigFailed(), check.detail || '');
-        throw new Error(sigFailed());
-      }
-      const clean = remoteCore.sanitize(remoteCore.parseBytes(bytes), SERVICES);
-      if (!clean) throw new Error(MLA.i18n.t('ext.host.badFormat'));
-      remoteCore.apply(SERVICES, remoteBase, clean.overrides);
-      store('remoteSelectors', remoteCore.packCache(bytes, sig));
-      // 새 셀렉터를 받았으면 자가진단 기록을 지우고 다시 확인한다
-      if (clean.version !== remoteStatus.version) {
-        diag.reset();
-        lastProbe.clear();
-        for (const id of panels.keys()) probePanel(id);
-      }
-      remoteStatus = {
-        source: 'remote',
-        version: clean.version,
-        updated: clean.updated,
-        services: Object.keys(clean.overrides),
-        ignored: clean.ignored, // 보안상 원격으로 바꾸지 않는 항목(버튼 셀렉터 등)이라 무시한 것
-        checkedAt,
-      };
-    } catch (err) {
-      remoteStatus = { ...remoteStatus, checkedAt, error: err.name === 'AbortError' ? MLA.i18n.t('ext.host.timeout') : err.message };
-    } finally {
-      clearTimeout(timer);
-    }
-    log('remote', JSON.stringify(remoteStatus));
-    pushState();
-    return remoteStatus;
-  }
-
-  function resetRemote() {
-    remoteCore.apply(SERVICES, remoteBase, {});
-    remoteStatus = { source: 'builtin' };
-  }
-
-  // ---------- 새 버전 알림 (v0.20.0) ----------
-  // 압축해제된 확장은 스스로 바꿀 수 없다. GitHub main의 package.json 버전만 보고 새 버전이 있으면 알린다
-  // (원격 셀렉터와 같은 raw.githubusercontent.com — 권한 · CSP를 더 받지 않는다).
-  const UPD = MLA.update;
-  const myVersion = chrome.runtime.getManifest().version;
-  let updateStatus = UPD.normalizeStatus({ state: 'idle', canInstall: false }, myVersion);
-  async function checkUpdate() {
-    updateStatus = UPD.normalizeStatus({ ...updateStatus, state: 'checking' }, myVersion);
-    pushState();
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-    try {
-      const res = await fetch(UPD.PACKAGE_URL, { cache: 'no-store', redirect: 'error', signal: ctrl.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const latest = UPD.versionFromPackage(await res.text());
-      if (!latest) throw new Error(MLA.i18n.t('ext.host.noVersion'));
-      const state = UPD.isNewer(latest, myVersion) ? 'available' : 'none';
-      updateStatus = UPD.normalizeStatus({ state, version: latest, checkedAt: Date.now(), canInstall: false }, myVersion);
-    } catch (err) {
-      updateStatus = UPD.normalizeStatus({ state: 'error', error: err.name === 'AbortError' ? MLA.i18n.t('ext.host.timeout') : err.message, checkedAt: Date.now(), canInstall: false }, myVersion);
-    } finally {
-      clearTimeout(timer);
-    }
-    pushState();
-    return updateStatus;
   }
 
   // ---------- 단축키 ----------
@@ -952,7 +683,8 @@
       savePrefs();
       pushState();
     },
-    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, lang } = {}) => {
+    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, lang, onboarded } = {}) => {
+      if (typeof onboarded === 'boolean') prefs.onboarded = onboarded; // 첫 사용 안내를 봤는지 (v0.31.0)
       // 화면 언어 (v0.30.0): 'auto' · 'ko' · 'en'만. 화면은 state.uiLang을 보고 다시 그리고, background · 사이드탭은 저장소 변화를 듣는다
       if (MLA.i18n.LANG_PREFS.includes(lang)) {
         prefs.lang = lang;
@@ -982,7 +714,7 @@
     // 새 버전 알림 (v0.20.0): 확장은 받기 · 설치가 없다 (git pull 후 chrome://extensions에서 ↻)
     update: {
       check: () => checkUpdate(),
-      download: async () => updateStatus,
+      download: async () => X.updateStatus,
       install: async () => false,
       openReleases: () => chrome.tabs.create({ url: UPD.RELEASES_URL }),
     },
@@ -1040,7 +772,9 @@
   // 앱 탭을 열 때: 설정·기록·원격 셀렉터를 불러오고, 지난번에 고른 모델로 채팅 화면을 엽니다.
   async function init() {
     fixButtonTitles();
-    prefs = { ...prefs, ...(await load('prefs', {})) };
+    const savedPrefs = await load('prefs', null);
+    prefs = { ...prefs, ...(savedPrefs || {}) };
+    prefs.onboarded = MLA.onboarding.wasOnboarded(savedPrefs); // 첫 사용 안내 (v0.31.0): 새로 설치한 사람만 한 번
     prefs.layout = MLA.layout.normalizeLayout(prefs.layout);
     // 예전 설정(없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
     prefs.local = normalizeLocalPrefs(prefs.local);
@@ -1096,6 +830,12 @@
     }
   }
 
+  // 먼저 읽힌 host-panels.js · host-remote.js가 "쓸 때" 찾는 것 (v0.31.0). 값이 바뀌는 것(prefs · tabId)은 읽을 때마다 지금 값을 준다.
+  Object.assign(X, { FETCH_TIMEOUT_MS, HELLO_TIMEOUT_MS, LOGIN_CHECK_MS, SERVICES, barIds, diag, framesEl, lastProbe, load, log, panels, probePanel, pushState, remoteCore, rounds, runShortcut, sendPanel, serviceForHost, store });
+  Object.defineProperties(X, {
+    prefs: { get: () => prefs, enumerable: true },
+    tabId: { get: () => tabId, enumerable: true },
+  });
   // renderer.js가 host.on(...)으로 화면 갱신 함수를 등록한 뒤에 시작한다.
   window.addEventListener('DOMContentLoaded', () =>
     init().catch((err) => {

@@ -196,6 +196,7 @@
   'main.shortcut.target': "Toggle the Nth send target",
   'main.shortcut.panel': "Focus the Nth panel",
   'main.shortcut.help': "Keyboard shortcuts help",
+  'main.shortcut.zoom': 'Zoom the app in · out · reset (AI site panels keep their own size)',
   'main.shortcut.back': "Return to the panels from compare, changes, file editor, git console, library, history, or help (cancels variable input)",
   'main.remote.sigMismatch': "The signature does not match",
 });

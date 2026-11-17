@@ -57,6 +57,15 @@ const SCENES = [
   { name: '43-skill-versions', page: 'app' },
   { name: '44-local-judge', page: 'app' },
   { name: '45-settings-transfer', page: 'app' },
+  // v0.31.0: 예전 디자인으로 남아 있던 프로젝트 장면을 다시 찍는다 (가짜 프로젝트 폴더로) + 첫 사용 안내 · 파일 나무 키보드
+  { name: '09-project', page: 'app' },
+  { name: '10-changes', page: 'app' },
+  { name: '16-test-run', page: 'app' },
+  { name: '21-truncation-guard', page: 'app' },
+  { name: '22-continue', page: 'app' },
+  { name: '23-plan-split', page: 'app' },
+  { name: '46-onboarding', page: 'app' },
+  { name: '47-file-tree', page: 'app' },
   { name: '41-side-recall', page: 'side', width: 420 },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];

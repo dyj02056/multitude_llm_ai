@@ -62,8 +62,9 @@ test('로그인 팝업: 서비스의 authHosts는 그 서비스 패널에서만'
   assert.equal(S.isAuthPopupUrl(null, 'https://claude.ai/'), false);
 });
 
-test('main.js가 정규식 대신 isAuthPopupUrl로 팝업과 팝업 안 이동을 검사한다', () => {
-  const src = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+test('본체(views.js — v0.31.0에 main.js에서 떼어 냄)가 정규식 대신 isAuthPopupUrl로 팝업과 팝업 안 이동을 검사한다', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../src/main/views.js'), 'utf8');
+  assert.ok(!/AUTH_URL_RE/.test(fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8')));
   assert.ok(!/AUTH_URL_RE/.test(src));
   assert.match(src, /setWindowOpenHandler\(\(\{ url \}\) => \{[\s\S]*?isAuthPopupUrl\(svc, url\)/);
   assert.match(src, /did-create-window[\s\S]*?will-navigate[\s\S]*?will-redirect/);

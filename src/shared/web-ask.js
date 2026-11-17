@@ -11,6 +11,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // AI에게 보내는 글 (i18n-*-prompt.js, v0.31.0 — 화면 언어를 따른다). 부를 때 찾는다.
+  const t = (key, vars) => {
+    const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
+    return i18n ? i18n.t(key, vars) : key;
+  };
+
   const MAX_SELECTION = 50000; // 입력창에 넣는 선택한 글의 최대 글자 수
   const MAX_QUESTION = 20000; // 사이드탭에서 함께 넘기는 질문의 최대 글자 수 (v0.21.0)
   const MAX_PAGE = 300000; // page.md에 넣는 본문의 최대 글자 수
@@ -33,7 +39,7 @@
     const question = String(raw.question || '').replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim().slice(0, MAX_QUESTION);
     const text = raw.kind === 'question' ? question : String(raw.text || '').replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim();
     if (!text) return null;
-    const title = String(raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 200) || url || '웹페이지';
+    const title = String(raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 200) || url || t('prompt.web.page');
     return { kind: raw.kind, title, url, text: text.slice(0, max), truncated: text.length > max, ...(question ? { question } : {}) };
   }
 
@@ -42,13 +48,13 @@
   /** 선택한 글 → 입력창 글. 맨 끝 "질문: " 뒤에 바로 이어 쓰게 한다. */
   function selectionPrompt(r) {
     return [
-      `다음은 웹페이지 ${source(r)}에서 고른 글입니다.${r.truncated ? ` (길어서 앞 ${MAX_SELECTION.toLocaleString()}자만)` : ''}`,
+      `${t('prompt.web.selection', { src: source(r) })}${r.truncated ? t('prompt.web.firstChars', { n: MAX_SELECTION.toLocaleString() }) : ''}`,
       '',
       '---',
       r.text,
       '---',
       '',
-      '질문: ',
+      t('prompt.web.question'),
     ].join('\n');
   }
 
@@ -63,8 +69,8 @@
       text: [
         `# ${r.title}`,
         '',
-        r.url ? `출처: ${r.url}` : '',
-        `가져온 때: ${when}${r.truncated ? ` (길어서 앞 ${MAX_PAGE.toLocaleString()}자만)` : ''}`,
+        r.url ? t('prompt.web.source', { url: r.url }) : '',
+        `${t('prompt.web.fetched', { when })}${r.truncated ? t('prompt.web.firstChars', { n: MAX_PAGE.toLocaleString() }) : ''}`,
         '',
         '---',
         '',
@@ -78,7 +84,7 @@
 
   /** 페이지 본문을 첨부할 때 입력창에 넣는 안내 글 */
   function pagePrompt(r) {
-    return [`첨부한 page.md는 웹페이지 ${source(r)}의 본문입니다.`, '', '질문: '].join('\n');
+    return [t('prompt.web.attached', { src: source(r) }), '', t('prompt.web.question')].join('\n');
   }
 
   return { MAX_SELECTION, MAX_PAGE, MAX_QUESTION, FRESH_MS, normalize, selectionPrompt, pageFile, pagePrompt };

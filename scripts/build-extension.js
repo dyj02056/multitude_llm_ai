@@ -4,7 +4,7 @@
 //   node scripts/build-extension.js          만들기 (npm run build:ext)
 //   node scripts/build-extension.js --check  만든 결과가 src/와 맞는지만 확인 (다르면 실패)
 //
-// 직접 고치는 파일: extension/host.js · project-fs.js · content.js · cookie-shim.js · cookie-bridge.js · background.js · ext.css
+// 직접 고치는 파일: extension/host.js · host-panels.js · host-remote.js · project-fs.js · content.js · cookie-shim.js · cookie-bridge.js · background.js · ext.css
 //                   · sidepanel.html · sidepanel.js · sidepanel.css (사이드탭 모드)
 // 이 스크립트가 만드는 파일 (직접 고치지 말 것):
 //   extension/manifest.json        서비스 목록(src/shared/services.js)과 package.json 버전으로 생성
@@ -52,6 +52,9 @@ const RENDERER_FILES = [
   'debate-ui.js',
   'project.js',
   'project-changes.js',
+  'project-runs.js', // v0.31.0: project-changes.js에서 떼어 냄 (큰 작업 · 이어서 받기)
+  'project-devtest.js', // 검사 실행
+  'project-collect.js', // 파일 모아보기
   'project-mix.js',
   'project-commit.js',
   'project-restore.js',
@@ -59,9 +62,12 @@ const RENDERER_FILES = [
   'library.js',
   'library-presets.js',
   'settings-transfer-ui.js',
+  'onboarding.js', // 첫 사용 안내 (v0.31.0)
   'a11y.js', // 창 포커스 관리 (v0.30.0)
 ];
 const PAGE_SCRIPTS = RENDERER_FILES.filter((n) => n !== 'templates.js');
+// 앱 탭의 host(window.host)를 이루는 파일 — extension/에서 직접 고친다. 앞의 둘은 host.js보다 먼저 읽힌다 (v0.31.0에서 나눔).
+const HOST_PARTS = ['host-panels.js', 'host-remote.js'];
 
 /** 만들 파일 목록: { 경로(extension/ 기준): 내용(문자열 | Buffer) } */
 // 만들 파일 목록 전체를 계산합니다 (공통 모듈 복사, 화면 파일 복사, app.html, manifest.json, 아이콘).
@@ -122,6 +128,8 @@ function buildAppHtml(html) {
   replace('  <script src="templates.js"></script>', [
     ...APP_SHARED.map((n) => `  <script src="lib/shared/${n}.js"></script>`),
     '  <script src="project-fs.js"></script>',
+    // host.js에서 떼어 낸 조각 (v0.31.0) — host.js보다 먼저 읽혀 MLA.extHost에 함수를 실어 둔다
+    ...HOST_PARTS.map((n) => `  <script src="${n}"></script>`),
     '  <script src="host.js"></script>',
     '  <script src="lib/renderer/templates.js"></script>',
   ].join('\n'));

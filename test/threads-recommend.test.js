@@ -160,7 +160,7 @@ test('본체 · 확장 host: 새 대화 · 처음 주소 · 로컬 대화 지우
   const path = require('path');
   const ROOT = path.join(__dirname, '..');
   const main = fs.readFileSync(path.join(ROOT, 'src', 'main', 'main.js'), 'utf8');
-  const host = fs.readFileSync(path.join(ROOT, 'extension', 'host.js'), 'utf8');
+  const host = require('./helpers/ext-host').readHost();
   // newchat · home · 로컬 LLM · 닫기(main: showChat · showLogin · logout · closeLocalPanel, host: closePanel · closeLocalPanel)
   assert.ok((main.match(/rounds\.resetPanel\(/g) || []).length >= 7);
   assert.ok((host.match(/rounds\.resetPanel\(/g) || []).length >= 5);

@@ -443,17 +443,70 @@
 
   const filesUnder = (dir) => project.scan.entries.filter((e) => e.kind === 'file' && !e.excluded && e.path.startsWith(`${dir}/`));
 
+  // ---------- 파일 나무 키보드 (v0.31.0 접근성) ----------
+  // 나무 전체가 Tab 한 번에 닿는 한 덩어리(role="tree")이고, 안에서는 방향키로 움직인다 (계산은 shared/tree-nav.js).
+  // 포커스가 있던 줄의 경로를 기억해, 펼치거나 체크해서 다시 그려도 그 줄로 돌아간다 (예전에는 처음으로 돌아갔다).
+  const TN = window.MLA.treeNav;
+  let treeFocus = ''; // 포커스를 둘 줄의 경로
+  const treeRows = () => [...$('#psTree').children];
+  const navRows = (entries) => entries.map((e) => ({ path: e.path, depth: e.depth, kind: e.kind, expanded: e.kind === 'dir' && project.expanded.has(e.path) }));
+
+  /** 줄 하나만 Tab이 닿게 하고(roving tabindex), move면 그 줄로 포커스를 옮긴다 */
+  function setTreeFocus(path, move) {
+    treeFocus = path;
+    for (const r of treeRows()) {
+      const on = r.dataset.path === path;
+      r.tabIndex = on ? 0 : -1;
+      if (on && move) {
+        r.focus();
+        r.scrollIntoView?.({ block: 'nearest' });
+      }
+    }
+  }
+
+  $('#psTree').addEventListener('keydown', (ev) => {
+    const row = ev.target.closest?.('.ps-row');
+    if (!row || ev.target !== row || ev.ctrlKey || ev.altKey || ev.metaKey) return; // 줄 안의 체크 상자에서 누른 키는 그대로 둔다
+    const entries = visibleEntries();
+    const index = entries.findIndex((e) => e.path === row.dataset.path);
+    const act = TN.keyAction(navRows(entries), index, ev.key);
+    if (!act) return;
+    ev.preventDefault();
+    const entry = (path) => entries.find((e) => e.path === path);
+    if ('focus' in act) setTreeFocus(entries[act.focus].path, true);
+    else if (act.toggle) toggleDir(entry(act.toggle));
+    else if (act.open && entry(act.open).excluded?.layer !== 'L1') P.openEditor(act.open);
+    else if (act.check) row.querySelector('input[type="checkbox"]:not(:disabled)')?.click();
+  });
+  // 마우스로 줄을 누르면 그 줄이 다음 Tab 자리가 된다
+  $('#psTree').addEventListener('focusin', (ev) => {
+    const row = ev.target.closest?.('.ps-row');
+    if (row && row.dataset.path !== treeFocus) setTreeFocus(row.dataset.path, false);
+  });
+
   /** 파일 나무를 그립니다: 접기/펼치기 ▸▾, 보낼 파일 체크, 제외 표시(L1·L2·L3), ⚠ 비밀?, 크기. 파일 이름을 누르면 편집기가 열립니다. */
   function renderTree() {
-    const rows = visibleEntries().map((e) => {
+    const tree = $('#psTree');
+    const hadFocus = tree.contains(document.activeElement); // 다시 그린 뒤 포커스를 돌려줄지
+    const entries = visibleEntries();
+    const focusAt = TN.focusIndex(entries, treeFocus);
+    treeFocus = focusAt >= 0 ? entries[focusAt].path : '';
+    const rows = entries.map((e, i) => {
       const row = document.createElement('div');
       row.className = `ps-row ${e.kind === 'dir' ? 'dir' : 'file'}${e.excluded ? ' excl' : ''}`;
       row.style.paddingLeft = `${e.depth * 14}px`;
+      row.dataset.path = e.path;
+      row.setAttribute('role', 'treeitem');
+      row.setAttribute('aria-level', String(e.depth + 1));
+      row.setAttribute('aria-label', e.kind === 'dir' ? `${e.name}/` : e.name);
+      if (e.kind === 'dir') row.setAttribute('aria-expanded', String(project.expanded.has(e.path)));
+      row.tabIndex = i === focusAt ? 0 : -1;
       const twisty = span('twisty', e.kind === 'dir' ? (project.expanded.has(e.path) ? '▾' : '▸') : '');
-      twisty.setAttribute('aria-hidden', 'true'); // 같은 일을 이름(키보드로 닿는 버튼)이 한다 (v0.30.0)
+      twisty.setAttribute('aria-hidden', 'true'); // 펼침 상태는 줄의 aria-expanded가 알린다
       if (e.kind === 'dir') twisty.addEventListener('click', () => toggleDir(e));
       const box = document.createElement('input');
       box.type = 'checkbox';
+      box.tabIndex = -1; // 키보드로는 줄에서 Space (Tab은 나무 전체에 한 번)
       if (e.kind === 'dir') {
         const under = filesUnder(e.path);
         box.checked = under.length > 0 && under.every((f) => project.checked.has(f.path));
@@ -472,6 +525,7 @@
       const name = span('nm', e.kind === 'dir' ? `${e.name}/` : e.name);
       name.title = e.path;
       box.setAttribute('aria-label', e.path); // 체크 상자가 어느 파일 것인지 (v0.30.0)
+      if (!box.disabled) row.setAttribute('aria-checked', box.indeterminate ? 'mixed' : String(box.checked)); // 보낼 파일로 골랐는지
       row.append(twisty, box, name);
       if (e.excluded) {
         const tag = span(`tag ${e.excluded.layer}`, e.excluded.layer);
@@ -491,21 +545,24 @@
         row.append(tag);
       }
       if (e.kind === 'file') row.append(span('sz', fmtSize(e.size)));
-      if (e.kind === 'dir') {
-        name.addEventListener('click', () => toggleDir(e));
-        keyClick(name, () => toggleDir(e), 'button').setAttribute('aria-expanded', String(project.expanded.has(e.path)));
-      } else if (e.kind === 'file' && e.excluded?.layer !== 'L1') {
+      // 이름을 누르면 폴더는 펼치고 파일은 연다. 키보드로는 줄에서 Enter (위의 keydown)
+      if (e.kind === 'dir') name.addEventListener('click', () => toggleDir(e));
+      else if (e.kind === 'file' && e.excluded?.layer !== 'L1') {
         name.title = `${e.path}\n${t('project.tree.openHint')}`;
         name.addEventListener('click', () => P.openEditor(e.path));
-        keyClick(name, () => P.openEditor(e.path), 'button');
       }
-      if (e.path === ed.path) row.classList.add('editing');
+      if (e.path === ed.path) {
+        row.classList.add('editing');
+        row.setAttribute('aria-current', 'true'); // 편집기에 열려 있는 파일
+      }
       return row;
     });
-    $('#psTree').replaceChildren(...rows);
+    tree.replaceChildren(...rows);
+    if (hadFocus && focusAt >= 0) rows[focusAt].focus(); // 다시 그려도 보던 줄에 그대로
   }
 
   async function toggleDir(e) {
+    if (!e) return;
     if (project.expanded.has(e.path)) project.expanded.delete(e.path);
     else {
       project.expanded.add(e.path);
@@ -551,17 +608,15 @@
 
   /** 고른 파일들을 읽는다. 비밀 정보가 새로 보이면 확인을 받는다. → { files, skipped } | null(취소) */
   // 고른 파일들의 내용을 읽어 옵니다. 너무 크거나 바이너리·비밀 정보 파일은 빼고 이유를 남깁니다.
-  // 보내지 않은 이유 (v0.30.0): AI에게 보내는 목록의 글(reason)은 한국어 그대로 두고 (AI에게 보내는 글은 아직 한국어),
-  // 확인 창에는 지금 화면 언어(key · vars → skipText)로 보여 준다.
-  const SKIP_WHY = {
-    binary: { reason: '바이너리 파일', key: 'project.skipWhy.binary' },
-    tooLarge: { reason: '1MB 초과', key: 'project.skipWhy.tooLarge' },
-    missing: { reason: '파일이 없습니다', key: 'project.skipWhy.missing' },
-    unreadable: { reason: '읽지 못함', key: 'project.skipWhy.unreadable' },
-    secret: { reason: '비밀 정보로 보이는 문자열이 있어 보내지 않음', key: 'project.skipWhy.secret' },
-    badPath: { reason: '허용되지 않는 경로', key: 'project.skipWhy.badPath' },
-    notInProject: { reason: '프로젝트에 없는 파일', key: 'project.skipWhy.notInProject' },
-  };
+  // 보내지 않은 이유 (v0.30.0): 확인 창에는 지금 화면 언어(key · vars → skipText)로 보여 준다.
+  // reason = AI에게 보내는 글(prompt.proj.skip.* — 화면 언어를 따른다, v0.31.0), key = 확인 창에 보이는 글. 읽을 때마다 지금 언어로 만든다.
+  const skipWhy = (name) => ({
+    get reason() {
+      return t(`prompt.proj.skip.${name}`);
+    },
+    key: `project.skipWhy.${name}`,
+  });
+  const SKIP_WHY = Object.fromEntries(['binary', 'tooLarge', 'missing', 'unreadable', 'secret', 'badPath', 'notInProject'].map((n) => [n, skipWhy(n)]));
   const readSkip = (path, r) => ({ path, ...(r.binary ? SKIP_WHY.binary : r.tooLarge ? SKIP_WHY.tooLarge : r.missing ? SKIP_WHY.missing : r.error ? { reason: r.error } : SKIP_WHY.unreadable) });
   const skipText = (f) => (f.key ? t(f.key, f.vars) : f.reason);
 
@@ -660,7 +715,7 @@
       P.splitSuggested = true;
       notice(t('project.send.bigHint', { n: files.length, lines: lineCount.toLocaleString() }));
     }
-    const request = project.split ? `${payload.text || '(요청 없음)'}\n\n${PC.PLAN_FIRST}` : payload.text;
+    const request = project.split ? `${payload.text || t('prompt.proj.noRequestPlain')}\n\n${PC.PLAN_FIRST}` : payload.text;
     const projInfo = { name: project.info.name, paths: sendablePaths() };
     const treeHash = PC.hashText(PC.buildTree(projInfo.paths));
     const plan = project.incremental
@@ -931,7 +986,7 @@
     const clean = PX.safeRelPath(path);
     if (!clean) return SKIP_WHY.badPath;
     const e = entryOf(clean);
-    const excluded = (rule) => ({ reason: `제외 규칙: ${PI.describe(rule)}`, key: 'project.skipWhy.excluded', vars: { rule: PI.describe(rule) } });
+    const excluded = (rule) => ({ reason: t('prompt.proj.skip.excluded', { rule: PI.describe(rule) }), key: 'project.skipWhy.excluded', vars: { rule: PI.describe(rule) } });
     if (e?.excluded) return excluded(e.excluded);
     // 훑지 않은(제외된 폴더 안) 경로도 규칙으로 다시 본다.
     const r = project.scan.matcher.classify(clean, false);

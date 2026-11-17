@@ -290,6 +290,7 @@
   'project.rules.l3None': '선택 적용: (해당 파일 없음)',
   'project.rules.l3On': '적용 중',
   'project.rules.l3Off': '켜면 {n}개 더 제외',
+  'project.tree.aria': '프로젝트 파일',
   'project.tree.excluded': '제외됨: {why}',
   'project.tree.excludedL1': ' — 앱 내장 규칙이라 보낼 수 없습니다',
   'project.tree.excludedPick': ' — 체크하면 이 파일만 보냅니다',

@@ -6,11 +6,11 @@
 //
 // [쉽게 말하면] 화면 글자를 언어별 사전에서 찾아 주는 부품입니다.
 // v0.30.0부터 설정 › 언어(자동 · 한국어 · English)를 따릅니다: 본체 · 화면 · 확장이 시작할 때 setLang(detectLang(설정, OS 언어))를 부릅니다.
-// AI에게 보내는 글(종합 · 분석 · 토론 프롬프트)은 아직 한국어 그대로입니다.
+// v0.31.0부터 AI에게 보내는 글(종합 · 분석 · 토론 · 프로젝트 모드 요청)도 같은 언어를 따릅니다 (사전: i18n-<언어>-prompt.js).
 (function (root, factory) {
   const isNode = typeof module === 'object' && module.exports;
   // 사전: 공통(i18n-ko.js · i18n-en.js) + 영역별(i18n-<언어>-<영역>.js, v0.30.0). 화면은 <script>로 먼저 읽어 합쳐 둔다.
-  const AREAS = ['ui', 'project', 'library', 'ext', 'main'];
+  const AREAS = ['ui', 'project', 'library', 'ext', 'main', 'prompt']; // prompt = AI에게 보내는 글 (v0.31.0)
   const load = (lang) => Object.assign({}, require(`./i18n-${lang}`), ...AREAS.map((a) => require(`./i18n-${lang}-${a}`)));
   const strings = isNode ? { ko: load('ko'), en: load('en') } : (root.MLA && root.MLA.i18nStrings) || {};
   const api = factory(strings);

@@ -196,6 +196,7 @@
   'main.shortcut.target': "N번째 보낼 대상 켜기/끄기",
   'main.shortcut.panel': "N번째 패널로 포커스 이동",
   'main.shortcut.help': "단축키 도움말",
+  'main.shortcut.zoom': '앱 화면 크게 · 작게 · 원래 크기 (AI 사이트 패널은 그대로)',
   'main.shortcut.back': "비교·변경 제안·파일 편집·git 콘솔·라이브러리·기록·도움말 화면에서 패널로 돌아가기 (변수 입력은 취소)",
   'main.remote.sigMismatch': "서명이 맞지 않습니다",
 });

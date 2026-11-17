@@ -17,6 +17,9 @@
   /* 선: 1px 회색 */
   --border: #30363d;
   --border-strong: #484f58;
+  /* v0.31.0 접근성: 버튼 · 입력칸 · 고르기 칸처럼 누르거나 쓰는 요소의 테두리. 가장 밝은 바탕(#1c2128)에서도 3:1 이상
+     (WCAG 1.4.11 — 글자가 아닌 요소). 칸을 나누는 선 · 꾸밈 선은 --border 그대로다 (요소를 알아보는 데 필요한 선이 아니라서). */
+  --control-border: #656d76;
   /* 글자: 본문 · 흐린 설명 · 아주 흐린 보조 */
   --text: #c9d1d9;
   --text-2: #8b949e;
@@ -104,21 +107,21 @@ button {
   position: relative;
   background: transparent;
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--r-sm);
   padding: 3px 9px;
   font: inherit;
   cursor: pointer;
   transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
 }
-button:hover { background: var(--field-hover); border-color: var(--border-strong); color: var(--bright); }
+button:hover { background: var(--field-hover); border-color: var(--text-2); color: var(--bright); }
 button:active { background: #22272e; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-button:disabled, button:disabled:hover { opacity: .45; cursor: default; background: transparent; border-color: var(--border); color: var(--text); }
+button:disabled, button:disabled:hover { opacity: .45; cursor: default; background: transparent; border-color: var(--control-border); color: var(--text); }
 button.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
-button.ghost:hover { background: var(--field-hover); border-color: var(--border); color: var(--text); }
+button.ghost:hover { background: var(--field-hover); border-color: var(--control-border); color: var(--text); }
 
-.seg { display: flex; padding: 0; gap: 0; border-radius: var(--r-sm); background: transparent; border: 1px solid var(--border); }
+.seg { display: flex; padding: 0; gap: 0; border-radius: var(--r-sm); background: transparent; border: 1px solid var(--control-border); }
 .seg button { border-radius: 0; border-color: transparent; background: transparent; color: var(--text-2); padding: 2px 9px; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button:hover { color: var(--bright); background: var(--field-hover); border-color: transparent; border-left-color: var(--border); }
@@ -173,7 +176,7 @@ body[data-mode="chat"] .only-chat { display: flex; }
 body[data-mode="chat"] #panels.only-chat { display: block; }
 body[data-mode="pick"] .only-auth, body[data-mode="chat"] .only-auth { display: inline-block; }
 
-button.danger { border-color: var(--border); color: var(--err-text); background: transparent; }
+button.danger { border-color: var(--control-border); color: var(--err-text); background: transparent; }
 button.danger:hover { background: var(--err-soft); border-color: var(--err); color: var(--err-text); }
 button.primary { background: var(--text); border-color: var(--text); color: var(--bg); padding: 6px 16px; font-weight: 700; }
 button.primary:hover { background: var(--bright); border-color: var(--bright); color: var(--bg); }
@@ -270,7 +273,7 @@ input[type="checkbox"] { accent-color: var(--text-2); }
 #prompt {
   flex: 1; resize: none; min-height: 0;
   background: var(--bg); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
+  border: 1px solid var(--control-border); border-radius: var(--r-sm);
   padding: 8px 12px 8px 26px; font: 13px/1.5 var(--mono); user-select: text;
 }
 /* 입력칸 앞의 ❯ 표시 (입력칸 안쪽 왼쪽 위) */
@@ -294,7 +297,7 @@ input[type="checkbox"] { accent-color: var(--text-2); }
 /* ---------- 교차검토(종합) ---------- */
 .synth { display: flex; align-items: center; gap: 6px; padding-left: 10px; border-left: 1px solid var(--border); }
 .synth select {
-  background: var(--field); color: var(--text); border: 1px solid var(--border);
+  background: var(--field); color: var(--text); border: 1px solid var(--control-border);
   border-radius: var(--r-sm); padding: 2px 6px; font-size: 11.5px;
 }
 .synth button { padding: 1px 9px; font-size: 11.5px; }
@@ -353,7 +356,7 @@ body[data-view="compare"] #panels { display: none !important; }
 .diff-tools { display: inline-flex; gap: 6px; align-items: center; }
 #diffToggle.active { border-color: var(--warn); color: var(--warn-text); }
 #diffBase {
-  background: var(--field); color: var(--text); border: 1px solid var(--border);
+  background: var(--field); color: var(--text); border: 1px solid var(--control-border);
   border-radius: var(--r-sm); padding: 2px 6px; font-size: 11.5px;
 }
 .diff-badge { font-size: 11px; padding: 0 6px; border-radius: var(--r-sm); border: 1px solid var(--border); color: var(--warn-text); }
@@ -400,7 +403,7 @@ body[data-view="compare"] #panels { display: none !important; }
 /* ---------- 질문 템플릿 ---------- */
 .tpl { display: flex; flex-direction: column; gap: 4px; width: 150px; flex: none; }
 #tplSelect, #presetSelect {
-  background: var(--field); color: var(--text); border: 1px solid var(--border);
+  background: var(--field); color: var(--text); border: 1px solid var(--control-border);
   border-radius: var(--r-sm); padding: 3px 6px; font-size: 11.5px;
 }
 #tplSelect.on { border-color: rgba(88, 166, 255, .6); color: var(--accent-text); }
@@ -452,7 +455,7 @@ body[data-view="history"] #panels { display: none !important; }
 #history { position: absolute; left: 0; right: 0; top: 44px; bottom: 132px; gap: 8px; padding: 8px; }
 .history-side { width: 300px; flex: none; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 #historySearch {
-  background: var(--field); color: var(--text); border: 1px solid var(--border);
+  background: var(--field); color: var(--text); border: 1px solid var(--control-border);
   border-radius: var(--r-sm); padding: 5px 10px; user-select: text;
 }
 .history-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--border); }
@@ -476,7 +479,7 @@ body[data-view="history"] #panels { display: none !important; }
 .hf-row[hidden] { display: none; }
 .hf-row > span:first-child { color: var(--text-2); min-width: 52px; }
 .hf-row select { flex: 1; min-width: 0; }
-.hf-row input[type="date"] { flex: 1; min-width: 0; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 4px; color-scheme: dark; }
+.hf-row input[type="date"] { flex: 1; min-width: 0; background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 2px 4px; color-scheme: dark; }
 .hf-wrap { flex-wrap: wrap; align-items: flex-start; }
 .hf-chips { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
 .hf-chips .chip { font-size: 11px; padding: 1px 7px; }
@@ -491,7 +494,7 @@ body[data-view="history"] #panels { display: none !important; }
 .star-btn { font-size: 14px; line-height: 1; padding: 2px 7px; color: var(--text-2); }
 .star-btn.on { color: var(--warn-text); border-color: var(--warn); }
 .tag-chip { font-size: 11.5px; padding: 1px 7px; color: var(--accent-text); }
-.tag-input { flex: 1; min-width: 160px; max-width: 360px; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 8px; user-select: text; }
+.tag-input { flex: 1; min-width: 160px; max-width: 360px; background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 2px 8px; user-select: text; }
 .kind-badge { margin-left: auto; font-size: 11px; color: var(--text-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; }
 /* 대화 줄기 */
 .thread-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
@@ -550,7 +553,7 @@ kbd {
   padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: transparent;
 }
 .setting-row select {
-  background: var(--field); color: var(--text); border: 1px solid var(--border);
+  background: var(--field); color: var(--text); border: 1px solid var(--control-border);
   border-radius: var(--r-sm); padding: 3px 8px;
 }
 /* 설정 아래 설명 = 왼쪽에 회색 줄이 있는 안내 문구 */
@@ -671,7 +674,7 @@ body.project-open[data-mode="chat"][data-view="dialog"] .project-side { display:
 /* 커밋 창 (v0.28.0) */
 .commit-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .commit-tools button { margin-left: auto; }
-.commit-msg { width: 100%; box-sizing: border-box; font: 12.5px/1.5 var(--mono); background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 8px; resize: vertical; }
+.commit-msg { width: 100%; box-sizing: border-box; font: 12.5px/1.5 var(--mono); background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 6px 8px; resize: vertical; }
 .commit-info { display: block; margin: 6px 0 2px; }
 .commit-files { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
 .commit-files li { display: flex; gap: 6px; align-items: center; }
@@ -873,7 +876,7 @@ body.project-open[data-mode="chat"][data-view="git"] .project-side { display: fl
 .git-out .info { color: var(--muted); }
 .git-form { display: flex; align-items: center; gap: 6px; }
 .git-prompt { color: var(--ok); font-weight: 700; }
-#gitInput { flex: 1; font: 12.5px var(--mono); background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 8px; user-select: text; }
+#gitInput { flex: 1; font: 12.5px var(--mono); background: var(--bg); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 5px 8px; user-select: text; }
 #gitInput:focus { outline: none; border-color: var(--accent); }
 
 /* ---------- 라이브러리 (내 템플릿 · 스킬) · 변수 입력 ---------- */
@@ -911,7 +914,7 @@ body[data-view="library"] #panels, body[data-view="vars"] #panels { display: non
 .lib-field { display: flex; flex-direction: column; gap: 3px; }
 .lib-field.grow { flex: 1; min-height: 0; }
 .lib-field input, .lib-field textarea, .var-row input, .var-row select {
-  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 8px; font: inherit; user-select: text;
+  background: var(--bg); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 4px 8px; font: inherit; user-select: text;
 }
 .lib-field textarea { flex: 1; min-height: 0; resize: none; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; }
 .lib-field input:focus, .lib-field textarea:focus, .var-row input:focus { outline: none; border-color: var(--accent); }
@@ -928,7 +931,7 @@ body[data-view="library"] #panels, body[data-view="vars"] #panels { display: non
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px 10px; font: 12px/1.45 var(--mono); user-select: text;
 }
 #libSkillMode, #libUseCompact, #cmpTarget {
-  background: var(--field); color: var(--text); border: 1px solid var(--border);
+  background: var(--field); color: var(--text); border: 1px solid var(--control-border);
   border-radius: var(--r-sm); padding: 2px 6px; font-size: 11.5px;
 }
 
@@ -969,7 +972,7 @@ body[data-view="library"] #panels, body[data-view="vars"] #panels { display: non
 #libInfo[data-level="warn"] { color: var(--warn-text); }
 #libInfo[data-level="strong"] { color: var(--err-text); }
 #libWarn[hidden] { display: none; }
-#libWarn input { width: 72px; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11.5px; }
+#libWarn input { width: 72px; background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11.5px; }
 .lib-skill-opts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11.5px; }
 .lib-skill-opts[hidden] { display: none; }
 .lib-skill-opts .spacer { flex: 1; }
@@ -982,7 +985,7 @@ body[data-view="compress"] #panels { display: none !important; }
   flex-direction: column; gap: 8px; padding: 8px;
 }
 #compressView .spacer { flex: 1; }
-#cmpLen { width: 80px; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11.5px; }
+#cmpLen { width: 80px; background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11.5px; }
 .cmp-status { font-size: 11.5px; color: var(--muted); }
 .cmp-status[data-kind="error"] { color: var(--err-text); }
 .cmp-status[data-kind="ok"] { color: var(--ok-text); }
@@ -1020,7 +1023,7 @@ body[data-view="compress"] #panels { display: none !important; }
 .panel.local-panel { background: var(--bg); }
 .local-chat { position: absolute; left: 0; right: 0; top: 28px; bottom: 0; display: flex; flex-direction: column; min-height: 0; }
 .local-head { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--border); flex: none; }
-.local-head select { background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1px 6px; font-size: 11.5px; max-width: 60%; }
+.local-head select { background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 1px 6px; font-size: 11.5px; max-width: 60%; }
 .local-head button { padding: 0 8px; font-size: 11.5px; }
 .local-messages { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; user-select: text; }
 .local-msg { max-width: 100%; line-height: 1.6; font-size: 12.5px; word-break: break-word; }
@@ -1036,7 +1039,7 @@ body[data-view="compress"] #panels { display: none !important; }
 .local-typing { color: var(--muted); font-size: 12px; animation: soft-blink 1.2s steps(2, jump-none) infinite; }
 .local-error { color: var(--err-text); font-size: 12px; }
 .local-img { color: var(--text-2); font-size: 11px; }
-.local-settings input { flex: 1; margin-left: 10px; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 3px 8px; font-weight: 400; user-select: text; }
+.local-settings input { flex: 1; margin-left: 10px; background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 3px 8px; font-weight: 400; user-select: text; }
 .local-settings select { flex: 1; }
 .local-settings[hidden] { display: none; }
 
@@ -1049,15 +1052,21 @@ body[data-view="compress"] #panels { display: none !important; }
 .offer-bar { border-top-color: var(--accent); z-index: 2; }
 .offer-bar .cb-icon { color: var(--accent-text); }
 .offer-bar .cb-text { flex: none; cursor: default; }
-.offer-bar .offer-intent { flex: none; background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11.5px; }
+.offer-bar .offer-intent { flex: none; background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11.5px; }
 .offer-bar .offer-target { box-shadow: inset 2px 0 0 var(--svc, var(--border)); }
 .offer-bar .cb-close { margin-left: auto; }
 .status[data-state="send-retrying"] { color: var(--warn-text); }
 #debateStop[hidden], #debateBtn[hidden] { display: none; }
 .modal-box.debate-box { width: min(560px, 94vw); height: auto; max-height: 88vh; }
+/* 첫 사용 안내 (v0.31.0): 걸음 번호 · 제목 · 설명 · 단축키. 걸음마다 높이가 달라 창이 들썩이지 않게 본문 높이를 잡아 둔다 */
+.modal-box.onboard-box { width: min(560px, 94vw); height: auto; max-height: 88vh; }
+.onboard-body { min-height: 190px; padding: 18px 20px; gap: 8px; }
+.onboard-body h3 { margin: 0; font-size: 15px; color: var(--bright); }
+.onboard-text { margin: 0; color: var(--text); line-height: 1.7; white-space: pre-line; user-select: text; }
+.onboard-keys { margin: 6px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .debate-field { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .debate-field > .muted-label { min-width: 90px; }
-.debate-field select { background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; }
+.debate-field select { background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 2px 6px; }
 .debate-parts { display: flex; gap: 6px; flex-wrap: wrap; }
 .debate-part { padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); box-shadow: inset 2px 0 0 var(--svc); }
 .debate-part:has(input:disabled) { opacity: .5; }
@@ -1091,7 +1100,7 @@ body[data-view="compress"] #panels { display: none !important; }
 .an-unique-badge { font-size: 10.5px; font-weight: 400; padding: 0 5px; border-radius: var(--r-sm); border: 1px solid rgba(210, 153, 34, .55); color: var(--warn-text); white-space: nowrap; }
 .an-compare { display: flex; flex-direction: column; gap: 8px; }
 .an-compare-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.an-compare-bar select { background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; font-size: 11.5px; max-width: 280px; }
+.an-compare-bar select { background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 2px 6px; font-size: 11.5px; max-width: 280px; }
 .an-compare-bar button { padding: 1px 8px; font-size: 11.5px; }
 .an-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
 .an-compare-grid .analysis-grid { grid-template-columns: minmax(0, 1fr); }
@@ -1116,7 +1125,7 @@ body[data-view="compress"] #panels { display: none !important; }
 /* 키보드로 옮겨 간 요소는 파란 테두리로 보인다 (마우스로 누를 때는 생기지 않는다). 버튼 · 입력칸은 위쪽 규칙이 맡고,
    여기서는 나머지 — 체크 상자 · 접는 줄(summary) · 링크 · Tab으로 닿게 한 줄/칸(tabindex) · 창 상자 — 를 맡는다. */
 input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, summary:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.lib-row:focus-visible, .ps-row .nm:focus-visible, .an-jump:focus-visible, .history-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lib-row:focus-visible, .ps-row:focus-visible, .an-jump:focus-visible, .history-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .modal-box:focus { outline: none; } /* 창을 열 때 잠깐 포커스를 받는 상자 (a11y.js) — 테두리는 그리지 않는다 */
 /* 화면에는 안 보이고 화면 읽기 프로그램만 읽는 글 (표 머리줄 등) */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

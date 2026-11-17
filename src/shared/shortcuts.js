@@ -35,13 +35,15 @@
     { keys: 'Ctrl+1~9', browserKeys: 'Alt+Shift+1~6', action: 'target:N', labelKey: 'main.shortcut.target' },
     { keys: 'Alt+1~9', browserKeys: 'Alt+1~6', action: 'panel:N', labelKey: 'main.shortcut.panel' },
     { keys: 'Ctrl+/', action: 'view:help', labelKey: 'main.shortcut.help' },
+    // 화면 확대 (v0.31.0, Windows 앱만 — 크롬 확장은 브라우저 확대를 쓴다). 누른 키 알아보기는 layout.js zoomKey, 처리는 main.js
+    { keys: 'Ctrl++ Ctrl+- Ctrl+0', action: 'zoom', appOnly: true, labelKey: 'main.shortcut.zoom' },
     { keys: 'Esc', action: 'view:panels', labelKey: 'main.shortcut.back' },
   ];
   for (const s of SHORTCUTS) Object.defineProperty(s, 'label', { get: () => t(s.labelKey), enumerable: true });
 
   /** 도움말 표에 보여 줄 목록 [{ keys, label }] */
   function shortcutList({ browser = false } = {}) {
-    return SHORTCUTS.map(({ keys, browserKeys, label }) => ({ keys: (browser && browserKeys) || keys, label }));
+    return SHORTCUTS.filter((s) => !(browser && s.appOnly)).map(({ keys, browserKeys, label }) => ({ keys: (browser && browserKeys) || keys, label }));
   }
 
   /**

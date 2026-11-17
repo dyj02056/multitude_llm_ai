@@ -23,7 +23,7 @@
 
   const Diff = DiffLib || require('./vendor/diff');
   // 화면 문구 (i18n-*-project.js) — 부를 때 찾는다 (Electron 앱 require · 화면 전역 MLA.i18n).
-  // AI 답에서 읽는 표시(파일: · 찾기/바꾸기 · 생략 표시)와 AI에게 보내는 이어받기 부탁 글은 옮기지 않는다.
+  // AI 답에서 읽는 표시(파일: · 찾기/바꾸기 · 생략 표시)는 옮기지 않고(두 언어를 다 읽는다), 이어받기 부탁 글은 i18n-*-prompt.js (v0.31.0).
   const tr = (key, vars) => {
     const i18n = typeof module === 'object' && module.exports ? require('./i18n') : globalThis.MLA && globalThis.MLA.i18n;
     return i18n ? i18n.t(key, vars) : key;
@@ -664,7 +664,7 @@
   // 겹치는 곳이 맞지 않으면 붙이지 않는다 (엉뚱한 곳에 이어 붙여 코드를 망가뜨리지 않게).
   const MAX_CONTINUE = 3; // 한 파일을 이어 받는 최대 횟수
   // 끊긴 파일 뒤에 주려던 다른 파일도 끊겨서 못 받았을 수 있다 — 이 파일을 다 쓴 뒤 이어서 달라고 한다
-  const AFTER_NOTE = '이 파일 다음에 주려던 다른 파일이 있었다면, 이 파일을 다 쓴 뒤 처음 답변 규칙 그대로("파일: 경로" + 코드 블록) 이어서 줘.';
+  const afterNote = () => tr('prompt.cont.after');
 
   /** 이어 받을 수 있는 수정안이면 이어 받기 정보, 아니면 null (diff · 삭제는 다시 요청으로) */
   function continuationOf(change) {
@@ -686,28 +686,14 @@
 
   /** 이어 받기를 부탁하는 글 */
   function continuePrompt(cont) {
-    const label = `파일: ${cont.path} (이어서)`;
+    const path = cont.path;
+    const label = tr('prompt.cont.label', { path });
     if (cont.kind === 'edit') {
-      return [
-        `직전 답의 "파일: ${cont.path}" 찾기/바꾸기가 출력 한도로 중간에 끊겼어. 끝까지 받은 찾기/바꾸기는 ${cont.edits.length}개야.`,
-        `${cont.edits.length + 1}번째부터 남은 찾기/바꾸기만, 앞에서와 같은 형식(<<<<<<< 찾기 / ======= / >>>>>>> 바꾸기)으로 "${label}" 줄 다음 코드 블록 하나에 줘.`,
-        '이미 받은 찾기/바꾸기는 다시 쓰지 말고, 다른 설명은 쓰지 마. 이번에도 다 못 쓰면 끝난 블록까지만 쓰고 멈춰 줘.',
-        AFTER_NOTE,
-      ].join('\n');
+      return [tr('prompt.cont.edit', { path, label, done: cont.edits.length, next: cont.edits.length + 1 }), afterNote()].join('\n');
     }
-    if (!cont.anchor) {
-      return [`직전 답의 "파일: ${cont.path}" 코드가 출력 한도로 끊겼어. 그 파일의 전체 내용을 "${label}" 줄 다음 코드 블록 하나로 처음부터 다시 줘.`].join('\n');
-    }
+    if (!cont.anchor) return tr('prompt.cont.restart', { path, label });
     const fence = cont.anchor.includes('```') ? '````' : '```';
-    return [
-      `직전 답의 "파일: ${cont.path}" 코드가 출력 한도로 중간에 끊겼어. 아래 줄까지는 받았어:`,
-      fence,
-      cont.anchor,
-      fence,
-      `이 줄을 첫 줄로 한 번 더 그대로 쓰고, 그 다음 줄부터 파일 끝까지 나머지만 "${label}" 줄 다음 코드 블록 하나로 줘.`,
-      '앞부분은 다시 쓰지 말고, 다른 설명은 쓰지 마. 이번에도 다 못 쓰면 줄이 끝나는 곳에서 멈춰 줘.',
-      AFTER_NOTE,
-    ].join('\n');
+    return [tr('prompt.cont.fullHead', { path }), fence, cont.anchor, fence, tr('prompt.cont.fullTail', { label }), afterNote()].join('\n');
   }
 
   /**

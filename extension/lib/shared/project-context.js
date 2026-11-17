@@ -14,7 +14,8 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
   'use strict';
 
-  // 화면 문구 (i18n-*-project.js) — 부를 때 찾는다 (Electron 앱 require · 화면 전역 MLA.i18n). AI에게 보내는 글(RULES 등)은 옮기지 않는다.
+  // 화면 문구 (i18n-*-project.js)와 AI에게 보내는 글(i18n-*-prompt.js, v0.31.0 — 화면 언어를 따른다) — 부를 때 찾는다
+  // (Electron 앱 require · 화면 전역 MLA.i18n). 그래서 RULES · PLAN_FIRST는 값이 아니라 읽을 때마다 만드는 속성(getter)이다.
   const tr = (key, vars) => {
     const i18n = typeof module === 'object' && module.exports ? require('./i18n') : root && root.MLA && root.MLA.i18n;
     return i18n ? i18n.t(key, vars) : key;
@@ -42,29 +43,7 @@
   const EDIT_LINES = 150;
 
   // AI에게 매번 함께 보내는 답변 규칙. 이 형식을 지켜야 변경 제안·파일 모아보기가 수정안을 찾을 수 있습니다.
-  const RULES = [
-    '[답변 규칙]',
-    '1) 먼저 원인이나 설계를 3줄 이내로 설명해 줘.',
-    `2) 파일 수정은 diff로 주지 말고, 파일마다 "파일: 경로" 줄 다음에 코드 블록 하나로 줘. 한 코드 블록에는 한 파일만 넣어 줘.`,
-    `   - 새 파일이거나 ${EDIT_LINES}줄 이하인 파일: 그 파일의 "전체" 내용. "..."이나 "(기존과 같음)"으로 줄이지 말고 처음부터 끝까지 다 써 줘.`,
-    `   - ${EDIT_LINES}줄보다 긴 기존 파일: 전체를 다시 쓰지 말고 바꿀 곳만 찾기/바꾸기로 줘 (답이 길어져 잘리지 않게). 찾을 부분은 지금 파일 그대로(한 글자도 바꾸지 말고) 파일 안에서 한 곳만 맞도록 앞뒤 줄을 조금 넣고, 바꿀 곳이 여러 군데면 한 블록 안에 여러 번 써 줘.`,
-    '   내용에 ``` 가 들어 있는 파일(.md 등)은 바깥 울타리를 ```` (백틱 4개, 안쪽보다 길게)로 써서 블록이 중간에 끊기지 않게 해 줘:',
-    '파일: 경로/짧은파일',
-    '```',
-    '(수정한 전체 내용)',
-    '```',
-    '파일: 경로/긴파일',
-    '```',
-    '<<<<<<< 찾기',
-    '(지금 파일에서 바꿀 부분 그대로)',
-    '=======',
-    '(바꾼 내용)',
-    '>>>>>>> 바꾸기',
-    '```',
-    '   코드 자체에 ======= 만 있는 줄이 있으면, 찾을 부분이 파일에서 한 곳만 맞도록 앞뒤 줄을 넉넉히 넣어 줘.',
-    '3) 지워야 하는 파일이 있으면 한 줄로 적어 줘: DELETE_FILES: 경로1, 경로2',
-    '4) 내용을 더 봐야 하는 파일이 있으면 답변 맨 끝에 한 줄로 적어 줘: NEED_FILES: 경로1, 경로2',
-  ].join('\n');
+  const rules = () => tr('prompt.proj.rules', { n: EDIT_LINES });
 
   const LANG = {
     js: 'js', mjs: 'js', cjs: 'js', jsx: 'jsx', ts: 'ts', tsx: 'tsx', json: 'json', md: 'markdown', py: 'python',
@@ -83,7 +62,7 @@
 
   function fileBlock(path, text) {
     const f = fence(text);
-    return `[파일: ${path}]\n${f}${langOf(path)}\n${text.replace(/\n$/, '')}\n${f}`;
+    return `${tr('prompt.proj.fileLabel', { path })}\n${f}${langOf(path)}\n${text.replace(/\n$/, '')}\n${f}`;
   }
 
   /**
@@ -106,7 +85,7 @@
       }
     }
     if (lines.length <= TREE_LINE_LIMIT) return lines.join('\n');
-    return `${lines.slice(0, TREE_LINE_LIMIT).join('\n')}\n… (${lines.length - TREE_LINE_LIMIT}줄 생략)`;
+    return `${lines.slice(0, TREE_LINE_LIMIT).join('\n')}\n${tr('prompt.proj.treeCut', { n: lines.length - TREE_LINE_LIMIT })}`;
   }
 
   /**
@@ -116,22 +95,22 @@
    *   inlineText는 문서 첨부를 받지 않는 서비스용(본문에 넣되 INLINE_LIMIT에서 자른 것).
    */
   function buildContext({ project, files, request }) {
-    const head = `[프로젝트: ${project.name}] (제외 규칙을 통과한 파일 ${project.paths.length}개 중 ${files.length}개 내용 포함)`;
+    const head = tr('prompt.proj.head', { name: project.name, total: project.paths.length, n: files.length });
     const context = [
       head,
       '',
-      '[프로젝트 구조]',
+      tr('prompt.proj.tree'),
       buildTree(project.paths),
       '',
       ...files.map((f) => `${fileBlock(f.path, f.text)}\n`),
     ].join('\n');
-    const tail = `[요청]\n${request || '(요청 없음 — 위 내용을 검토해 줘)'}\n\n${RULES}`;
+    const tail = `${tr('prompt.proj.request')}\n${request || tr('prompt.proj.noRequest')}\n\n${rules()}`;
     const inline = `${context}\n${tail}`;
     if (inline.length <= INLINE_LIMIT) return { text: inline, attachment: null, inlineText: inline };
 
-    const short = `[프로젝트: ${project.name}] 첨부한 ${CONTEXT_FILE}에 프로젝트 구조와 파일 ${files.length}개의 내용이 있습니다.\n\n${tail}`;
+    const short = `${tr('prompt.proj.short', { name: project.name, file: CONTEXT_FILE, n: files.length })}\n\n${tail}`;
     const room = INLINE_LIMIT - tail.length - 200;
-    const cut = `${context.slice(0, Math.max(0, room))}\n… (분량이 많아 여기까지만 넣었습니다)\n\n${tail}`;
+    const cut = `${context.slice(0, Math.max(0, room))}\n${tr('prompt.proj.cut')}\n\n${tail}`;
     return { text: short, attachment: { name: CONTEXT_FILE, content: context }, inlineText: cut };
   }
 
@@ -140,22 +119,22 @@
    * files: [{ path, text }] 보낼 파일, skipped: [{ path, reason }] 보내지 않은 파일
    */
   function buildFollowUp(files, skipped = []) {
-    const parts = ['요청한 파일입니다.', ''];
+    const parts = [tr('prompt.proj.followUp'), ''];
     for (const f of files) parts.push(fileBlock(f.path, f.text), '');
     if (skipped.length) {
-      parts.push('[보내지 않은 파일]');
+      parts.push(tr('prompt.proj.skipped'));
       for (const s of skipped) parts.push(`- ${s.path}: ${s.reason}`);
       parts.push('');
     }
-    parts.push('같은 답변 규칙으로 이어서 답해 줘.', '', RULES);
+    parts.push(tr('prompt.proj.sameRules'), '', rules());
     return parts.join('\n');
   }
 
   /** diff가 현재 파일과 맞지 않을 때: 현재 내용을 주고 전체 파일로 다시 달라고 한다 */
   function buildRefetch(path, text) {
     return [
-      `아래 파일은 네가 준 diff가 현재 내용과 맞지 않아 적용하지 못했어. 지금 내용을 줄게.`,
-      `수정한 "전체" 파일 내용을 "파일: ${path}" 줄 다음에 코드 블록 하나로 다시 줘.`,
+      tr('prompt.proj.refetchIntro'),
+      tr('prompt.proj.refetchFull', { path }),
       '',
       fileBlock(path, text),
     ].join('\n');
@@ -190,15 +169,7 @@
   const SPLIT_SUGGEST = { files: 4, lines: 600 }; // 이보다 많이 고르면 "큰 작업"을 권한다
 
   // 질문 뒤에 붙여, 이번 답에서는 코드 없이 계획만 받는다
-  const PLAN_FIRST = [
-    '[큰 작업 — 이번 답은 계획만]',
-    '이번 답에서는 코드를 쓰지 마. 고칠 파일이 많아서, 먼저 계획만 받고 파일마다 따로 물어볼게.',
-    '1) 무엇을 어떻게 바꿀지 5줄 이내로 설명해 줘.',
-    '2) 바꾸거나 새로 만들 파일을 고치는 순서대로, 한 줄에 하나씩 "- 경로: 그 파일에서 할 일 한 줄"로 적어 줘.',
-    '3) 맨 끝에 같은 파일들을 한 줄로 적어 줘: PLAN_FILES: 경로1, 경로2, 경로3',
-    '4) 지울 파일은 DELETE_FILES: 경로 로 적어 줘. 내용을 더 봐야 하는 파일은 NEED_FILES: 경로 로 적어 줘.',
-    '아래 답변 규칙(코드 형식)은 내가 파일별로 물어볼 때 지켜 줘.',
-  ].join('\n');
+  const planFirst = () => tr('prompt.proj.planFirst');
 
   /**
    * 계획 답에서 고칠 파일 목록을 읽는다: "PLAN_FILES: a.js, b.js" 줄 + 그 앞의 "- 경로: 할 일" 목록(할 일 글을 붙이려고)
@@ -228,11 +199,7 @@
 
   /** 파일 하나를 부탁하는 글 (index는 0부터) */
   function stepPrompt({ path, note }, index, total) {
-    return [
-      `계획대로 ${index + 1}/${total}번째 파일만 줘: ${path}${note ? ` — ${note}` : ''}`,
-      `"파일: ${path}" 줄 다음 코드 블록 하나로, 처음 답변 규칙대로 줘 (${EDIT_LINES}줄 이하 · 새 파일은 전체 내용, 그보다 긴 기존 파일은 찾기/바꾸기).`,
-      '이번 답에는 이 파일만 쓰고 다른 파일은 쓰지 마. 설명은 2줄 이내로. 다음 파일은 내가 따로 물어볼게.',
-    ].join('\n');
+    return tr('prompt.proj.step', { i: index + 1, total, path, note: note ? ` — ${note}` : '', n: EDIT_LINES });
   }
 
   /** 고른 파일 수 · 줄 수가 크면 "큰 작업"을 권할지 */
@@ -403,8 +370,13 @@
     INLINE_LIMIT,
     CONTEXT_FILE,
     EDIT_LINES,
-    RULES,
-    PLAN_FIRST,
+    // 지금 언어의 글 (읽을 때마다 만든다 — 언어를 바꾼 뒤에도 맞게)
+    get RULES() {
+      return rules();
+    },
+    get PLAN_FIRST() {
+      return planFirst();
+    },
     MAX_PLAN_FILES,
     SPLIT_SUGGEST,
     SPLIT_TOKENS,

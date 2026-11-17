@@ -290,6 +290,7 @@
   'project.rules.l3None': 'Optional: (no such files)',
   'project.rules.l3On': 'applied',
   'project.rules.l3Off': 'excludes {n} more when on',
+  'project.tree.aria': 'Project files',
   'project.tree.excluded': 'Excluded: {why}',
   'project.tree.excludedL1': '. Built-in rule, so it cannot be sent.',
   'project.tree.excludedPick': '. Check it to send just this file.',

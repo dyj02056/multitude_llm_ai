@@ -6,7 +6,9 @@
 
 This guide was written when the screens were Korean only, so it still quotes the **Korean label** next to many controls — useful if you run the Korean interface; in the English interface the same control carries the English name given in brackets or a close equivalent.
 
-Still Korean in this release: the prompts the app writes for **synthesis, analysis, debate and project mode** (so those answers may come back in Korean), and the sample questions and answers in the screenshots.
+Since v0.31.0 the requests the app writes for the AIs (**synthesis, analysis, debate, hand-off, project mode, skills compression and the built-in templates**) follow the interface language, so in the English interface they go out in English. Your own questions, templates and skills are sent as you wrote them. Still Korean: the sample questions and answers in the screenshots.
+
+**First start (v0.31.0):** the first time a new installation opens its panels, a four-step **Getting started** window explains asking, comparing, synthesis and where the rest lives. **Skip** or `Esc` closes it for good; reopen it from **?** (Settings) › **Show again**. People who already used an earlier version do not see it.
 
 > Screenshots show the real app screens in English; the chat inside each panel is a test page with (Korean) sample answers.
 
@@ -133,8 +135,12 @@ History stays on this PC. Questions sent from the extension's side panel appear 
 | `Ctrl+Shift+D` / `Ctrl+H` | Compare / history |
 | `Ctrl+Shift+P` (extension: `Alt+Shift+P`) | Proposed changes (project mode) |
 | `Ctrl+1–9` (extension: `Alt+Shift+1–6`) / `Alt+1–9` | Toggle the Nth target / focus the Nth panel |
+| `Ctrl+/` | Settings and shortcuts |
+| `Ctrl++` / `Ctrl+-` / `Ctrl+0` (Windows app, v0.31.0) | Zoom the app screens in / out / back to normal (8 steps, 80%–200%, remembered). AI site panels keep their own size. In the Chrome extension use the browser's zoom |
 | `Esc` | Back to the panels |
 | `Alt+Shift+S` (extension) | Open the side panel with the current page |
+
+In the project sidebar the file tree is one tab stop: `↑` `↓` move, `→` expands (or enters) a folder, `←` collapses (or goes to the parent), `Home` `End` jump, `Enter` opens a file or toggles a folder, `Space` ticks the file to send (v0.31.0).
 
 ## 8. Library: templates and skills
 
