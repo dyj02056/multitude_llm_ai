@@ -110,36 +110,46 @@
   // 웹 서비스 목록(SERVICES)과 따로 두고, 켜 두었을 때만 붙인다. 이 PC 주소(localhost · 127.0.0.1) 권한은 켤 때 그때 묻는다.
   const LL = MLA.localLLM;
   const LOCAL_ORIGINS = ['http://localhost/*', 'http://127.0.0.1/*'];
-  const normalizeLocalPrefs = (v) => {
-    const o = v && typeof v === 'object' ? v : {};
-    return { enabled: o.enabled === true, baseUrl: LL.normalizeBaseUrl(o.baseUrl) || LL.DEFAULT_BASE, model: LL.cleanModel(o.model), contextTokens: LL.normalizeContext(o.contextTokens) };
-  };
+  const normalizeLocalPrefs = LL.normalizeLocalPrefs; // 패널 수 · 패널마다 모델까지 (v0.36.0)
   /** 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 판정 · 압축 — Windows 앱 main.js askLocal과 같음): 패널 대화와 따로인 임시 대화 */
   const askLocal = (text) =>
     prefs.local?.enabled ? LL.askOnce({ fetchFn: (url, opts) => fetch(url, opts), getConfig: () => prefs.local, text }) : Promise.resolve({ ok: false, error: MLA.i18n.t('ext.host.localOff') });
-  const allServices = () => (prefs.local?.enabled ? [...SERVICES, LL.localService(prefs.local)] : SERVICES);
-  const isLocal = (id) => id === LL.LOCAL_ID;
-  let localChat = null;
-  const hasPanelId = (id) => (isLocal(id) ? !!localChat : panels.has(id));
-  function openLocalPanel() {
-    if (localChat) return;
-    localChat = LL.createLocalChat({
+  const allServices = () => (prefs.local?.enabled ? [...SERVICES, ...LL.localServices(prefs.local)] : SERVICES);
+  const isLocal = LL.isLocalId;
+  const localChats = new Map(); // 로컬 LLM 대화 (id → 대화, 패널이 열려 있을 때만, 최대 3개 — v0.36.0)
+  const hasPanelId = (id) => (isLocal(id) ? localChats.has(id) : panels.has(id));
+  function openLocalPanel(id = LL.LOCAL_ID) {
+    if (!isLocal(id) || localChats.has(id)) return;
+    const chat = LL.createLocalChat({
       fetchFn: (url, opts) => fetch(url, opts),
-      getConfig: () => prefs.local,
-      onUpdate: (view) => sendPanel(LL.LOCAL_ID, { local: view }),
+      getConfig: () => ({ ...prefs.local, model: LL.modelOf(prefs.local, id) }), // 패널마다 모델이 다르다
+      onUpdate: (view) => sendPanel(id, { local: view }),
     });
-    sendPanel(LL.LOCAL_ID, { login: 'ready', local: localChat.view() });
+    localChats.set(id, chat);
+    sendPanel(id, { login: 'ready', local: chat.view() });
   }
-  function closeLocalPanel() {
-    localChat?.stop();
-    localChat = null;
-    rounds.resetPanel(LL.LOCAL_ID); // 대화 줄기 (v0.27.0): 닫은 패널은 지난 대화를 잇지 않는다
+  /** 로컬 패널 하나를 닫는다 (id가 없으면 모두) */
+  function closeLocalPanel(id) {
+    for (const x of id ? [id] : [...localChats.keys()]) {
+      localChats.get(x)?.stop();
+      localChats.delete(x);
+      rounds.resetPanel(x); // 대화 줄기 (v0.27.0): 닫은 패널은 지난 대화를 잇지 않는다
+    }
   }
 
   // 기록별 저장 (v0.24.0, shared/history-core.js createAreaStore): 'history:index' + 'history:r:<id>'.
   // 예전 'history' 칸(배열 전체)은 처음 읽을 때 옮기고 지운다.
   const historyStore = createAreaStore(chrome.storage.local, { onError: (err) => console.error('[storage] 기록 저장 실패:', err.message) });
   const history = createHistory(historyStore.save);
+  // 기록 의미 검색 (v0.36.0, Windows 앱 main.js와 같음): 로컬 서버(localhost)의 /v1/embeddings로 만든 뜻 벡터는 'embedIndex' 칸에 둔다
+  const embed = MLA.embedIndex.createEmbedService({
+    getConfig: () => prefs.local,
+    getRecords: () => history.all(),
+    fetchFn: (url, opts) => fetch(url, opts),
+    load: async () => (await chrome.storage.local.get('embedIndex')).embedIndex || null,
+    save: async (index) => (index ? chrome.storage.local.set({ embedIndex: index }) : chrome.storage.local.remove('embedIndex')),
+    listByIds: (ids, filters) => history.listByIds(ids, filters),
+  });
   // 최대 개수를 넘은 기록의 보관 (v0.35.0, shared/history-archive.js): 'history:a:YYYY-MM' 칸, 설정에서 켠 때만
   const historyArchive = MLA.historyArchive.createAreaArchive(chrome.storage.local, { onError: (err) => console.error('[storage] 기록 보관 실패:', err.message) });
   const setArchiveOn = (on) => history.setArchive(on ? (list) => void historyArchive.append(list) : null);
@@ -229,8 +239,10 @@
     savePrefs();
     for (const id of [...panels.keys()]) if (!ids.includes(id)) closePanel(id);
     for (const id of ids) if (!isLocal(id) && !panels.has(id)) openPanel(svcOf(id));
-    if (ids.includes(LL.LOCAL_ID)) openLocalPanel();
-    else closeLocalPanel();
+    for (const id of LL.LOCAL_IDS) {
+      if (ids.includes(id)) openLocalPanel(id);
+      else closeLocalPanel(id);
+    }
     mode = 'chat';
     chatView = 'panels';
     pushState();
@@ -300,7 +312,7 @@
       remoteSelectors: prefs.remoteSelectors,
       remote: X.remoteStatus,
       diag: diag.all(SERVICES.map((s) => s.id)),
-      services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
+      services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s), ...(s.textOnlyDocs ? { textOnlyDocs: true } : {}) })),
       local: { ...prefs.local },
       autoUpdate: prefs.autoUpdate !== false,
       notify: { ...prefs.notify },
@@ -383,14 +395,16 @@
     hasPanel: hasPanelId,
     sendPrompt: async (id, text, files, { fallbackText } = {}) => {
       if (isLocal(id)) {
-        if (!localChat) return { ok: false, error: MLA.i18n.t('ext.side.paneClosed') };
+        if (!localChats.has(id)) return { ok: false, error: MLA.i18n.t('ext.side.paneClosed') };
         const b64 = (d) => {
           const bytes = new Uint8Array(d);
           let s = '';
           for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
           return btoa(s);
         };
-        return localChat.send(text, files.map((f) => LL.imageDataUrl(f, b64)).filter(Boolean));
+        // 글 파일은 요청 글에 끼워 보낸다 (컨텍스트 한도를 넘으면 일부만, v0.36.0)
+        const emb = LL.embedTextFiles(text, files, { sp: MLA.sendPlan, decode: (f) => new TextDecoder('utf-8').decode(new Uint8Array(f.data)), contextTokens: prefs.local?.contextTokens });
+        return localChats.get(id).send(text, files.map((f) => LL.imageDataUrl(f, b64)).filter(Boolean), emb);
       }
       const svc = svcOf(id);
       let upload = null;
@@ -406,12 +420,12 @@
       const res = await callFrame(id, { type: 'mla:send', cfg: sendCfg(svc), text, upload, fallbackText });
       return res || { ok: false, error: MLA.i18n.t('ext.side.paneNoReply') };
     },
-    snapshot: (id, opts) => (isLocal(id) ? (localChat ? localChat.snapshot() : null) : snapshot(id, opts)),
+    snapshot: (id, opts) => (isLocal(id) ? (localChats.has(id) ? localChats.get(id).snapshot() : null) : snapshot(id, opts)),
     watch: (id, before, isCurrent, onState) => {
       if (isLocal(id)) {
-        const chat = localChat;
+        const chat = localChats.get(id);
         if (!chat) return;
-        return watchAnswer(async () => chat.snapshot(), before, () => isCurrent() && localChat === chat, onState, { maxMs: prefs.answerTimeoutMin * 60 * 1000 });
+        return watchAnswer(async () => chat.snapshot(), before, () => isCurrent() && localChats.get(id) === chat, onState, { maxMs: prefs.answerTimeoutMin * 60 * 1000 });
       }
       return watchAnswer(() => snapshot(id), before, isCurrent, onState, { maxMs: prefs.answerTimeoutMin * 60 * 1000 });
     },
@@ -471,13 +485,15 @@
   // 패널 머리줄 버튼 처리: 새로고침 · 처음 주소 · 뒤로 · 새 대화 · 로그인 탭 열기
   function panelAction(id, action) {
     // 로컬 LLM 패널: 새 대화 · 처음 주소 = 대화 지우기, 중지 = 답 그만 받기
-    if (localChat && (id === '*' || isLocal(id)) && ['newchat', 'home', 'stop'].includes(action)) {
-      rounds.cancelWatch(LL.LOCAL_ID);
-      if (action === 'stop') localChat.stop();
-      else {
-        localChat.reset();
-        rounds.resetPanel(LL.LOCAL_ID);
-        sendPanel(LL.LOCAL_ID, { answer: 'clear' });
+    if (localChats.size && (id === '*' || isLocal(id)) && ['newchat', 'home', 'stop'].includes(action)) {
+      for (const [lid, chat] of id === '*' ? [...localChats] : [[id, localChats.get(id)]].filter(([, c]) => c)) {
+        rounds.cancelWatch(lid);
+        if (action === 'stop') chat.stop();
+        else {
+          chat.reset();
+          rounds.resetPanel(lid);
+          sendPanel(lid, { answer: 'clear' });
+        }
       }
     }
     const ids = id === '*' ? [...panels.keys()] : [id].filter((x) => panels.has(x));
@@ -641,6 +657,7 @@
       },
       get: async (id) => history.get(id) || sideHistory.get(id) || (okRecordId(id) ? await historyArchive.find(id) : null),
       archiveInfo: async () => historyArchive.info(),
+      semantic: async (query, filters) => (typeof query === 'string' && query.length <= 500 ? embed.searchSimilar(query, HS.cleanFilters(filters)) : { ok: false, error: 'query' }),
       // 기록 옮기기로 받은 기록 더하기 (Windows 앱 history:import와 같음, 모양은 history-core cleanRecord가 다시 검사)
       import: async (list) => (Array.isArray(list) && list.length <= 5000 ? history.importRecords(list) : { added: 0, duplicate: 0, invalid: 0, overflow: 0, error: 'size' }),
       // 태그 · 즐겨찾기 (v0.27.0, Windows 앱 main/ipc/history.js와 같은 검사). 사이드탭 기록은 사이드탭이 쓰는 칸이라 바꾸지 않는다
@@ -660,6 +677,7 @@
         return historyArchive.remove(id); // 보관된 기록
       },
       clear: async () => {
+        await embed.clear(); // 뜻 벡터 색인도 (기록에서 만든 것이라)
         await historyArchive.clear(); // 보관도 함께 (남겨 두면 지운 기록이 보관에 남기 때문)
         history.clear();
         sideHistory.clear();
@@ -677,16 +695,26 @@
           const granted = await chrome.permissions.request({ origins: LOCAL_ORIGINS }).catch(() => false);
           if (!granted) return { ok: false, error: MLA.i18n.t('ext.host.localDenied') };
         }
-        prefs.local = {
+        prefs.local = LL.normalizeLocalPrefs({
           enabled,
           baseUrl,
-          model: next.model === undefined ? cur.model : LL.cleanModel(next.model),
-          contextTokens: LL.normalizeContext(next.contextTokens === undefined ? cur.contextTokens : next.contextTokens), // v0.29.0
-        };
+          model: next.model === undefined ? cur.model : next.model,
+          contextTokens: next.contextTokens === undefined ? cur.contextTokens : next.contextTokens, // v0.29.0
+          panels: next.panels === undefined ? cur.panels : next.panels, // 로컬 패널 수 1 ~ 3 (v0.36.0)
+          extraModels: Array.isArray(next.extraModels) ? next.extraModels.slice(0, 2) : cur.extraModels, // 둘째 · 셋째 패널의 모델
+          embedModel: next.embedModel === undefined ? cur.embedModel : next.embedModel, // 의미 검색용 임베딩 모델 (v0.36.0)
+        });
         if (!enabled) {
           prefs.selected = prefs.selected.filter((x) => !isLocal(x));
           if (isLocal(prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
           closeLocalPanel();
+        }
+        // 패널 수를 줄이면 넘는 로컬 패널을 닫고 고른 목록 · 종합 담당에서 뺀다
+        for (const id of LL.LOCAL_IDS.slice(prefs.local.panels)) {
+          if (!prefs.selected.includes(id) && !localChats.has(id)) continue;
+          prefs.selected = prefs.selected.filter((x) => x !== id);
+          if (prefs.synthTarget === id) prefs.synthTarget = prefs.selected[0];
+          closeLocalPanel(id);
         }
         savePrefs();
         pushState();
@@ -782,6 +810,8 @@
       },
     },
     // 진단 정보를 채운 GitHub 이슈 양식 (주소는 항상 이 저장소의 issues/new — 제목 · 본문만 받음)
+    // 기록 의미 검색 색인 (v0.36.0)
+    embed: { status: () => embed.status(), build: () => embed.startBuild(), stop: async () => embed.stopBuild() },
     openIssue: async (title, body) => {
       if (typeof title !== 'string' || typeof body !== 'string' || body.length > 20000) return { ok: false };
       await chrome.tabs.create({ url: UPD.issueUrl(title, body) });
@@ -854,9 +884,9 @@
     prefs.layout = MLA.layout.normalizeLayout(prefs.layout);
     // 예전 설정(없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
     prefs.local = normalizeLocalPrefs(prefs.local);
-    const hadLocal = Array.isArray(prefs.selected) && prefs.selected.includes(LL.LOCAL_ID);
+    const hadLocal = Array.isArray(prefs.selected) ? prefs.selected.filter(LL.isLocalId) : [];
     prefs.selected = normalizeSelected(prefs.selected);
-    if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(LL.LOCAL_ID);
+    for (const id of hadLocal) if (prefs.local.enabled && LL.panelIndex(id) < prefs.local.panels && prefs.selected.length < MAX_SELECTED) prefs.selected.push(id);
     if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
     prefs.historyMax = normalizeMax(prefs.historyMax);
     prefs.notify = MLA.notify.normalizePrefs(prefs.notify);

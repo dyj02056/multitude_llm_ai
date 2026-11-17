@@ -260,6 +260,20 @@ Since v0.29.0 the local LLM can also be the synthesis / analysis / debate judge 
 
 In the Chrome extension, Ollama must allow extension requests: set the environment variable `OLLAMA_ORIGINS=chrome-extension://*` and restart Ollama.
 
+### Several panels, text files and semantic search (v0.36.0)
+
+- **Up to 3 local panels**: **?** › Local LLM › *Local panels* (1–3). The model picker then offers `Local LLM 2` and `Local LLM 3`, each with **its own model** (chosen in settings or in the panel header), so you can ask different models on the same server at once and compare the answers. Lowering the count closes the extra panels (their models are remembered). Synthesis, judging and skill compression use the first model.
+- **Text file attachments**: a local panel inserts files it can read as text (`.txt` `.md` `.csv` `.json` `.log`, code, subtitles…) **into the request**. The bubble shows only your question and `📎 file name`; the file text stays in the conversation for follow-ups. Beyond 80% of the **context limit** (settings) the later files / the end of a file are cut and the text says so (`(partly)`). Images still go separately (vision models); **PDFs and other documents are left out** and the pre-send preview says so. Up to 200,000 characters per file.
+- **Semantic history search (find by meaning)**: type an embedding model name in Local LLM › *Embedding model* (e.g. `nomic-embed-text` on Ollama) and press **Build index**. The local server's `/v1/embeddings` turns the start of each question and answer into numbers stored on this PC (you can stop and resume; only changed records are redone). Then turn on **Find by meaning** under the History search box: records with a similar meaning appear in order of `match 82%` even when the words differ (up to 24 new records are indexed just before each search; filters still apply). **Your text never leaves this PC (localhost only)**; archived records are not indexed, changing the model rebuilds from scratch, and Clear history clears the index too.
+
+![Three local panels side by side](../screenshots/en/64-local-panels.png)
+
+![Attachment preview — the local panel takes the .md but not the PDF](../screenshots/en/65-local-attach.png)
+
+![Find by meaning](../screenshots/en/66-semantic-search.png)
+
+![Local LLM settings: panels, models, index](../screenshots/en/67-local-settings.png)
+
 ## Privacy in short
 
 No Multitude LLM server, no analytics. Questions go only to the AI services you open; history stays on your PC. Details: [PRIVACY.md](../../PRIVACY.md).

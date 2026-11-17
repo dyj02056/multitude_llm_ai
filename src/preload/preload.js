@@ -59,9 +59,16 @@ contextBridge.exposeInMainWorld('host', {
     reset: (id) => ipcRenderer.invoke('selectors:reset', id),
   },
   openIssue: (title, body) => ipcRenderer.invoke('issue:open', title, body),
+  // 기록 의미 검색 색인 (v0.36.0)
+  embed: {
+    status: () => ipcRenderer.invoke('embed:status'),
+    build: () => ipcRenderer.invoke('embed:build'),
+    stop: () => ipcRenderer.invoke('embed:stop'),
+  },
   history: {
     list: (query, filters, opts) => ipcRenderer.invoke('history:list', query, filters, opts),
     archiveInfo: () => ipcRenderer.invoke('history:archiveInfo'),
+    semantic: (query, filters) => ipcRenderer.invoke('history:semantic', query, filters),
     import: (list) => ipcRenderer.invoke('history:import', list),
     get: (id) => ipcRenderer.invoke('history:get', id),
     stats: () => ipcRenderer.invoke('history:stats'),

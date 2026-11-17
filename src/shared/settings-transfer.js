@@ -62,6 +62,9 @@
       if (typeof L.baseUrl === 'string' && L.baseUrl.length <= 200) local.baseUrl = L.baseUrl;
       if (typeof L.model === 'string' && L.model.length <= 200) local.model = L.model;
       if (Number.isInteger(L.contextTokens) && L.contextTokens > 0) local.contextTokens = L.contextTokens;
+      if (Number.isInteger(L.panels) && L.panels >= 1 && L.panels <= 3) local.panels = L.panels; // 로컬 패널 수 (v0.36.0)
+      if (typeof L.embedModel === 'string' && /^[\w.:/@+-]{1,120}$/.test(L.embedModel.trim())) local.embedModel = L.embedModel.trim();
+      if (Array.isArray(L.extraModels)) local.extraModels = L.extraModels.slice(0, 2).map((m) => (typeof m === 'string' && /^[\w.:/@+-]{1,120}$/.test(m.trim()) ? m.trim() : ''));
       if (Object.keys(local).length) out.local = local;
     }
     return out;

@@ -77,7 +77,13 @@ function keyClick(el, onClick, role) {
 
 // 서비스 이름을 화면에 보일 때 (v0.30.0): 로컬 LLM만 지금 언어의 이름으로 바꿔 보여 준다 (모델 고르기 · 패널 머리줄 · 보낼 대상).
 // 서비스의 name 자체('로컬 LLM')는 그대로다 — 기록 · 통계 · AI에게 보내는 글이 그 이름으로 저장되고 서로 찾기 때문.
-const svcLabel = (svc) => (svc?.kind === 'local' ? t('ui.local.name') : svc?.name || '');
+// 로컬 LLM 패널 번호 (v0.36.0): 첫 패널 'local', 둘째 · 셋째 'local-2' · 'local-3' — 패널마다 모델이 따로다
+const LOCAL_PANEL_IDX = { local: 0, 'local-2': 1, 'local-3': 2 };
+const localModelOf = (id) => {
+  const i = LOCAL_PANEL_IDX[id] ?? 0;
+  return (i ? state.local?.extraModels?.[i - 1] : state.local?.model) || '';
+};
+const svcLabel = (svc) => (svc?.kind === 'local' ? `${t('ui.local.name')}${LOCAL_PANEL_IDX[svc.id] ? ` ${LOCAL_PANEL_IDX[svc.id] + 1}` : ''}` : svc?.name || '');
 
 // 기호만 있는 버튼 (v0.30.0): 설명(title)과 화면 읽기 이름(aria-label)을 사전 키로 달아 언어를 바꾸면 apply()가 다시 쓴다
 function tbutton(label, key, onClick) {
@@ -274,7 +280,7 @@ function createPanel(svc) {
   panels.set(svc.id, p);
   renderFeedback(svc.id);
   renderDiagBadge(svc.id);
-  if (localBox) renderLocalChat(svc.id, localViews[svc.id] || { messages: [], streaming: false, model: state.local?.model || '', error: '' });
+  if (localBox) renderLocalChat(svc.id, localViews[svc.id] || { messages: [], streaming: false, model: localModelOf(svc.id), error: '' });
   return p;
 }
 
@@ -497,11 +503,11 @@ function drawLocalChat(id, view) {
   const models = localModels;
   const sel = document.createElement('select');
   sel.title = t('ui.local.modelTitle');
-  const cur = view.model || state.local?.model || '';
+  const cur = view.model || localModelOf(id);
   const names = [...new Set([cur, ...models].filter(Boolean))];
   sel.replaceChildren(...(names.length ? names : [t('ui.local.pickModel')]).map((n) => Object.assign(document.createElement('option'), { value: names.length ? n : '', textContent: n })));
   sel.value = cur;
-  sel.addEventListener('change', () => host.local.setPrefs({ model: sel.value }));
+  sel.addEventListener('change', () => setLocalPanelModel(id, sel.value));
   const conn = button(t('ui.local.modelList'), t('ui.local.modelListTitle'), () => refreshLocalModels(conn));
   head.append(span('muted-label', t('ui.local.model')), sel, conn);
   const list = document.createElement('div');
@@ -517,6 +523,7 @@ function drawLocalChat(id, view) {
     if (m.role === 'user') {
       b.textContent = m.text;
       if (m.images) b.append(span('local-img', ` ${t('ui.local.images', { n: m.images })}`));
+      for (const f of m.files || []) b.append(span('local-img', ` ${t(f.cut ? 'ui.local.fileCut' : 'ui.local.file', { name: f.name })}`)); // 끼워 보낸 글 파일 (v0.36.0)
     } else {
       const src = m.text || (view.streaming ? '…' : '');
       const i = nextMd.length;
@@ -552,6 +559,15 @@ async function refreshLocalModels(el) {
   return r.models;
 }
 
+/** 로컬 패널 하나의 모델을 바꾼다 (첫 패널은 model, 둘째 · 셋째는 extraModels) */
+function setLocalPanelModel(id, model) {
+  const i = LOCAL_PANEL_IDX[id] ?? 0;
+  if (!i) return host.local.setPrefs({ model });
+  const extra = [...(state.local?.extraModels || ['', ''])];
+  extra[i - 1] = model;
+  return host.local.setPrefs({ extraModels: extra });
+}
+
 /** 설정 화면의 로컬 LLM 칸 */
 function renderLocalSettings() {
   const L = state.local || {};
@@ -562,13 +578,29 @@ function renderLocalSettings() {
   const names = [...new Set([L.model, ...localModels].filter(Boolean))];
   sel.replaceChildren(...(names.length ? names : ['']).map((n) => Object.assign(document.createElement('option'), { value: n, textContent: n || t('ui.local.getList') })));
   sel.value = L.model || '';
+  // 패널 수 · 둘째 · 셋째 패널의 모델 (v0.36.0)
+  const panels = L.panels || 1;
+  $('#localPanels').value = String(panels);
+  [2, 3].forEach((n) => {
+    const row = $(`#localModelRow${n}`);
+    row.hidden = panels < n;
+    const s2 = $(`#localModel${n}`);
+    const cur = L.extraModels?.[n - 2] || '';
+    const list = [...new Set([cur, ...localModels, L.model].filter(Boolean))];
+    s2.replaceChildren(...(list.length ? list : ['']).map((m) => Object.assign(document.createElement('option'), { value: m, textContent: m || t('ui.local.getList') })));
+    s2.value = cur;
+  });
   // 컨텍스트 한도 (v0.29.0): 2k ~ 128k 토큰, 기본 8k
   const ctxSel = $('#localCtx');
   if (!ctxSel.options.length) {
     ctxSel.replaceChildren(...[2048, 4096, 8192, 16384, 32768, 131072].map((n) => Object.assign(document.createElement('option'), { value: String(n), textContent: t('local.ctxOption', { k: Math.round(n / 1024) }) })));
   }
   ctxSel.value = String(L.contextTokens || 8192);
+  // 의미 검색용 임베딩 모델 (v0.36.0)
+  if (document.activeElement !== $('#embedModel')) $('#embedModel').value = L.embedModel || '';
+  $('#embedModelList').replaceChildren(...localModels.map((m) => Object.assign(document.createElement('option'), { value: m })));
   $('#localBody').hidden = !L.enabled;
+  if (L.enabled && state.chatView === 'help') window.refreshEmbedStatus?.();
 }
 
 /** 설정 화면: 서비스별 입력창 · 보내기 버튼 · 답변 영역 상태 표 (열어 둔 패널만, 로컬 LLM 패널은 셀렉터를 쓰지 않으므로 뺀다) */

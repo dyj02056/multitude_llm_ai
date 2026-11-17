@@ -135,7 +135,7 @@
     if (key === 'synthTarget') return nameOf(v);
     if (key === 'lang') return { auto: t('settings.lang.auto'), ko: '한국어', en: 'English' }[v] || String(v);
     if (key === 'notify') return Object.entries(v).filter(([, on]) => on).map(([k]) => k).join(', ') || t('transfer.off');
-    if (key === 'local') return [v.enabled === undefined ? '' : t(v.enabled ? 'transfer.on' : 'transfer.off'), v.baseUrl, v.model, v.contextTokens ? `${v.contextTokens.toLocaleString()} tok` : ''].filter(Boolean).join(' · ');
+    if (key === 'local') return [v.enabled === undefined ? '' : t(v.enabled ? 'transfer.on' : 'transfer.off'), v.baseUrl, v.model, v.panels > 1 ? t('local.panelsValue', { n: v.panels }) : '', v.contextTokens ? `${v.contextTokens.toLocaleString()} tok` : ''].filter(Boolean).join(' · ');
     return String(v);
   }
 

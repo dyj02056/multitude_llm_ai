@@ -34,7 +34,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\
 
 // 앱 탭(app.html)이 읽는 공통 모듈. 순서가 중요하다 (rounds.js는 synth.js · debate.js를 쓴다).
 // chain.js · retry.js는 화면도 쓰므로 index.html의 공통 모듈 줄에서 먼저 읽힌다 (v0.26.0).
-const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'history-archive', 'remote-core', 'debate', 'rounds', 'local-llm', 'notify'];
+const APP_SHARED = ['services', 'layout', 'synth', 'shortcuts', 'watch', 'history-core', 'history-archive', 'remote-core', 'debate', 'rounds', 'local-llm', 'embed-index', 'notify'];
 // 서비스 페이지(content script)가 읽는 공통 모듈
 const CONTENT_SHARED = ['page', 'markdown', 'shortcuts'];
 const ICON_SIZES = [16, 32, 48, 128];

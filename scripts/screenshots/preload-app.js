@@ -19,9 +19,12 @@ const TOOLBAR_H = 44;
 const COMPOSER_H = 132;
 const HEADER_H = 28;
 const LOCAL = ['19-local-llm', '20-local-llm-settings'].includes(scene);
+// v0.36.0: 로컬 패널 여러 개 · 글 파일 첨부 · 의미 검색 · 로컬 설정 장면
+const LOCALX = ['64-local-panels', '65-local-attach', '66-semantic-search', '67-local-settings'].includes(scene);
+const LOCAL_PANELS = LOCALX && scene !== '66-semantic-search' ? 3 : 1;
 const LOCAL_JUDGE = scene === '44-local-judge'; // v0.29.0: 로컬 LLM을 켜 두었지만 패널은 없음 → 패널 없이 판정
 const localSvc = LL.localService({ baseUrl: 'http://localhost:11434' });
-const all = LOCAL || LOCAL_JUDGE ? [...SERVICES, localSvc] : SERVICES;
+const all = LOCALX ? [...SERVICES, ...LL.localServices({ baseUrl: 'http://localhost:11434', panels: LOCAL_PANELS })] : LOCAL || LOCAL_JUDGE ? [...SERVICES, localSvc] : SERVICES;
 const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
@@ -33,7 +36,7 @@ const SIDEBAR_W = 300;
 let sidebar = false;
 const barRows = new Map();
 // 보내기 전 미리보기 장면은 문서를 받지 않는 Duck.ai를 넣어 "빼고 보냄" 경고가 보이게 한다
-const selected = LOCAL ? ['gemini', 'chatgpt', 'claude', LL.LOCAL_ID] : PREVIEW ? ['gemini', 'chatgpt', 'claude', 'duckai'] : ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
+const selected = scene === '64-local-panels' ? ['gemini', 'local', 'local-2', 'local-3'] : scene === '65-local-attach' ? ['gemini', 'chatgpt', 'local', 'local-2'] : LOCAL ? ['gemini', 'chatgpt', 'claude', LL.LOCAL_ID] : PREVIEW ? ['gemini', 'chatgpt', 'claude', 'duckai'] : ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
 
 const listeners = { state: [], 'panel:status': [], 'synth:status': [], shortcut: [] };
 const emit = (ch, p) => listeners[ch].forEach((fn) => fn(p));
@@ -172,7 +175,7 @@ function rects() {
 
 // 패널 안 웹페이지 자리 = 테스트용 채팅 페이지 (실제 앱에서는 본체가 여기에 AI 사이트를 얹는다)
 const frames = new Map();
-const chatUrl = (id) => (id === LL.LOCAL_ID ? null : `shot://repo/__chat?id=${id}&scene=${scene}`);
+const chatUrl = (id) => (LL.isLocalId(id) ? null : `shot://repo/__chat?id=${id}&scene=${scene}`);
 function placeFrames(rs, show) {
   for (const r of rs) {
     const src = chatUrl(r.id);
@@ -197,8 +200,8 @@ function push() {
     attachLimits: { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 },
     synthTarget: LOCAL_JUDGE ? 'local' : 'gemini', autoSynth: false, answerTimeoutMin: 20, timeoutChoices: [5, 10, 20, 30, 60], historyMax: 500, historyMaxChoices: [100, 500, 1000, 2000],
     historyArchive: true, recommendOrder: 'completion', remoteSelectors: true, remote: { source: 'remote', version: 12, updated: '2026-11-08', checkedAt: now - 3600e3 }, diag: ['15-screen-status', '25-diag', '63-selector-editor'].includes(scene) ? DIAG : {},
-    services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
-    local: { enabled: LOCAL || LOCAL_JUDGE, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b', contextTokens: 8192 },
+    services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s), ...(s.textOnlyDocs ? { textOnlyDocs: true } : {}) })),
+    local: { enabled: LOCAL || LOCAL_JUDGE || LOCALX, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b', contextTokens: 8192, panels: LOCAL_PANELS, extraModels: ['llama3.1:8b', 'phi4:14b'], embedModel: LOCALX ? 'nomic-embed-text' : '' },
     autoUpdate: true,
     notify: { round: true, limit: true, error: true, synth: false }, sendPreview: false, retryOnce: true, autoRecommend: scene === '35-recommend-chip', commitOffer: true, lang: LANG, uiLang: LANG, onboarded,
     update: { state: 'none', current: require('../../package.json').version, version: '', percent: null, error: '', checkedAt: now - 600e3, canInstall: true },
@@ -227,6 +230,10 @@ window.host = {
   history: {
     list: async (q, f, opts) => fakeHistory.list(q || '', f, opts && opts.archive ? ARCHIVED : undefined),
     get: async (id) => fakeHistory.get(id) || ARCHIVED.find((r) => r.id === id) || null,
+    semantic: async (q, f) => {
+      const items = fakeHistory.list('', f).filter((it) => it.kind !== 'project').slice(0, 5).map((it, i) => ({ ...it, score: Math.round((0.88 - i * 0.09) * 100) / 100 }));
+      return { ok: true, items, indexed: 26 };
+    },
     archiveInfo: async () => ({ total: ARCHIVED.length, months: [{ month: '2026-06', count: 3 }, { month: '2026-05', count: 2 }] }),
     import: async (list) => ({ added: list.length - 1, duplicate: 1, invalid: 0, overflow: 0 }),
     speed: async () => fakeHistory.speed(),
@@ -242,6 +249,7 @@ window.host = {
   },
   copyText: async () => true,
   saveFile: async () => ({ ok: true }),
+  embed: { status: async () => ({ ok: true, ready: true, enabled: true, model: 'nomic-embed-text', count: 21, total: 26, building: false, error: '' }), build: async () => ({ ok: true }), stop: async () => ({ ok: true }) },
   selectors: {
     get: async (id) => selView(id, id === 'deepseek' ? { response: ['.chat-message:last-of-type .markdown'] } : {}),
     set: async (id, patch) => ({ ok: true, view: selView(id, patch) }),
@@ -380,6 +388,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     await sleep(50);
     $('.fb-btn[data-fb="good"]:not([hidden])')?.click(); // 첫 패널에 [+1]을 누른 모습
   }
+  if (scene === '64-local-panels' || scene === '65-local-attach') {
+    const say = { local: ['qwen2.5:7b', '두 언어 모두 배우기 쉽지만 쓰임새가 다릅니다. 파이썬은 데이터 분석 · AI, 자바스크립트는 웹 화면에 주로 씁니다.'], 'local-2': ['llama3.1:8b', '핵심만 말하면: 파이썬 = 데이터 · 자동화, 자바스크립트 = 웹. 처음이면 파이썬을 먼저 권합니다.'], 'local-3': ['phi4:14b', '둘 다 쉽습니다. 목적이 웹이면 자바스크립트, 데이터면 파이썬을 고르세요.'] };
+    for (const id of LL.LOCAL_IDS.filter((x) => selected.includes(x))) {
+      const [model, text] = say[id];
+      const file = scene === '65-local-attach' && id === 'local' ? { files: [{ name: '회의록.md', chars: 420, cut: false }] } : {};
+      emit('panel:status', { id, login: 'ready', local: { messages: [{ role: 'user', text: scene === '65-local-attach' ? '첨부한 회의록을 세 줄로 요약해 줘' : S.QUESTION, ...file }, { role: 'assistant', text }], streaming: false, model, error: '' } });
+    }
+    for (const id of ['gemini', 'chatgpt'].filter((x) => selected.includes(x))) emit('panel:status', { id, answer: 'done', chars: (S.ANSWERS[id] || '').length });
+  }
   if (LOCAL) {
     emit('panel:status', { id: LL.LOCAL_ID, login: 'ready', local: { messages: [{ role: 'user', text: S.QUESTION }, { role: 'assistant', text: S.ANSWERS.claude.replace('둘 다', '로컬 모델 답: 둘 다') }], streaming: false, model: 'qwen2.5:7b', error: '' } });
     for (const id of ['gemini', 'chatgpt', 'claude']) emit('panel:status', { id, answer: 'done', chars: (S.ANSWERS[id] || '').length });
@@ -448,6 +465,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     await sleep(300);
     click('#diagFixSel');
     await sleep(400);
+  }
+  // v0.36.0 의미 검색: "비슷한 뜻으로 찾기"를 켜고 검색어를 쓴 모습
+  if (scene === '66-semantic-search') {
+    click('#historyBtn');
+    await sleep(300);
+    click('#historyGroup button[data-group="records"]');
+    await sleep(200);
+    $('#historySemantic').click();
+    $('#historySearch').value = '파이썬이 자바스크립트보다 쉬운가요';
+    $('#historySearch').dispatchEvent(new Event('input'));
+    await sleep(1300);
   }
   if (scene === '33-history-thread') {
     click('#historyBtn');
@@ -615,7 +643,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   if (scene === '06-settings-shortcuts') click('#helpBtn');
   // 설정 화면의 표들: 그 칸이 맨 위에 오게 스크롤
-  const helpAt = { '15-screen-status': '#diagTable', '17-stats': '#statsTable', '20-local-llm-settings': '#localEnabled', '34-recommend-stats': '#recommendTable', '62-recommend-speed': '#recommendTable' }[scene];
+  const helpAt = { '15-screen-status': '#diagTable', '17-stats': '#statsTable', '20-local-llm-settings': '#localEnabled', '34-recommend-stats': '#recommendTable', '62-recommend-speed': '#recommendTable', '67-local-settings': '#localPanels' }[scene];
   if (helpAt) {
     click('#helpBtn');
     await sleep(500);
@@ -671,6 +699,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     dt.items.add(new File([JSON.stringify(file)], 'multitude-llm-settings-2026-11-15.mla.json', { type: 'application/json' }));
     $('#transferFile').files = dt.files;
     $('#transferFile').dispatchEvent(new Event('change'));
+    await sleep(400);
+  }
+  if (scene === '65-local-attach') {
+    // 글 파일(.md)과 PDF를 붙여 Shift+클릭 → 로컬 패널은 글 파일만 끼워 보내고 PDF는 뺀다
+    await sleep(300);
+    const dt = new DataTransfer();
+    dt.items.add(new File(['# 회의록\n- 결정 사항: 예산 승인\n- 할 일: 일정 정하기'], '회의록.md', { type: 'text/markdown' }));
+    dt.items.add(new File([new Uint8Array(420000)], '분기 보고서.pdf', { type: 'application/pdf' }));
+    document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }));
+    $('#prompt').value = '첨부한 회의록을 세 줄로 요약해 줘';
+    $('#sendBtn').dispatchEvent(new MouseEvent('click', { shiftKey: true, bubbles: true }));
     await sleep(400);
   }
   if (scene === '26-send-preview') {

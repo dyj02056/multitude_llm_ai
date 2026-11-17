@@ -400,6 +400,14 @@
       return HS.filterRecords(all, query, filters).map((r) => summary(r, old.has(r.id)));
     }
 
+    /** 주어진 id 순서대로 목록 줄 (거르기에 맞는 것만) — 의미 검색 결과를 보여 줄 때 (v0.36.0) */
+    function listByIds(ids, filters) {
+      const want = new Set(Array.isArray(ids) ? ids : []);
+      const by = new Map(records.filter((r) => r && want.has(r.id)).map((r) => [r.id, r]));
+      const ordered = (Array.isArray(ids) ? ids : []).map((id) => by.get(id)).filter(Boolean);
+      return HS.filterRecords(ordered, '', filters).map((r) => summary(r));
+    }
+
     /** 기록 하나 → 목록 한 줄 (글은 앞부분만) */
     function summary(r, archivedRow = false) {
       const synth = Array.isArray(r.synth) ? r.synth : [];
@@ -531,7 +539,7 @@
       changed();
     }
 
-    return { load, add, importRecords, setArchive, setAnswer, setFeedback, addSynth, addChain, list, get, setTags, setStar, thread, tags, recommend, speed, stats, remove, clear, all, flush, setMax, max: () => limit };
+    return { load, add, importRecords, setArchive, listByIds, setAnswer, setFeedback, addSynth, addChain, list, get, setTags, setStar, thread, tags, recommend, speed, stats, remove, clear, all, flush, setMax, max: () => limit };
   }
 
   /**

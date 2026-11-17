@@ -86,6 +86,11 @@ const SCENES = [
   { name: '61-history-transfer', page: 'app' },
   { name: '62-recommend-speed', page: 'app' },
   { name: '63-selector-editor', page: 'app' },
+  // v0.36.0
+  { name: '64-local-panels', page: 'app' },
+  { name: '65-local-attach', page: 'app' },
+  { name: '66-semantic-search', page: 'app' },
+  { name: '67-local-settings', page: 'app' },
   { name: '41-side-recall', page: 'side', width: 420 },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];

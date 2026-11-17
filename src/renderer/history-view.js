@@ -13,7 +13,7 @@ const ANSWER_STATE_TEXT = {
   get error() { return t('ui.answerState.error'); },
 };
 // historySelected: 고른 기록 id 또는 대화 줄기 'thread:<id>'. picked: 내보내기로 고른 기록 id
-const historyView = { filters: HSU.cleanFilters({}), group: 'records', picked: new Set(), items: [], archive: false }; // archive: 보관된 기록도 찾기 (v0.35.0, 껐다 켜면 꺼짐)
+const historyView = { filters: HSU.cleanFilters({}), group: 'records', picked: new Set(), items: [], archive: false, semantic: false }; // archive: 보관된 기록도 찾기 (v0.35.0, 껐다 켜면 꺼짐)
 let historySelected = null;
 
 try {
@@ -30,7 +30,8 @@ function historyMeta(it) {
     `${it.files ? ` · ${t('ui.history.metaFiles', { n: it.files })}` : ''}${it.synth ? ` · ${t('ui.history.metaSynth', { n: it.synth })}` : ''}${it.analysis ? ` · ${t('ui.history.metaAnalysis', { n: it.analysis })}` : ''}` +
     `${it.chain ? ` · ${t('history.chainCount', { n: it.chain })}` : ''}${it.debate ? ` · ${t('history.debateCount', { n: it.debate })}` : ''}` +
     `${it.source === 'side' ? ' · side' : ''}${it.archived ? ` · ${t('history.archivedBadge')}` : ''}${it.project ? ` · ${t('history.projectBadge', { name: it.project })}` : ''}` +
-    `${it.tags?.length ? ` · #${it.tags.join(' #')}` : ''}`
+    `${it.tags?.length ? ` · #${it.tags.join(' #')}` : ''}` +
+    `${typeof it.score === 'number' ? ` · ${t('history.semanticScore', { n: Math.round(it.score * 100) })}` : ''}`
   );
 }
 
@@ -66,13 +67,26 @@ function historyRow({ key, question, meta, star, ids }) {
 /** 기록 화면 왼쪽: 검색어 · 거르기에 맞는 기록 (또는 대화 줄기) 목록 */
 async function renderHistoryList() {
   const query = $('#historySearch').value;
-  const items = await host.history.list(query, historyView.filters, historyView.archive ? { archive: true } : undefined);
+  // 비슷한 뜻으로 찾기 (v0.36.0): 로컬 임베딩 모델이 정해져 있을 때만 — 켜면 검색어를 뜻 벡터로 비교한다
+  const canSemantic = !!(state?.local?.enabled && state.local.embedModel && host.history.semantic);
+  $('#historySemanticRow').hidden = !canSemantic;
+  const useSemantic = canSemantic && historyView.semantic && query.trim();
+  let items;
+  let semNote = '';
+  if (useSemantic) {
+    const r = await host.history.semantic(query, historyView.filters).catch((err) => ({ ok: false, error: err.message }));
+    if (r?.ok) items = r.items;
+    else {
+      items = [];
+      semNote = t('history.semanticFailed', { error: embedErr(r?.error) });
+    }
+  } else items = await host.history.list(query, historyView.filters, historyView.archive ? { archive: true } : undefined);
   historyView.items = items;
   renderFilterBadge();
   const list = $('#historyList');
   const filtered = query || HSU.activeCount(historyView.filters) || historyView.archive;
   if (!items.length) {
-    list.replaceChildren(span('history-empty', filtered ? t('history.emptyFiltered') : t('ui.history.empty')));
+    list.replaceChildren(span('history-empty', semNote || (useSemantic ? t('history.semanticEmpty') : filtered ? t('history.emptyFiltered') : t('ui.history.empty'))));
     $('#historyDetail').replaceChildren();
     renderPickedBar();
     return;
@@ -390,7 +404,11 @@ async function renderThreadDetail(threadId, fallbackId) {
 let searchTimer = null;
 $('#historySearch').addEventListener('input', () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(renderHistoryList, 200);
+  searchTimer = setTimeout(renderHistoryList, historyView.semantic ? 700 : 200); // 뜻 검색은 서버를 부르므로 조금 더 기다린다
+});
+$('#historySemantic').addEventListener('change', (e) => {
+  historyView.semantic = e.target.checked;
+  renderHistoryList();
 });
 $('#historyClose').addEventListener('click', () => host.setView('panels'));
 $('#historyClear').addEventListener('click', async () => {

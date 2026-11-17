@@ -20,6 +20,15 @@
   };
 
   const LOCAL_ID = 'local';
+  // 로컬 패널은 최대 3개 (v0.36.0): 첫 패널은 예전 그대로 'local', 둘째 · 셋째는 'local-2' · 'local-3'. 패널마다 모델을 따로 고른다.
+  const LOCAL_IDS = ['local', 'local-2', 'local-3'];
+  const MAX_PANELS = LOCAL_IDS.length;
+  const COLORS = ['#f97316', '#eab308', '#a855f7'];
+  const isLocalId = (id) => LOCAL_IDS.includes(id);
+  /** 패널 번호 (0 · 1 · 2), 로컬 패널이 아니면 -1 */
+  const panelIndex = (id) => LOCAL_IDS.indexOf(id);
+  /** 패널 수 설정 검사: 1 ~ 3 (아니면 1) */
+  const normalizePanels = (v) => (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= MAX_PANELS ? Number(v) : 1);
   const DEFAULT_BASE = 'http://localhost:11434'; // Ollama 기본 주소 (LM Studio는 http://localhost:1234)
   const MAX_TURNS = 40; // 대화에 남기는 최대 메시지 수 (오래된 것부터 뺀다)
   const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
@@ -28,18 +37,23 @@
   const DEFAULT_CONTEXT = 8192;
   const ASK_TIMEOUT_MS = 10 * 60 * 1000; // 패널 없이 한 번 묻기(판정 · 압축)의 최대 대기
 
-  /** 서비스 목록에 붙일 로컬 LLM 항목 (웹 서비스 목록 SERVICES와는 따로 둔다) */
-  function localService(cfg = {}) {
+  /** 서비스 목록에 붙일 로컬 LLM 항목 (웹 서비스 목록 SERVICES와는 따로 둔다). index: 패널 번호 (0 = 첫 패널) */
+  function localService(cfg = {}, index = 0) {
+    const i = Number.isInteger(index) && index >= 0 && index < MAX_PANELS ? index : 0;
     return {
-      id: LOCAL_ID,
-      name: '로컬 LLM',
-      color: '#f97316',
+      id: LOCAL_IDS[i],
+      name: i ? `로컬 LLM ${i + 1}` : '로컬 LLM',
+      color: COLORS[i],
       kind: 'local',
       url: normalizeBaseUrl(cfg.baseUrl) || DEFAULT_BASE,
       hosts: [],
-      upload: { accept: ['image'] }, // 이미지 첨부만 (비전 모델일 때). 문서는 본문으로 보낸다.
+      upload: { accept: ['image', 'document'] }, // 이미지(비전 모델일 때) + 글 파일은 본문에 끼워 보낸다 (v0.36.0, 그 밖의 문서는 뺀다)
+      textOnlyDocs: true,
     };
   }
+
+  /** 지금 쓰는 로컬 패널 항목 전부 (설정의 패널 수만큼) */
+  const localServices = (cfg = {}) => Array.from({ length: normalizePanels(cfg.panels) }, (_, i) => localService(cfg, i));
 
   /** 주소 검사: http(s)이고 호스트가 이 PC일 때만 → "http://localhost:11434" (경로 · 계정 · 쿼리 없이) | null */
   function normalizeBaseUrl(raw) {
@@ -57,6 +71,72 @@
 
   /** 모델 이름 검사 (서버가 준 이름 · 사용자가 고른 이름) */
   const cleanModel = (m) => (typeof m === 'string' && /^[\w.:/@+-]{1,120}$/.test(m.trim()) ? m.trim() : '');
+
+  /** 그 로컬 패널이 쓸 모델: 첫 패널은 model, 둘째 · 셋째는 extraModels[0] · [1] (비었으면 '') */
+  function modelOf(cfg, id) {
+    const i = panelIndex(id);
+    if (i < 0) return ''; // 로컬 패널이 아님
+    if (i === 0) return cleanModel(cfg && cfg.model);
+    return cleanModel(cfg && Array.isArray(cfg.extraModels) ? cfg.extraModels[i - 1] : '');
+  }
+
+  /** 설정 한 덩어리 검사 (패널 수 · 모델들까지). 둘째 · 셋째 모델은 [이름, 이름]으로 항상 두 칸 */
+  function normalizeLocalPrefs(v) {
+    const o = v && typeof v === 'object' ? v : {};
+    const extra = Array.isArray(o.extraModels) ? o.extraModels : [];
+    return {
+      enabled: o.enabled === true,
+      baseUrl: normalizeBaseUrl(o.baseUrl) || DEFAULT_BASE,
+      model: cleanModel(o.model),
+      contextTokens: normalizeContext(o.contextTokens),
+      panels: normalizePanels(o.panels),
+      extraModels: [cleanModel(extra[0]), cleanModel(extra[1])],
+      embedModel: cleanModel(o.embedModel), // 기록 의미 검색용 임베딩 모델 (v0.36.0, 비면 끔)
+    };
+  }
+
+  const MAX_ATTACH_CHARS = 200000; // 글 파일 하나에서 가져오는 최대 글자 수 (컨텍스트 한도를 몰라도)
+  const ATTACH_SHARE = 0.8; // 컨텍스트 한도의 이만큼까지만 질문 + 첨부에 쓴다 (나머지는 답 · 이어지는 대화 몫)
+
+  /**
+   * 글 파일을 질문 글에 끼운다 (v0.36.0). 로컬 LLM은 문서 업로드가 없어서 글로 읽을 수 있는 파일(send-plan isTextLike)만 본문으로 보낸다.
+   * 컨텍스트 한도(contextTokens)가 있으면 질문 + 첨부가 한도의 80%를 넘지 않게 뒤쪽 파일부터 · 파일 안에서는 뒷부분을 잘라 내고,
+   * 잘렸다는 말을 글에 남긴다 (사용자 · 모델이 같이 안다).
+   * opts: { sp: shared/send-plan, decode(file) → 글 | null, contextTokens }
+   * → { attach: API에만 붙일 글 ('' 가능), files: [{ name, chars, cut }], skipped: [이름 (글로 읽을 수 없는 파일)] }
+   */
+  function embedTextFiles(text, files, { sp, decode, contextTokens } = {}) {
+    const files_ = [];
+    const skipped = [];
+    const parts = [];
+    const limit = Number(contextTokens) > 0 ? Math.floor(Number(contextTokens) * ATTACH_SHARE) : 0;
+    let room = limit ? Math.max(0, limit - sp.estimateTokens(String(text || ''))) : Infinity;
+    for (const f of Array.isArray(files) ? files : []) {
+      if (!f || /^image\//.test(f.type || '')) continue; // 이미지는 따로 (image_url)
+      let body = sp.isTextLike(f) ? decode(f) : null;
+      if (typeof body !== 'string' || body.includes('\u0000')) {
+        skipped.push(String(f.name || ''));
+        continue;
+      }
+      let cut = false;
+      if (body.length > MAX_ATTACH_CHARS) {
+        body = body.slice(0, MAX_ATTACH_CHARS);
+        cut = true;
+      }
+      if (limit) {
+        const need = sp.estimateTokens(body);
+        if (need > room) {
+          body = sp.cutToTokens(body, room);
+          cut = true;
+        }
+        room = Math.max(0, room - sp.estimateTokens(body));
+      }
+      const name = String(f.name || '').replace(/[\r\n`]+/g, ' ').slice(0, 120) || 'file';
+      parts.push(`${t('local.attachHead', { name })}\n\`\`\`\n${body}\n\`\`\`${cut ? `\n${t('local.attachCut', { name })}` : ''}`);
+      files_.push({ name, chars: body.length, cut });
+    }
+    return { attach: parts.length ? `\n\n${parts.join('\n\n')}` : '', files: files_, skipped };
+  }
 
   /** 서버의 모델 목록 → [이름] (OpenAI 호환 /v1/models) */
   async function listModels(fetchFn, baseUrl, { signal } = {}) {
@@ -113,7 +193,7 @@
     let model = '';
 
     const view = () => ({
-      messages: messages.map((m) => ({ role: m.role, text: m.text, images: m.images ? m.images.length : 0 })),
+      messages: messages.map((m) => ({ role: m.role, text: m.text, images: m.images ? m.images.length : 0, ...(m.attach ? { files: m.attach.files } : {}) })),
       streaming,
       model,
       error,
@@ -128,15 +208,17 @@
     }
 
     /** 질문을 보낸다. 서버가 받아들이면 { ok: true, via: 'local' }, 아니면 { ok: false, error } (답은 이어서 스트리밍) */
-    async function send(text, images = []) {
+    async function send(text, images = [], extra = {}) {
       if (streaming) return { ok: false, error: t('main.local.busy') };
       const cfg = getConfig() || {};
       const base = normalizeBaseUrl(cfg.baseUrl);
       model = cleanModel(cfg.model);
       if (!base) return { ok: false, error: t('main.local.badBase') };
       if (!model) return { ok: false, error: t('main.local.noModel') };
-      const user = { role: 'user', text: String(text || ''), images: images.length ? images : undefined };
-      const history = [...messages, user].slice(-MAX_TURNS).map((m) => ({ role: m.role, content: m.role === 'user' ? toContent(m.text, m.images || []) : m.text }));
+      // 글 파일은 API로 보내는 글에만 붙이고 패널에는 파일 이름만 보인다 (v0.36.0)
+      const attach = extra && extra.attach && Array.isArray(extra.files) && extra.files.length ? { body: String(extra.attach), files: extra.files.slice(0, 20) } : undefined;
+      const user = { role: 'user', text: String(text || ''), images: images.length ? images : undefined, ...(attach ? { attach } : {}) };
+      const history = [...messages, user].slice(-MAX_TURNS).map((m) => ({ role: m.role, content: m.role === 'user' ? toContent(m.text + (m.attach ? m.attach.body : ''), m.images || []) : m.text }));
       ctrl = new AbortController();
       let res;
       try {
@@ -269,7 +351,8 @@
   }
 
   return {
-    LOCAL_ID, DEFAULT_BASE, LOCAL_HOSTS, CONTEXT_CHOICES, DEFAULT_CONTEXT,
+    embedTextFiles, LOCAL_ID, LOCAL_IDS, MAX_PANELS, isLocalId, panelIndex, normalizePanels, modelOf, normalizeLocalPrefs, localServices,
+    DEFAULT_BASE, LOCAL_HOSTS, CONTEXT_CHOICES, DEFAULT_CONTEXT,
     localService, normalizeBaseUrl, cleanModel, normalizeContext, listModels, toContent, parseSSE, createLocalChat, askOnce, imageDataUrl,
   };
 });

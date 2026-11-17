@@ -62,8 +62,16 @@ function register(ctx) {
   });
   ipcMain.handle('history:clear', () => {
     history.archive.clear(); // 기록을 비우면 보관 파일도 같이 지운다 (남겨 두면 지운 기록이 보관에 남기 때문)
+    ctx.embed?.clear(); // 뜻 벡터 색인도 (기록에서 만든 것이라)
     return history.clear();
   });
+  // 의미 검색 (v0.36.0): 색인 상태 · 만들기(기다리지 않음, 진행은 status) · 멈추기 · 비슷한 뜻 찾기 — 로컬 서버(localhost)만 쓴다
+  ipcMain.handle('embed:status', () => ctx.embed.status());
+  ipcMain.handle('embed:build', () => ctx.embed.startBuild());
+  ipcMain.handle('embed:stop', () => ctx.embed.stopBuild());
+  ipcMain.handle('history:semantic', (_e, query, filters) =>
+    typeof query === 'string' && query.length <= 500 ? ctx.embed.searchSimilar(query, cleanFilters(filters)) : { ok: false, error: 'query' },
+  );
   ipcMain.handle('clipboard:write', (_e, text) => {
     if (typeof text === 'string') clipboard.writeText(text);
   });

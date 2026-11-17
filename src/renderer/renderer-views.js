@@ -538,6 +538,50 @@ $('#localBase').addEventListener('change', async (e) => {
   if (!r?.ok) e.target.value = state.local?.baseUrl || '';
 });
 $('#localModel').addEventListener('change', (e) => host.local.setPrefs({ model: e.target.value }));
+// 기록 의미 검색 색인 (v0.36.0): 임베딩 모델 이름 · [색인 만들기] · 진행 보기
+const embedErr = (raw) => {
+  const [code, status] = String(raw || '').split(' ');
+  const text = t(`embed.err.${code}`, { status });
+  return text === `embed.err.${code}` ? String(raw) : text;
+};
+let embedTimer = null;
+async function refreshEmbedStatus() {
+  const box = $('#embedStatus');
+  if (!box) return;
+  const s = await host.embed?.status().catch(() => null);
+  if (!s || !s.enabled || !s.model) {
+    box.textContent = t('embed.statusOff');
+    $('#embedBuild').disabled = true;
+    $('#embedStop').hidden = true;
+  } else {
+    const building = s.building && typeof s.building === 'object' ? s.building : null;
+    box.textContent = building ? t('embed.statusBuilding', { done: building.done, total: building.total }) : t('embed.statusReady', { count: s.count, total: s.total });
+    if (s.error && !building) box.textContent += ` · ${t('embed.statusError', { error: embedErr(s.error) })}`;
+    $('#embedBuild').disabled = !!building;
+    $('#embedStop').hidden = !building;
+  }
+  clearTimeout(embedTimer);
+  if (s && s.building) embedTimer = setTimeout(() => state?.chatView === 'help' && refreshEmbedStatus(), 1000);
+}
+window.refreshEmbedStatus = refreshEmbedStatus;
+$('#embedModel').addEventListener('change', async (e) => {
+  await host.local.setPrefs({ embedModel: e.target.value.trim() });
+  refreshEmbedStatus();
+});
+$('#embedBuild').addEventListener('click', async () => {
+  const r = await host.embed.build().catch((err) => ({ ok: false, error: err.message }));
+  if (!r?.ok) $('#embedStatus').textContent = embedErr(r?.error);
+  else refreshEmbedStatus();
+});
+$('#embedStop').addEventListener('click', async () => {
+  await host.embed.stop();
+  refreshEmbedStatus();
+});
+
+// 로컬 패널 수 · 둘째 · 셋째 패널의 모델 (v0.36.0)
+$('#localPanels').addEventListener('change', (e) => host.local.setPrefs({ panels: Number(e.target.value) }));
+$('#localModel2').addEventListener('change', (e) => setLocalPanelModel('local-2', e.target.value));
+$('#localModel3').addEventListener('change', (e) => setLocalPanelModel('local-3', e.target.value));
 $('#localCheck').addEventListener('click', () => refreshLocalModels($('#localCheck')));
 $('#localCtx').addEventListener('change', (e) => host.local.setPrefs({ contextTokens: Number(e.target.value) })); // 컨텍스트 한도 (v0.29.0)
 

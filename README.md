@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.35.0-58a6ff)
+![version](https://img.shields.io/badge/version-0.36.0-58a6ff)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -67,7 +67,7 @@ flowchart LR
 | | 테스트 실행 · git 콘솔 · 커밋 | 적용 전/후 `npm test` · lint · typecheck · build 비교(v0.28.0), 적용한 파일만 커밋(v0.28.0, push 없음), 그 폴더의 git 명령만 실행 (Windows 앱) | [테스트 실행](docs/project-mode.md#테스트-실행-windows-앱) · [커밋](docs/project-mode.md#적용-후-커밋-windows-앱-v0280) · [git 콘솔](docs/project-mode.md#git-콘솔-windows-앱) |
 | **확장 · 기타** | 사이드탭 | 크롬 사이드 패널에 AI 2개, 보고 있는 페이지 본문을 자동으로 함께 보냄, 요약 · 번역 · 핵심만 · 쉽게 설명 단추와 이 페이지에서 전에 물어본 것(v0.29.0) | [사이드탭](docs/chrome-extension.md#사이드탭-크롬-확장) |
 | | 웹페이지로 질문 | 오른쪽 클릭 › 선택한 글 · 이 페이지 본문을 앱에 넣기 | [웹페이지로 질문](docs/chrome-extension.md#보고-있는-웹페이지로-질문-크롬-확장) |
-| | 로컬 LLM | Ollama · LM Studio 등 이 PC의 OpenAI 호환 서버를 패널로 (밖으로 안 나감), 패널 없이 종합 · 토론 판정 · 스킬 압축, 컨텍스트 한도(v0.29.0) | [로컬 LLM](docs/guide.md#로컬-llm-패널) |
+| | 로컬 LLM | Ollama · LM Studio 등 이 PC의 OpenAI 호환 서버를 패널로 (밖으로 안 나감), 패널 없이 종합 · 토론 판정 · 스킬 압축, 컨텍스트 한도(v0.29.0), 패널 최대 3개 · 글 파일 첨부 · 기록 의미 검색(v0.36.0) | [로컬 LLM](docs/guide.md#로컬-llm-패널) |
 | | 설정 옮기기 | 설정 · 템플릿 · 스킬 · 프리셋을 `.mla.json` 하나로 내보내고 가져오기, 비밀번호 암호화 선택 (기록 · 프로젝트 · 쿠키는 넣지 않음, v0.29.0) | [설정 옮기기](docs/guide.md#설정-옮기기-v0290) |
 | | 셀렉터 원격 갱신 | 사이트 화면이 바뀌면 `remote/selectors.json`만 고쳐 바로잡음 | [remote/README.md](remote/README.md) |
 
@@ -174,11 +174,11 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.36.0** | **로컬 LLM · 의미 검색** — 로컬 패널을 **최대 3개**(패널마다 모델을 따로 골라 같은 질문의 답을 나란히 비교) · 질문에 붙인 **글 파일**(.md · .txt · 코드 등)을 로컬 모델에게 본문으로 끼워 보내기(컨텍스트 한도를 넘으면 앞부분만) · 기록을 **비슷한 뜻으로 찾기**(로컬 임베딩 모델로 만든 색인, 글은 PC 밖으로 안 나감) |
 | **v0.35.0** | **기록 · 통계 · 설정 · 셀렉터** — 최대 개수를 넘은 기록을 지우지 않고 **달별 보관 파일**로(검색에서 "보관된 기록 포함") · 고른 기록을 **옮기기 파일**(`.mla-history.json`, 비밀번호 선택)로 앱 ↔ 확장 사이에 · 추천에 **★ · 평가 반영 + 줄 세우는 기준** 고르기 · **시간대별 응답 속도** 표 · 템플릿 · 스킬 · 프리셋 **하나만 공유** · 자가진단 창에서 **셀렉터 직접 고치기** + 진단 정보를 채운 **GitHub 이슈** 열기 |
 | **v0.34.0** | **프로젝트 모드** — 테스트 실행에 **pytest · cargo test · go test**(해당 파일이 있을 때만) · 실패한 검사 로그를 AI에게 돌려 **다시 받기**(기본 2번, 최대 3번, 자동 적용 없음) · **관련 파일 찾기**(import 따라가기, JS · TS · Python) · **새 브랜치에 적용**(`mla/날짜-AI`) |
 | **v0.33.0** | **작업 흐름**(초안 → 비판 → 고쳐 쓰기 → 검증처럼 정한 순서대로 AI 여러 개에게 차례로, 걸음마다 멈춤 · 건너뛰기, 프리셋에 저장) · **사실 확인**(답에서 주장을 최대 10개 뽑아 검색형 AI에 한 번에 확인 → 확인 · 반박 · 일부 · 출처 없음 표) · 시작 전에 **보낼 횟수** 표시(작업 흐름 · 사실 확인 · 토론) |
 | **v0.32.0** | 분석에 **합의율** · 줄마다 **같은 입장 AI 수** · 답변에 나온 링크를 모은 **출처** 칸 · 토론 **역할**(찬성 · 반대 · 반론 전담) · 라운드 사이 **끼어들기** · 역할 · 끼어들기까지 **프리셋에 저장** · 답변 비교 **보기 방식**(문단 맞추기 · 코드만 · 표 비교) |
-| **v0.31.0** | **AI에게 보내는 글도 화면 언어를 따름**(종합 · 분석 · 토론 · 프로젝트 요청 · 기본 템플릿) · **첫 사용 안내**(처음 켤 때 4걸음, 설정에서 다시 보기) · **접근성**(버튼 · 입력칸 테두리 3:1, 파일 나무 방향키, 앱 화면 확대 `Ctrl` `+` `-` `0`) · 큰 파일 나누기 · 프로젝트 장면 그림 새로 찍기 |
 
 전체 기록은 **[docs/changelog.md](docs/changelog.md)** 에 있습니다.
 

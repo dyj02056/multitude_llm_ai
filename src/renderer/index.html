@@ -521,6 +521,7 @@
   <section id="history" class="only-history">
     <aside class="history-side">
       <input id="historySearch" data-i18n-aria="ui.h.historySearch.ph" type="search" data-i18n-placeholder="ui.h.historySearch.ph" />
+      <label id="historySemanticRow" class="check-label history-semantic" hidden><input type="checkbox" id="historySemantic" /> <span data-i18n="history.semantic" data-i18n-title="history.semanticTitle"></span></label>
       <!-- v0.27.0: 묶는 방식 · 거르기 (history-view.js) -->
       <div class="history-tools">
         <div id="historyGroup" class="seg">
@@ -691,10 +692,40 @@
           <button id="localCheck" data-i18n="ui.h.localCheck"></button>
         </div>
         <div class="setting-row">
+          <label for="localPanels" data-i18n="local.panelsLabel"></label>
+          <select id="localPanels">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </div>
+        <div id="localModelRow2" class="setting-row" hidden>
+          <label for="localModel2" data-i18n="local.model2Label"></label>
+          <select id="localModel2"></select>
+        </div>
+        <div id="localModelRow3" class="setting-row" hidden>
+          <label for="localModel3" data-i18n="local.model3Label"></label>
+          <select id="localModel3"></select>
+        </div>
+        <p class="muted small" data-i18n="local.panelsNote"></p>
+        <div class="setting-row">
           <label for="localCtx" data-i18n="local.ctxLabel"></label>
           <select id="localCtx"></select>
         </div>
         <p class="muted small" data-i18n="local.ctxNote"></p>
+        <!-- 기록 의미 검색 (v0.36.0, renderer-views.js): 로컬 서버의 /v1/embeddings로 뜻 벡터 색인 -->
+        <h3 data-i18n="embed.title"></h3>
+        <div class="setting-row">
+          <label for="embedModel" data-i18n="embed.modelLabel"></label>
+          <input id="embedModel" list="embedModelList" spellcheck="false" placeholder="nomic-embed-text" />
+          <datalist id="embedModelList"></datalist>
+        </div>
+        <div class="setting-row">
+          <button id="embedBuild" data-i18n="embed.build"></button>
+          <button id="embedStop" data-i18n="embed.stop" hidden></button>
+          <span id="embedStatus" class="muted-label" role="status" aria-live="polite"></span>
+        </div>
+        <p class="muted small" data-i18n="embed.note"></p>
         <p class="muted small" id="localStatus"><span data-i18n="ui.h.localStatus.text"></span> <code>OLLAMA_ORIGINS=chrome-extension://*</code><span data-i18n="ui.h.localStatus.text2"></span></p>
       </div>
       <!-- 설정 옮기기 (v0.29.0, settings-transfer-ui.js): .mla.json 파일로 내보내기 · 가져오기 (기록 · 프로젝트 · 로그인 정보는 넣지 않음) -->

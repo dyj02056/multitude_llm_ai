@@ -21,6 +21,7 @@
 
 // ---------- 필요한 도구(모듈) 불러오기 ----------
 // require는 다른 파일이나 라이브러리의 기능을 가져오는 명령입니다.
+const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, ipcMain, shell, Menu, clipboard, dialog, net, Notification } = require('electron');
 const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, limitTextOf } = require('../shared/services');
@@ -35,6 +36,7 @@ const watchCore = require('../shared/watch');
 const { pageLimitCheck } = require('../shared/page');
 const history = require('./history');
 const recommendCore = require('../shared/recommend');
+const { createEmbedService } = require('../shared/embed-index');
 const { normalizeMax, MAX_CHOICES } = require('../shared/history-core');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
@@ -142,10 +144,10 @@ function loadPrefs() {
   prefs.onboarded = wasOnboarded(saved); // 첫 사용 안내 (v0.31.0): 새로 설치한 사람만 한 번, 예전부터 쓰던 사람에게는 띄우지 않는다
   // 예전 설정(Groq 등 없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
   prefs.local = normalizeLocalPrefs(prefs.local);
-  const hadLocal = Array.isArray(prefs.selected) && prefs.selected.includes(L.LOCAL_ID);
+  const hadLocal = Array.isArray(prefs.selected) ? prefs.selected.filter(L.isLocalId) : [];
   prefs.selected = normalizeSelected(prefs.selected);
-  // 로컬 LLM은 웹 서비스 목록(SERVICES) 밖이라 normalizeSelected가 뺀다 — 켜 둔 동안은 다시 넣는다
-  if (hadLocal && prefs.local.enabled && prefs.selected.length < MAX_SELECTED) prefs.selected.push(L.LOCAL_ID);
+  // 로컬 LLM은 웹 서비스 목록(SERVICES) 밖이라 normalizeSelected가 뺀다 — 켜 둔 동안은 다시 넣는다 (패널 수 안의 것만, v0.36.0)
+  for (const id of hadLocal) if (prefs.local.enabled && L.panelIndex(id) < prefs.local.panels && prefs.selected.length < MAX_SELECTED) prefs.selected.push(id);
   prefs.layout = normalizeLayout(prefs.layout);
   if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
   prefs.historyMax = normalizeMax(prefs.historyMax);
@@ -181,36 +183,36 @@ function applyUiZoom() {
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
 // 웹 서비스 목록(SERVICES)과 따로 둔다: 켜 두었을 때만 모델 목록 · 패널 · 종합 대상에 "로컬 LLM"이 붙는다.
 // 패널은 웹페이지가 아니라 앱이 대화를 들고 이 PC의 OpenAI 호환 서버(localhost만)에 묻는다 (shared/local-llm.js).
-function normalizeLocalPrefs(v) {
-  const o = v && typeof v === 'object' ? v : {};
-  return { enabled: o.enabled === true, baseUrl: L.normalizeBaseUrl(o.baseUrl) || L.DEFAULT_BASE, model: L.cleanModel(o.model), contextTokens: L.normalizeContext(o.contextTokens) };
-}
+const normalizeLocalPrefs = L.normalizeLocalPrefs; // 패널 수 · 패널마다 모델까지 (v0.36.0)
 /** 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 판정 · 압축): 패널 대화와 따로인 임시 대화 — 켜 두었을 때만 */
 function askLocal(text) {
   if (!prefs.local?.enabled) return Promise.resolve({ ok: false, error: t('main.localOff') });
   return L.askOnce({ fetchFn: (url, opts) => net.fetch(url, opts), getConfig: () => prefs.local, text });
 }
-const localSvc = () => L.localService(prefs.local);
-/** 지금 쓸 수 있는 서비스 전체: 웹 서비스 + (켰으면) 로컬 LLM */
-const allServices = () => (prefs.local?.enabled ? [...SERVICES, localSvc()] : SERVICES);
+/** 지금 쓸 수 있는 서비스 전체: 웹 서비스 + (켰으면) 로컬 LLM 패널들 (v0.36.0: 최대 3개) */
+const allServices = () => (prefs.local?.enabled ? [...SERVICES, ...L.localServices(prefs.local)] : SERVICES);
 const svcById = (id) => allServices().find((s) => s.id === id);
-let localChat = null; // 로컬 LLM 대화 (패널이 열려 있을 때만)
-const isLocal = (id) => id === L.LOCAL_ID;
-const hasPanelId = (id) => (isLocal(id) ? !!localChat : panels.has(id));
+const localChats = new Map(); // 로컬 LLM 대화 (id → 대화, 패널이 열려 있을 때만, 최대 3개)
+const isLocal = L.isLocalId;
+const hasPanelId = (id) => (isLocal(id) ? localChats.has(id) : panels.has(id));
 
-function openLocalPanel() {
-  if (localChat) return;
-  localChat = L.createLocalChat({
+function openLocalPanel(id = L.LOCAL_ID) {
+  if (!isLocal(id) || localChats.has(id)) return;
+  const chat = L.createLocalChat({
     fetchFn: (url, opts) => net.fetch(url, opts),
-    getConfig: () => prefs.local,
-    onUpdate: (view) => sendPanel(L.LOCAL_ID, { local: view }),
+    getConfig: () => ({ ...prefs.local, model: L.modelOf(prefs.local, id) }), // 패널마다 모델이 다르다
+    onUpdate: (view) => sendPanel(id, { local: view }),
   });
-  sendPanel(L.LOCAL_ID, { login: 'ready', local: localChat.view() });
+  localChats.set(id, chat);
+  sendPanel(id, { login: 'ready', local: chat.view() });
 }
-function closeLocalPanel() {
-  localChat?.stop();
-  localChat = null;
-  rounds.resetPanel(L.LOCAL_ID); // 대화 줄기 (v0.27.0): 닫은 패널은 지난 대화를 잇지 않는다
+/** 로컬 패널 하나를 닫는다 (id가 없으면 모두) */
+function closeLocalPanel(id) {
+  for (const x of id ? [id] : [...localChats.keys()]) {
+    localChats.get(x)?.stop();
+    localChats.delete(x);
+    rounds.resetPanel(x); // 대화 줄기 (v0.27.0): 닫은 패널은 지난 대화를 잇지 않는다
+  }
 }
 
 // 설정 · 라이브러리 저장: 0.3초 모았다가 비동기로 쓴다 (v0.23). 앱을 끌 때 will-quit에서 flush()로 동기로 마저 쓴다.
@@ -315,8 +317,10 @@ function showChat(selected) {
     if (p) win.contentView.addChildView(p.view);
     else openPanel(svc);
   }
-  if (ids.includes(L.LOCAL_ID)) openLocalPanel();
-  else closeLocalPanel();
+  for (const id of L.LOCAL_IDS) {
+    if (ids.includes(id)) openLocalPanel(id);
+    else closeLocalPanel(id);
+  }
   mode = 'chat';
   chatView = 'panels';
   pushState();
@@ -411,7 +415,7 @@ function pushState() {
     remoteSelectors: prefs.remoteSelectors,
     remote: remote.getStatus(),
     diag: diag.all(SERVICES.map((s) => s.id)),
-    services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
+    services: allServices().map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s), ...(s.textOnlyDocs ? { textOnlyDocs: true } : {}) })),
     local: { ...prefs.local },
     autoUpdate: prefs.autoUpdate !== false,
     notify: { ...prefs.notify },
@@ -549,6 +553,16 @@ function sendSynthStatus(patch) {
 // rounds = 질문 보내기·답변 기다리기·종합을 맡는 공통 부품입니다 (src/shared/rounds.js).
 // 크롬 확장 프로그램과 같은 코드를 쓰기 때문에, "패널을 다루는 방법"만 Windows 앱 식으로 넘겨줍니다.
 // 답변 평가 (v0.23): 지금 라운드(공통 입력창으로 마지막에 보낸 질문)의 기록 id. rounds가 기록을 만들 때 받아 둔다.
+// 기록 의미 검색 (v0.36.0): 로컬 서버의 /v1/embeddings로 기록마다 뜻 벡터를 만들어 두고 비슷한 뜻을 찾는다 (localhost만)
+const embedFile = () => path.join(app.getPath('userData'), 'history-embeddings.json');
+const embed = createEmbedService({
+  getConfig: () => prefs.local,
+  getRecords: () => history.all(),
+  fetchFn: (url, opts) => net.fetch(url, opts),
+  load: async () => secure.store().readJson(embedFile(), null),
+  save: async (index) => (index ? secure.store().writeJson(embedFile(), index) : fs.rmSync(embedFile(), { force: true })),
+  listByIds: (ids, filters) => history.listByIds(ids, filters),
+});
 let roundHistoryId = null;
 const roundHistory = { ...history, add: (rec) => (roundHistoryId = history.add(rec)) };
 // OS 알림 (v0.25.0): 앱 창을 보고 있지 않을 때 답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝을 알린다 (main/notifier.js)
@@ -571,16 +585,18 @@ const rounds = createRounds({
   hasPanel: hasPanelId,
   sendPrompt: (id, text, files, extra) => {
     if (isLocal(id)) {
-      if (!localChat) return { ok: false, error: t('main.panelClosed') };
+      if (!localChats.has(id)) return { ok: false, error: t('main.panelClosed') };
       const images = files.map((f) => L.imageDataUrl(f, (d) => Buffer.from(d).toString('base64'))).filter(Boolean);
-      return localChat.send(text, images);
+      // 글 파일은 요청 글에 끼워 보낸다 (컨텍스트 한도를 넘으면 일부만, v0.36.0)
+      const emb = L.embedTextFiles(text, files, { sp: require('../shared/send-plan'), decode: (f) => Buffer.from(f.data).toString('utf8'), contextTokens: prefs.local?.contextTokens });
+      return localChats.get(id).send(text, images, emb);
     }
     return panels.has(id)
       ? sendPrompt(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), text, files, extra)
       : { ok: false, error: t('main.panelClosed') };
   },
   snapshot: (id, opts) => {
-    if (isLocal(id)) return localChat ? localChat.snapshot() : null;
+    if (isLocal(id)) return localChats.has(id) ? localChats.get(id).snapshot() : null;
     return panels.has(id) ? snapshot(panels.get(id).view.webContents, SERVICES.find((s) => s.id === id), opts) : null;
   },
   watch: (id, before, isCurrent, onState) => {
@@ -591,9 +607,9 @@ const rounds = createRounds({
     };
     if (isLocal(id)) {
       // 로컬 LLM: 웹 패널과 같은 규칙으로, 앱이 들고 있는 대화의 "사진"을 지켜본다
-      if (!localChat) return;
-      const chat = localChat;
-      watchCore.watchAnswer(async () => chat.snapshot(), before, () => isCurrent() && localChat === chat, onState, opts);
+      const chat = localChats.get(id);
+      if (!chat) return;
+      watchCore.watchAnswer(async () => chat.snapshot(), before, () => isCurrent() && localChats.get(id) === chat, onState, opts);
       return;
     }
     const p = panels.get(id);
@@ -683,13 +699,15 @@ ipcMain.on('view:set', (_e, value) => {
 // id가 '*'이면 열린 패널 전부에 같은 동작을 합니다 (모두 새 대화 등).
 ipcMain.on('panel:action', (_e, { id, action }) => {
   // 로컬 LLM 패널: 새 대화 · 처음 주소 = 대화 지우기, 중지 = 답 그만 받기 (웹페이지 동작은 없음)
-  if (localChat && (id === '*' || isLocal(id)) && ['newchat', 'home', 'stop'].includes(action)) {
-    rounds.cancelWatch(L.LOCAL_ID);
-    if (action === 'stop') localChat.stop();
-    else {
-      localChat.reset();
-      rounds.resetPanel(L.LOCAL_ID);
-      sendPanel(L.LOCAL_ID, { answer: 'clear' });
+  if (localChats.size && (id === '*' || isLocal(id)) && ['newchat', 'home', 'stop'].includes(action)) {
+    for (const [lid, chat] of id === '*' ? [...localChats] : [[id, localChats.get(id)]].filter(([, c]) => c)) {
+      rounds.cancelWatch(lid);
+      if (action === 'stop') chat.stop();
+      else {
+        chat.reset();
+        rounds.resetPanel(lid);
+        sendPanel(lid, { answer: 'clear' });
+      }
     }
   }
   const targets = id === '*' ? [...panels.entries()] : [[id, panels.get(id)]].filter(([, p]) => p);
@@ -746,6 +764,7 @@ let updater = null;
 require('./ipc/history').register({
   ipcMain,
   history,
+  embed,
   clipboard,
   dialog,
   app,
@@ -786,7 +805,7 @@ require('./ipc/settings').register({
     if (panels.has(id)) probePanel(id);
     pushState();
   },
-  localChat: () => localChat,
+  localChat: () => (localChats.size ? localChats : null),
   closeLocalPanel,
   askLocal,
   focusId: () => focusId,

@@ -22,7 +22,7 @@ test('주소: 이 PC의 http(s)만, 경로 · 계정은 버리고 바깥 주소�
   assert.equal(L.cleanModel('llama3.2:3b'), 'llama3.2:3b');
   assert.equal(L.cleanModel('a b; rm -rf'), '');
   assert.equal(L.localService({ baseUrl: 'http://evil.com' }).url, L.DEFAULT_BASE); // 이상한 주소는 기본값으로
-  assert.deepEqual(L.localService().upload.accept, ['image']);
+  assert.deepEqual(L.localService().upload.accept, ['image', 'document']); // 이미지 + 글 파일 (v0.36.0)
 });
 
 test('SSE 읽기: 줄 단위로 글 조각을 모으고, 끝나지 않은 줄은 다음으로 넘긴다', () => {

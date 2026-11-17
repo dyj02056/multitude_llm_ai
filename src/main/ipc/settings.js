@@ -22,7 +22,7 @@ const ASK_MAX = 200000; // local:ask 글자 수 한도 (v0.29.0)
  */
 function register(ctx) {
   const { ipcMain, history, remote, guard, net, shell } = ctx;
-  const isLocal = (id) => id === L.LOCAL_ID;
+  const isLocal = L.isLocalId;
 
   // 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 기록 최대 개수, 사이트 셀렉터 자동 갱신, 새 버전 자동 확인,
   // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0)
@@ -75,12 +75,24 @@ function register(ctx) {
     const cur = prefs.local;
     const baseUrl = next.baseUrl === undefined ? cur.baseUrl : L.normalizeBaseUrl(next.baseUrl);
     if (!baseUrl) return { ok: false, error: t('main.settings.localOnly') };
-    prefs.local = {
+    const curExtra = Array.isArray(cur.extraModels) ? cur.extraModels : ['', ''];
+    prefs.local = L.normalizeLocalPrefs({
       enabled: typeof next.enabled === 'boolean' ? next.enabled : cur.enabled,
       baseUrl,
-      model: next.model === undefined ? cur.model : L.cleanModel(next.model),
-      contextTokens: next.contextTokens === undefined ? L.normalizeContext(cur.contextTokens) : L.normalizeContext(next.contextTokens), // v0.29.0
-    };
+      model: next.model === undefined ? cur.model : next.model,
+      contextTokens: next.contextTokens === undefined ? cur.contextTokens : next.contextTokens, // v0.29.0
+      panels: next.panels === undefined ? cur.panels : next.panels, // 로컬 패널 수 1 ~ 3 (v0.36.0)
+      extraModels: Array.isArray(next.extraModels) ? next.extraModels.slice(0, 2) : curExtra, // 둘째 · 셋째 패널의 모델
+      embedModel: next.embedModel === undefined ? cur.embedModel : next.embedModel, // 의미 검색용 임베딩 모델 (v0.36.0)
+    });
+    // 패널 수를 줄이면 넘는 로컬 패널을 닫고 고른 목록 · 종합 담당에서 뺀다
+    for (const id of L.LOCAL_IDS.slice(prefs.local.panels)) {
+      if (!prefs.selected.includes(id) && !ctx.localChat()?.has(id)) continue;
+      prefs.selected = prefs.selected.filter((x) => x !== id);
+      if (prefs.synthTarget === id) prefs.synthTarget = prefs.selected[0];
+      ctx.closeLocalPanel(id);
+      if (ctx.focusId() === id) ctx.setFocusId(null);
+    }
     if (!prefs.local.enabled) {
       prefs.selected = prefs.selected.filter((x) => !isLocal(x));
       if (isLocal(prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];

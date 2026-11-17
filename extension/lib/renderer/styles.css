@@ -494,6 +494,8 @@ body[data-view="history"] #panels { display: none !important; }
 #hfReset { align-self: flex-end; font-size: 11.5px; }
 .history-picked { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 6px 8px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: var(--accent-soft); }
 .history-picked[hidden] { display: none; }
+.history-semantic { font-size: 12px; }
+.history-semantic[hidden] { display: none; }
 .history-move { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel); }
 .history-move[hidden] { display: none; }
 .history-move-pass { display: flex; flex-wrap: wrap; gap: 4px; }

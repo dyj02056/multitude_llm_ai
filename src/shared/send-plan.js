@@ -75,6 +75,12 @@
 
   const str = (v) => (typeof v === 'string' ? v : undefined);
   const fileKind = (type) => (/^image\//.test(type || '') ? 'image' : 'document');
+
+  // 글 파일 (v0.36.0): 로컬 LLM은 문서를 업로드하지 못해, 글로 읽을 수 있는 파일만 요청 글에 끼워 보낸다 (그 밖의 문서는 빼고 알림)
+  const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|jsonl|xml|yaml|yml|toml|ini|log|html?|css|js|mjs|cjs|jsx|ts|tsx|py|java|kt|go|rs|c|h|cc|cpp|hpp|cs|rb|php|swift|sql|sh|bat|ps1|tex|rst|srt|vtt)$/i;
+  const TEXT_TYPE = /^(text\/|application\/(json|xml|x-yaml|yaml|javascript|x-javascript|x-sh|sql|toml))/i;
+  /** 글로 읽을 수 있는 파일인가 (종류 · 확장자로만 — 내용은 보지 않는다) */
+  const isTextLike = (f) => !!f && (TEXT_TYPE.test(f.type || '') || TEXT_EXT.test(f.name || ''));
   const sizeOf = (f) => (Number.isFinite(f.size) ? f.size : f.data && Number.isFinite(f.data.byteLength) ? f.data.byteLength : 0);
 
   /**
@@ -113,7 +119,8 @@
     const maxBytes = Number.isFinite(svc.maxFileBytes) && svc.maxFileBytes > 0 ? svc.maxFileBytes : limits.maxFileBytes;
     const files = item.files.map((f, i) => {
       const kind = fileKind(f.type);
-      return { name: String(f.name || ''), size: sizeOf(f), kind, project: i >= item.own, sent: accept.includes(kind) };
+      const sent = kind === 'document' && svc.textOnlyDocs ? accept.includes(kind) && isTextLike(f) : accept.includes(kind);
+      return { name: String(f.name || ''), size: sizeOf(f), kind, project: i >= item.own, sent };
     });
     const warnings = [];
     const chars = item.text.length;
@@ -147,5 +154,5 @@
     return planSend(text, ids, files, opts).map((item) => previewRow(item, byId.get(item.id), limits || FILE_LIMITS));
   }
 
-  return { LONG_TEXT, planSend, previewRow, preview, estimateTokens, contextCheck, fitAnswers, cutToTokens };
+  return { LONG_TEXT, planSend, previewRow, preview, estimateTokens, contextCheck, fitAnswers, cutToTokens, isTextLike };
 });
