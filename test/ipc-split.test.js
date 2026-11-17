@@ -51,7 +51,7 @@ test('ipc/history: 기록 요청을 등록하고, 평가는 지금 라운드 기
   };
   let roundId = null;
   require('../src/main/ipc/history').register({ ipcMain, history, clipboard: {}, dialog: {}, app: {}, rounds: () => ({}), roundHistoryId: () => roundId, win: () => null });
-  assert.deepEqual([...ipcMain.handle_.keys()].sort(), ['answer:copy', 'answer:get', 'answers:get', 'clipboard:write', 'file:save', 'history:clear', 'history:delete', 'history:feedback', 'history:get', 'history:list', 'history:recommend', 'history:setStar', 'history:setTags', 'history:stats', 'history:tags', 'history:thread']);
+  assert.deepEqual([...ipcMain.handle_.keys()].sort(), ['answer:copy', 'answer:get', 'answers:get', 'clipboard:write', 'file:save', 'history:archiveInfo', 'history:clear', 'history:delete', 'history:feedback', 'history:get', 'history:import', 'history:list', 'history:recommend', 'history:setStar', 'history:setTags', 'history:speed', 'history:stats', 'history:tags', 'history:thread']);
   assert.deepEqual(ipcMain.handle_.get('history:list')(null, 42), ['list', '']);
   assert.equal(ipcMain.handle_.get('history:feedback')(null, 'a', 1), null); // 라운드가 없으면 남기지 않음
   roundId = 'r1';

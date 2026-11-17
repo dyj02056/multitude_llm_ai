@@ -9,13 +9,23 @@ const RCU = MLA.recommend;
 const RECOMMEND_TTL_MS = 30 * 1000; // 기록이 자주 바뀌지 않으므로 잠깐 모아 둔다
 let recommendData = null;
 let recommendAt = 0;
+let recommendOrderUsed = '';
 
-/** 추천 숫자 가져오기 (TTL 안이면 모아 둔 것) */
+/** 추천 숫자 가져오기 (TTL 안이면 모아 둔 것, 줄 세우는 기준이 바뀌면 다시) */
 async function loadRecommend(force = false) {
-  if (!force && recommendData && Date.now() - recommendAt < RECOMMEND_TTL_MS) return recommendData;
-  recommendData = (await host.history.recommend?.().catch(() => null)) || null;
+  const order = state?.recommendOrder || 'completion';
+  if (!force && recommendData && recommendOrderUsed === order && Date.now() - recommendAt < RECOMMEND_TTL_MS) return recommendData;
+  recommendData = (await host.history.recommend?.(order).catch(() => null)) || null;
+  recommendOrderUsed = order;
   recommendAt = Date.now();
   return recommendData;
+}
+
+/** 만족도 글: 83% (좋음 5 · 별로 1 · ★ 2) — 표가 없으면 — */
+function satText(r) {
+  if (r.satisfaction == null) return '—';
+  const star = r.starred ? ' · ★' + r.starred : '';
+  return `${fmtPct(r.satisfaction)} (${r.good}/${r.good + r.bad}${star})`;
 }
 
 const svcName = (id) => state?.services?.find((s) => s.id === id)?.name || id;
@@ -28,7 +38,7 @@ function recommendRowTip(r) {
     answers: r.answers,
     completion: fmtPct(r.completion),
     time: fmtSec(r.doneMedianMs),
-    sat: r.satisfaction == null ? '—' : `${fmtPct(r.satisfaction)} (${r.good}/${r.good + r.bad})`,
+    sat: satText(r),
   });
 }
 
@@ -84,6 +94,31 @@ async function renderRecommendTable() {
     return det;
   });
   box.replaceChildren(...blocks);
+  renderSpeedTable();
+}
+
+// ---------- 설정 › 시간대별 응답 속도 (v0.35.0) ----------
+
+async function renderSpeedTable() {
+  const table = $('#speedTable');
+  if (!table) return;
+  const data = await host.history.speed?.().catch(() => null);
+  $('#speedNote').textContent = t('recommend.speedNote', { min: RCU.MIN_SPEED_SAMPLE });
+  const head = document.createElement('tr');
+  head.append(Object.assign(document.createElement('th'), { textContent: t('recommend.colService') }));
+  for (const b of data?.buckets || RCU.BUCKETS.map((x) => x.id)) head.append(Object.assign(document.createElement('th'), { textContent: t(`recommend.bucket.${b}`) }));
+  const rows = (data?.rows || []).map((r) => {
+    const tr = document.createElement('tr');
+    tr.append(Object.assign(document.createElement('td'), { textContent: `${svcName(r.id)} (${r.total})` }));
+    for (const c of r.cells) {
+      const td = Object.assign(document.createElement('td'), { textContent: c.medianMs == null ? (c.n ? `· (${c.n})` : '—') : `${fmtSec(c.medianMs)} (${c.n})` });
+      if (c.medianMs == null) td.className = 'rec-few';
+      tr.append(td);
+    }
+    return tr;
+  });
+  table.replaceChildren(head, ...rows);
+  if (!rows.length) $('#speedNote').textContent += ` ${t('recommend.speedEmpty')}`;
 }
 
 /** 종류 하나의 AI별 숫자 표 (추천에 든 AI는 굵게, 표본이 모자란 AI는 흐리게) */
@@ -103,7 +138,7 @@ function recommendRowsTable(k) {
       String(r.answers),
       `${fmtPct(r.completion)} (${r.done}/${r.answers})`,
       fmtSec(r.doneMedianMs),
-      r.satisfaction == null ? '—' : `${fmtPct(r.satisfaction)} (${r.good}/${r.good + r.bad})`,
+      satText(r),
     ];
     for (const c of cells) tr.append(Object.assign(document.createElement('td'), { textContent: c }));
     return tr;

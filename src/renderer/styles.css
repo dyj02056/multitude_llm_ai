@@ -493,6 +493,16 @@ body[data-view="history"] #panels { display: none !important; }
 #hfReset { align-self: flex-end; font-size: 11.5px; }
 .history-picked { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 6px 8px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: var(--accent-soft); }
 .history-picked[hidden] { display: none; }
+.history-move { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel); }
+.history-move[hidden] { display: none; }
+.history-move-pass { display: flex; flex-wrap: wrap; gap: 4px; }
+.history-move-pass[hidden], .history-move-pass input[hidden] { display: none; }
+.history-move-pass input { flex: 1 1 140px; min-width: 0; }
+.history-move-btns { display: flex; gap: 4px; }
+.history-move-btns button[hidden] { display: none; }
+#historyMoveStatus[data-kind="error"] { color: var(--err); }
+#historyMoveStatus[data-kind="ok"] { color: var(--ok); }
+#historyMoveStatus[data-kind="warn"] { color: var(--warn); }
 .history-picked .muted-label { margin-right: auto; color: var(--accent-text); }
 .history-picked button { font-size: 11.5px; padding: 1px 8px; }
 /* 오른쪽: 즐겨찾기 · 태그 */
@@ -609,9 +619,18 @@ body.drag-files #attachHint { color: var(--accent-text); }
 .diag-table td[data-state="unknown"] { color: var(--muted); }
 .diag-table tr[data-level="broken"] td:last-child { color: var(--warn-text); font-weight: 700; }
 /* 셀렉터 자가진단 창 (v0.21.1): 미리보기 창보다 작게 */
-.modal-box.diag-box { width: min(680px, 94vw); height: auto; max-height: 88vh; }
+.modal-box.diag-box { width: min(760px, 94vw); height: auto; max-height: 88vh; }
+.diag-box .modal-foot { flex-wrap: wrap; }
+.diag-box .modal-foot button { white-space: nowrap; }
 #diagStatus[data-kind="ok"] { color: var(--ok-text); }
 #diagStatus[data-kind="error"] { color: var(--err-text); }
+#selStatus[data-kind="ok"] { color: var(--ok-text); }
+#selStatus[data-kind="error"] { color: var(--err-text); }
+.sel-field { margin-bottom: 10px; }
+.sel-field label { font-weight: 600; }
+.sel-field textarea { width: 100%; box-sizing: border-box; font-family: var(--mono, monospace); font-size: 12px; }
+.sel-field .small { margin: 2px 0 4px; }
+.sel-inherited { word-break: break-all; }
 /* 원격 셀렉터를 새로 받았을 때 툴바에 잠깐 (v0.21.1) */
 .status-line .remote-badge { margin-left: 8px; color: var(--ok-text); }
 .panel-head .attach-badge { font-size: 11px; color: var(--err-text); white-space: nowrap; cursor: help; }

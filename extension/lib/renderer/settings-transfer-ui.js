@@ -52,7 +52,39 @@
     }
   }
 
+  // ---------- 하나만 공유 (v0.35.0) ----------
+
+  /**
+   * 라이브러리 항목 하나를 .mla.json 공유 파일로 저장한다 (암호 없이 — 남에게 주려는 파일). 프리셋은 쓰는 스킬 · 템플릿도 함께.
+   * kind: 'template' | 'skill' | 'preset', anchor: 결과 글을 잠깐 보여 줄 단추
+   */
+  window.shareLibraryItem = async (kind, id, anchor) => {
+    const share = ST.buildShare({ kind, id, library: api().get(), app: host.git ? 'app' : 'extension', appVersion: state?.update?.current || '' });
+    if (!share) return;
+    const c = share.counts;
+    if (!confirm(t('transfer.shareConfirm', { name: share.name, t: c.templates, s: c.skills, p: c.presets }))) return;
+    try {
+      const safe = share.name.replace(/[\\/:*?"<>|\s]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || kind;
+      const r = await host.saveFile({ name: `multitude-llm-share-${safe}`, text: JSON.stringify(share.payload, null, 2), kind: 'mla' });
+      if (r?.cancelled) return;
+      if (!r?.ok) throw new Error(r?.error || '');
+      flash(anchor, t('transfer.shareSaved'));
+    } catch (err) {
+      alert(`${t('transfer.exportFailed')} ${err.message}`);
+    }
+  };
+
   // ---------- 가져오기 ----------
+
+  /** 라이브러리 화면의 가져오기에서 넘어온 설정 옮기기 · 공유 파일 글을 같은 확인 창으로 연다 */
+  window.openTransferText = (text, fileName) => {
+    try {
+      incoming = ST.parseFile(text);
+    } catch (err) {
+      return alert(`${t('transfer.importFailed')} ${errText(err)}`);
+    }
+    openModal(fileName);
+  };
 
   async function pickFile(file) {
     if (!file) return;
@@ -153,7 +185,7 @@
         const r = await host.local.setPrefs(s.local).catch((err) => ({ ok: false, error: err.message }));
         if (!r?.ok) notes.push(t('transfer.localFailed', { error: r?.error || '' }));
       }
-      const plain = Object.fromEntries(['answerTimeoutMin', 'historyMax', 'notify', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer', 'lang'].filter((k) => s[k] !== undefined).map((k) => [k, s[k]]));
+      const plain = Object.fromEntries(['answerTimeoutMin', 'historyMax', 'historyArchive', 'notify', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer', 'lang'].filter((k) => s[k] !== undefined).map((k) => [k, s[k]]));
       if (Object.keys(plain).length) host.setSettings(plain);
       if (s.layout) host.setLayout(s.layout);
       const synth = () => host.setSynth({ ...(s.synthTarget ? { target: s.synthTarget } : {}), ...(s.autoSynth !== undefined ? { auto: s.autoSynth } : {}) });
@@ -164,7 +196,9 @@
         host.openModels(want);
       } else synth();
       closeModal();
-      say('#transferStatus', `${t('transfer.done')}${notes.length ? ` — ${notes.join(' · ')}` : ''}`, notes.length ? 'warn' : 'ok');
+      const doneText = `${t('transfer.done')}${notes.length ? ` — ${notes.join(' · ')}` : ''}`;
+      say('#transferStatus', doneText, notes.length ? 'warn' : 'ok');
+      if (state?.chatView === 'library') alert(doneText); // 라이브러리 화면에서 열었으면 그 자리에서 알린다
     } catch (err) {
       $('#transferApply').disabled = false;
       say('#transferModalStatus', `${t('transfer.importFailed')} ${err.message}`, 'error');
@@ -190,6 +224,6 @@
   });
   // 설정 화면을 떠나면 창을 닫는다
   host.on('state', () => {
-    if (incoming && state.chatView !== 'help') closeModal();
+    if (incoming && state.chatView !== 'help' && state.chatView !== 'library') closeModal();
   });
 })();

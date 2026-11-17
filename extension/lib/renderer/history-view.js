@@ -14,7 +14,7 @@ const ANSWER_STATE_TEXT = {
   get error() { return t('ui.answerState.error'); },
 };
 // historySelected: 고른 기록 id 또는 대화 줄기 'thread:<id>'. picked: 내보내기로 고른 기록 id
-const historyView = { filters: HSU.cleanFilters({}), group: 'records', picked: new Set(), items: [] };
+const historyView = { filters: HSU.cleanFilters({}), group: 'records', picked: new Set(), items: [], archive: false }; // archive: 보관된 기록도 찾기 (v0.35.0, 껐다 켜면 꺼짐)
 let historySelected = null;
 
 try {
@@ -30,7 +30,7 @@ function historyMeta(it) {
     `${fmtTime(it.at)} · ${t('ui.history.metaAnswered', { n: it.answered, total: it.targets })}` +
     `${it.files ? ` · ${t('ui.history.metaFiles', { n: it.files })}` : ''}${it.synth ? ` · ${t('ui.history.metaSynth', { n: it.synth })}` : ''}${it.analysis ? ` · ${t('ui.history.metaAnalysis', { n: it.analysis })}` : ''}` +
     `${it.chain ? ` · ${t('history.chainCount', { n: it.chain })}` : ''}${it.debate ? ` · ${t('history.debateCount', { n: it.debate })}` : ''}` +
-    `${it.source === 'side' ? ' · side' : ''}${it.project ? ` · ${t('history.projectBadge', { name: it.project })}` : ''}` +
+    `${it.source === 'side' ? ' · side' : ''}${it.archived ? ` · ${t('history.archivedBadge')}` : ''}${it.project ? ` · ${t('history.projectBadge', { name: it.project })}` : ''}` +
     `${it.tags?.length ? ` · #${it.tags.join(' #')}` : ''}`
   );
 }
@@ -67,11 +67,11 @@ function historyRow({ key, question, meta, star, ids }) {
 /** 기록 화면 왼쪽: 검색어 · 거르기에 맞는 기록 (또는 대화 줄기) 목록 */
 async function renderHistoryList() {
   const query = $('#historySearch').value;
-  const items = await host.history.list(query, historyView.filters);
+  const items = await host.history.list(query, historyView.filters, historyView.archive ? { archive: true } : undefined);
   historyView.items = items;
   renderFilterBadge();
   const list = $('#historyList');
-  const filtered = query || HSU.activeCount(historyView.filters);
+  const filtered = query || HSU.activeCount(historyView.filters) || historyView.archive;
   if (!items.length) {
     list.replaceChildren(span('history-empty', filtered ? t('history.emptyFiltered') : t('ui.history.empty')));
     $('#historyDetail').replaceChildren();
@@ -112,6 +112,7 @@ async function renderHistoryFilters() {
   const f = historyView.filters;
   $('#hfPeriod').value = f.period;
   $('#hfRange').hidden = f.period !== 'range';
+  $('#hfArchive').checked = historyView.archive;
   $('#hfFrom').value = f.from;
   $('#hfTo').value = f.to;
   $('#hfRating').value = f.rating;
@@ -151,7 +152,7 @@ function setHistoryFilters(patch) {
 }
 
 function renderFilterBadge() {
-  const n = HSU.activeCount(historyView.filters);
+  const n = HSU.activeCount(historyView.filters) + (historyView.archive ? 1 : 0);
   const btn = $('#historyFilterBtn');
   btn.textContent = n ? t('history.filtersOn', { n }) : t('history.filters');
   btn.classList.toggle('on', n > 0);
@@ -168,6 +169,10 @@ $('#hfFrom').addEventListener('change', (e) => setHistoryFilters({ from: e.targe
 $('#hfTo').addEventListener('change', (e) => setHistoryFilters({ to: e.target.value }));
 $('#hfRating').addEventListener('change', (e) => setHistoryFilters({ rating: e.target.value }));
 $('#hfSource').addEventListener('change', (e) => setHistoryFilters({ source: e.target.value }));
+$('#hfArchive').addEventListener('change', (e) => {
+  historyView.archive = e.target.checked;
+  renderHistoryList();
+});
 $('#hfTag').addEventListener('change', (e) => setHistoryFilters({ tag: e.target.value }));
 for (const box of document.querySelectorAll('[data-hf]')) {
   box.addEventListener('change', () => {
@@ -179,6 +184,7 @@ for (const box of document.querySelectorAll('[data-hf]')) {
   });
 }
 $('#hfReset').addEventListener('click', () => {
+  historyView.archive = false;
   historyView.filters = HSU.cleanFilters({});
   renderHistoryFilters();
   renderHistoryList();
@@ -218,11 +224,15 @@ $('#historyPickClear').addEventListener('click', () => {
 // ---------- 오른쪽: 기록 하나 ----------
 
 /** 즐겨찾기 · 태그 줄 (사이드탭 기록은 사이드탭이 쓰는 칸이라 바꾸지 않는다) */
-function historyMarks(rec) {
+function historyMarks(rec, archived = false) {
   const box = document.createElement('div');
   box.className = 'history-marks';
   if (rec.source === 'side') {
     box.append(span('muted-label', t('history.tagsSideNote')));
+    return box;
+  }
+  if (archived) {
+    box.append(span('muted-label', t('history.archivedNote'))); // 보관된 기록은 보기 · 지우기만 (v0.35.0)
     return box;
   }
   const star = button(rec.star ? '★' : '☆', rec.star ? t('history.starOn') : t('history.starOff'), async () => {
@@ -338,7 +348,8 @@ async function renderHistoryDetail(id) {
     det.append(Object.assign(document.createElement('summary'), { textContent: t('compare.chainTabCount', { n: chain.length }) }), chainBlock(chain, []));
     after.push(det);
   }
-  box.replaceChildren(head, historyMarks(rec), questionBox(rec), ...extra, cols, ...after);
+  const archived = historyView.items.some((x) => x.id === rec.id && x.archived);
+  box.replaceChildren(head, historyMarks(rec, archived), questionBox(rec), ...extra, cols, ...after);
 }
 
 // ---------- 오른쪽: 대화 줄기 ----------

@@ -233,6 +233,7 @@
     api().refreshAll();
     flash($('#presetInfo'), t('preset.saved'));
   });
+  $('#presetShare').addEventListener('click', () => ui.sel && window.shareLibraryItem('preset', ui.sel, $('#presetShare')));
   $('#presetDelete').addEventListener('click', async () => {
     const p = byId(ui.sel);
     if (!p || !confirm(t('preset.confirmDelete', { name: p.name }))) return;

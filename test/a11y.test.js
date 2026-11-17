@@ -51,7 +51,7 @@ test('화면 뼈대: 모든 버튼 · 입력칸 · 고르기 칸에 이름이 �
 test('창(dialog): role="dialog" · aria-modal · 제목으로 이름표, 그리고 포커스를 가두고 돌려주는 코드가 붙어 있다', () => {
   const html = read('src/renderer/index.html');
   const r = A.scan(html);
-  assert.deepEqual(r.dialogs.map((d) => d.id).sort(), ['debateModal', 'diagModal', 'interjectModal', 'onboardModal', 'patchModal', 'previewModal', 'transferModal', 'workflowModal']);
+  assert.deepEqual(r.dialogs.map((d) => d.id).sort(), ['debateModal', 'diagModal', 'interjectModal', 'onboardModal', 'patchModal', 'previewModal', 'selModal', 'transferModal', 'workflowModal']);
   for (const d of r.dialogs) assert.ok(d.ok, d.id);
   assert.equal((html.match(/class="modal"/g) || []).length, r.dialogs.length); // 훑어보기가 놓친 창이 없다
   const js = read('src/renderer/a11y.js');
@@ -176,10 +176,11 @@ test('키보드: 포커스 테두리가 보이고, 버튼이 아닌 누르는 �
 
 test('표에는 머리줄이 있다 (스크립트가 만드는 표 포함)', () => {
   const tables = [...read('src/renderer/index.html').matchAll(/<table id="(\w+)"/g)].map((m) => m[1]);
-  assert.deepEqual(tables.sort(), ['diagParts', 'diagTable', 'helpTable', 'statsTable']);
+  assert.deepEqual(tables.sort(), ['diagParts', 'diagTable', 'helpTable', 'speedTable', 'statsTable']);
   const views = read('src/renderer/renderer-views.js');
   assert.match(views, /helpHeadRow\.append\(Object\.assign\(document\.createElement\('th'\)/); // helpTable
   assert.match(views, /for \(const t of cols\) head\.append\(Object\.assign\(document\.createElement\('th'\)/); // statsTable
+  assert.match(read('src/renderer/recommend-ui.js'), /head\.append\(Object\.assign\(document\.createElement\('th'\)/); // speedTable
   const r = read('src/renderer/renderer.js');
   assert.match(r, /row\(\[t\('ui\.diag\.item'\), t\('ui\.diag\.state'\)\], 'th'\)/); // diagParts
   assert.match(r, /head\.append\(Object\.assign\(document\.createElement\('th'\), \{ textContent: label \}\)\)/); // diagTable

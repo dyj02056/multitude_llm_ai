@@ -32,9 +32,17 @@ let base = new Map(); // id -> 처음(앱에 들어 있던) 값
 let cacheFile = null;
 let url = DEFAULT_URL;
 let status = { source: 'builtin' }; // 'builtin' | 'cache' | 'remote', version, updated, checkedAt, error
+let remoteOverrides = {}; // 마지막으로 적용한 원격 값 (내 셀렉터를 바꿀 때 다시 얹는다)
+let localFile = null;
+let localSel = {}; // 이 PC에서 직접 고친 셀렉터 { id: { input?, stop?, response? } } (v0.35.0)
 
 const sanitize = (data) => sanitizeData(data, services);
-const apply = (overrides) => applyTo(services, base, overrides);
+// 앱에 들어 있던 값 → 원격 값 → 내가 고친 값(맨 앞) 순으로 얹는다
+const apply = (overrides) => {
+  remoteOverrides = overrides;
+  applyTo(services, base, overrides);
+  core.applyLocal(services, localSel);
+};
 
 /** 앱을 켤 때: 앱에 들어 있던 원래 값을 기억해 두고, 지난번에 받아 둔 목록이 있으면 먼저 적용합니다. */
 // 받아 둔 목록 읽기는 동기로 둔다: 첫 창 · 패널이 뜨기 전에 셀렉터가 적용돼 있어야 한다 (작은 파일 한 번).
@@ -42,7 +50,14 @@ function init(userDataDir, serviceList, { remoteUrl } = {}) {
   services = serviceList;
   cacheFile = path.join(userDataDir, 'remote-selectors.json');
   if (remoteUrl) url = remoteUrl;
+  localFile = path.join(userDataDir, 'local-selectors.json');
+  try {
+    localSel = core.sanitizeLocal(JSON.parse(fs.readFileSync(localFile, 'utf8')), services).overrides;
+  } catch {
+    localSel = {};
+  }
   base = snapshotBase(services);
+  apply({}); // 내가 고친 셀렉터를 먼저 얹는다 (원격 값은 아래에서 다시)
   try {
     // 받아 둔 바이트와 서명을 다시 확인한다. 서명 없는 예전 캐시는 공개 키가 있으면 버린다 (내장 값을 씀).
     const packed = core.unpackCache(JSON.parse(fs.readFileSync(cacheFile, 'utf8')));
@@ -128,4 +143,27 @@ function reset() {
 
 const getStatus = () => status;
 
-module.exports = { init, refresh, reset, getStatus, sanitize };
+/** 내가 고친 셀렉터 (v0.35.0) */
+const getLocal = (id) => ({ ...(localSel[id] || {}) });
+
+/**
+ * 서비스 하나의 내 셀렉터를 바꾼다 (patch: { input?, stop?, response? } — 빈 목록이면 그 칸을 지움, 아무것도 안 남으면 서비스째 지움).
+ * 검사를 통과한 것만 저장하고 바로 적용한다 → { ok, local } | { ok: false, error }
+ */
+function setLocal(id, patch) {
+  const clean = core.sanitizeLocal({ [id]: patch }, services);
+  const next = { ...localSel };
+  if (clean.overrides[id]) next[id] = clean.overrides[id];
+  else delete next[id];
+  try {
+    if (Object.keys(next).length) fs.writeFileSync(localFile, JSON.stringify(next, null, 2));
+    else fs.rmSync(localFile, { force: true });
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  localSel = next;
+  apply(remoteOverrides);
+  return { ok: true, local: getLocal(id) };
+}
+
+module.exports = { init, refresh, reset, getStatus, sanitize, getLocal, setLocal };

@@ -209,6 +209,7 @@
             <span class="spacer"></span>
             <button id="presetApply" class="accent" data-i18n="preset.apply"></button>
             <button id="presetUpdate" data-i18n="preset.update" data-i18n-title="preset.updateTitle"></button>
+            <button id="presetShare" data-i18n-title="library.shareTitle" data-i18n="library.share"></button>
             <button id="presetDelete" class="danger" data-i18n="preset.delete"></button>
             <button id="presetSave" class="primary" data-i18n="preset.saveName"></button>
           </div>
@@ -246,6 +247,7 @@
             <span class="spacer"></span>
             <button id="libUse" class="accent" data-label-by-script></button>
             <button id="libExportMd" data-i18n-title="ui.h.libExportMd.title" data-i18n="ui.h.libExportMd"></button>
+            <button id="libShare" data-i18n-title="library.shareTitle" data-i18n="library.share"></button>
             <button id="libCopy" data-label-by-script></button>
             <button id="libDelete" class="danger" data-i18n="ui.h.libDelete"></button>
             <button id="libSave" class="primary" data-i18n="ui.h.libSave"></button>
@@ -378,8 +380,28 @@
         <button id="diagRefresh" data-i18n-title="ui.h.diagRefresh.title" data-i18n="ui.h.diagRefresh"></button>
         <button id="diagHome" data-i18n-title="ui.h.diagHome.title" data-i18n="ui.h.diagHome"></button>
         <button id="diagCopy" data-i18n-title="ui.h.diagCopy.title" data-i18n="ui.h.diagCopy"></button>
+        <button id="diagFixSel" data-i18n-title="selector.fixTitle" data-i18n="selector.fix"></button>
+        <button id="diagIssue" data-i18n-title="selector.issueTitle" data-i18n="selector.issue"></button>
         <button id="diagSettings" class="ghost" data-i18n-title="ui.h.diagSettings.title" data-i18n="ui.h.diagSettings"></button>
         <button id="diagClose" class="primary" data-i18n="ui.h.diagClose"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 셀렉터 편집기 (v0.35.0, selector-editor.js): 입력창 · 답변 읽기 · 중지 셀렉터를 이 PC에서 직접 고친다 -->
+  <div id="selModal" class="modal" hidden>
+    <div class="modal-box diag-box" role="dialog" aria-modal="true" aria-labelledby="selTitle">
+      <div class="modal-head"><b id="selTitle"></b></div>
+      <div class="modal-body">
+        <p class="muted small" data-i18n="selector.note"></p>
+        <div id="selFields"></div>
+      </div>
+      <div class="modal-foot">
+        <span id="selStatus" class="muted-label" role="status" aria-live="polite"></span>
+        <button id="selIssue" data-i18n-title="selector.issueTitle" data-i18n="selector.issue"></button>
+        <button id="selReset" class="danger" data-i18n-title="selector.resetTitle" data-i18n="selector.reset"></button>
+        <button id="selSave" class="primary" data-i18n="selector.save"></button>
+        <button id="selClose" data-i18n="selector.close"></button>
       </div>
     </div>
   </div>
@@ -538,6 +560,7 @@
             <option value="side" data-i18n="history.source.side"></option>
           </select>
         </label>
+        <label class="check-label hf-row"><input type="checkbox" id="hfArchive" /> <span data-i18n="history.archiveInclude"></span></label>
         <label class="hf-row"><span data-i18n="history.tag"></span><select id="hfTag"></select></label>
         <div class="hf-row hf-wrap"><span data-i18n="history.services"></span><div id="hfServices" class="hf-chips"></div></div>
         <div class="hf-row hf-wrap hf-checks">
@@ -554,9 +577,25 @@
         <span id="historyPickedCount" class="muted-label"></span>
         <button id="historyPickMd" data-i18n="history.exportSelectedMd" data-i18n-title="history.exportSelectedTitle"></button>
         <button id="historyPickHtml" data-i18n="history.exportSelectedHtml" data-i18n-title="history.exportSelectedTitle"></button>
+        <button id="historyPickMove" data-i18n="history.moveExport" data-i18n-title="history.moveExportTitle"></button>
         <button id="historyPickClear" data-i18n="history.selectClear"></button>
       </div>
+      <!-- 기록 옮기기 (v0.35.0, history-transfer-ui.js): 내보내기 비밀번호 · 가져오기 확인 -->
+      <div id="historyMove" class="history-move" hidden>
+        <p id="historyMoveNote" class="muted small"></p>
+        <div id="historyMovePassRow" class="history-move-pass">
+          <input id="historyMovePass" type="password" autocomplete="new-password" data-i18n-aria="history.move.passOpen" />
+          <input id="historyMovePass2" type="password" autocomplete="new-password" data-i18n-placeholder="transfer.pass2Placeholder" data-i18n-aria="transfer.pass2Placeholder" />
+        </div>
+        <div class="history-move-btns">
+          <button id="historyMoveGo" class="accent" data-i18n="history.move.importGo"></button>
+          <button id="historyMoveCancel" data-i18n="history.move.close"></button>
+        </div>
+        <p id="historyMoveStatus" class="muted small" role="status" aria-live="polite"></p>
+      </div>
       <div class="history-side-foot">
+        <button id="historyImport" data-i18n="history.moveImport" data-i18n-title="history.moveImportTitle"></button>
+        <input type="file" id="historyImportFile" accept=".json,application/json" hidden />
         <button id="historyClear" class="danger" data-i18n="ui.h.historyClear"></button>
         <button id="historyClose" data-i18n="ui.h.historyClose"></button>
       </div>
@@ -588,6 +627,10 @@
       </div>
       <p class="muted small" data-i18n="settings.historyMaxNote"></p>
       <div class="setting-row">
+        <label class="check-label"><input type="checkbox" id="historyArchiveToggle" /> <span data-i18n="settings.historyArchive"></span></label>
+      </div>
+      <p class="muted small" id="historyArchiveNote" data-i18n="settings.historyArchiveNote"></p>
+      <div class="setting-row">
         <label class="check-label"><input type="checkbox" id="sendPreviewToggle" /> <span data-i18n="settings.sendPreview"></span></label>
       </div>
       <p class="muted small" data-i18n="settings.sendPreviewNote"></p>
@@ -599,6 +642,15 @@
         <label class="check-label"><input type="checkbox" id="autoRecommendToggle" /> <span data-i18n="settings.autoRecommend"></span></label>
       </div>
       <p class="muted small" data-i18n="settings.autoRecommendNote"></p>
+      <div class="setting-row">
+        <label for="recommendOrderSelect" data-i18n="recommend.orderLabel"></label>
+        <select id="recommendOrderSelect">
+          <option value="completion" data-i18n="recommend.order.completion"></option>
+          <option value="rating" data-i18n="recommend.order.rating"></option>
+          <option value="speed" data-i18n="recommend.order.speed"></option>
+        </select>
+      </div>
+      <p class="muted small" data-i18n="recommend.orderNote"></p>
       <div class="setting-row only-git" id="commitOfferRow" hidden>
         <label class="check-label"><input type="checkbox" id="commitOfferToggle" /> <span data-i18n="settings.commitOffer"></span></label>
       </div>
@@ -670,6 +722,9 @@
       <h3 data-i18n="recommend.table"></h3>
       <p class="muted small" id="recommendNote"></p>
       <div id="recommendTable" class="recommend-table"></div>
+      <h3 data-i18n="recommend.speedTitle"></h3>
+      <p class="muted small" id="speedNote"></p>
+      <div class="stats-wrap"><table id="speedTable" class="diag-table stats-table"></table></div>
       <h2 data-i18n="ui.h.shortcuts.title"></h2>
       <p class="muted" data-i18n="ui.h.shortcuts.note"></p>
       <table id="helpTable"></table>
@@ -731,7 +786,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle" data-i18n="ui.h.sendBtn"></button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → library.js → library-presets.js → settings-transfer-ui.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
   <script src="lib/shared/i18n-ko.js"></script>
   <script src="lib/shared/i18n-ko-ui.js"></script>
   <script src="lib/shared/i18n-ko-project.js"></script>
@@ -775,6 +830,7 @@
   <script src="lib/shared/send-plan.js"></script>
   <script src="lib/shared/prompt-lib.js"></script>
   <script src="lib/shared/settings-transfer.js"></script>
+  <script src="lib/shared/history-transfer.js"></script>
   <script src="lib/shared/update-core.js"></script>
   <script src="lib/shared/services.js"></script>
   <script src="lib/shared/layout.js"></script>
@@ -782,6 +838,7 @@
   <script src="lib/shared/shortcuts.js"></script>
   <script src="lib/shared/watch.js"></script>
   <script src="lib/shared/history-core.js"></script>
+  <script src="lib/shared/history-archive.js"></script>
   <script src="lib/shared/remote-core.js"></script>
   <script src="lib/shared/debate.js"></script>
   <script src="lib/shared/rounds.js"></script>
@@ -797,6 +854,7 @@
   <script src="lib/renderer/chain-views.js"></script>
   <script src="lib/renderer/compare-modes.js"></script>
   <script src="lib/renderer/history-view.js"></script>
+  <script src="lib/renderer/history-transfer-ui.js"></script>
   <script src="lib/renderer/recommend-ui.js"></script>
   <script src="lib/renderer/renderer-compose.js"></script>
   <script src="lib/renderer/send-preview.js"></script>
@@ -817,6 +875,7 @@
   <script src="lib/renderer/library.js"></script>
   <script src="lib/renderer/library-presets.js"></script>
   <script src="lib/renderer/settings-transfer-ui.js"></script>
+  <script src="lib/renderer/selector-editor.js"></script>
   <script src="lib/renderer/onboarding.js"></script>
   <script src="lib/renderer/a11y.js"></script>
 </body>

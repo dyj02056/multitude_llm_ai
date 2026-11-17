@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createHistory, planWrites, okRecordId, cleanLegacy } = require('../shared/history-core');
+const { okMonth, groupByMonth, mergeMonth } = require('../shared/history-archive');
 const { store } = require('./secure-store'); // 암호화해 저장 (v0.22.1)
 
 /**
@@ -211,14 +212,108 @@ function loadOrMigrate(recordStore, legacyFile, { sec = store, fsMod = fs } = {}
   return check || legacy;
 }
 
+/**
+ * 보관 저장소 (v0.35.0): 최대 개수를 넘은 기록을 달별 파일(archive-YYYY-MM.json, 암호화)에 둔다.
+ * [쉽게 말하면] 목록에서 밀려난 오래된 기록의 창고입니다. history/ 폴더와 따로 history-archive/ 폴더를 씁니다
+ * (기록 읽기가 "색인에 없는 파일"을 정리하므로 같은 폴더에 두면 지워집니다). 읽기는 처음 쓸 때 한 번 하고 기억해 둡니다.
+ * dir: () => 보관 폴더, sec: () => secure-store, fsMod: fs (테스트용)
+ */
+function createFileArchive({ dir, sec = store, fsMod = fs, onError = () => {} }) {
+  const file = (m) => path.join(dir(), `archive-${m}.json`);
+  let cache = null; // 읽어 둔 전체 (바뀌면 null)
+  const okRec = (r) => r && typeof r === 'object' && okRecordId(r.id);
+
+  function months() {
+    try {
+      return fsMod
+        .readdirSync(dir())
+        .map((n) => /^archive-(\d{4}-\d{2})\.json$/.exec(n)?.[1])
+        .filter(okMonth)
+        .sort()
+        .reverse();
+    } catch {
+      return [];
+    }
+  }
+  function readMonth(m) {
+    const v = sec().readJson(file(m), null);
+    return Array.isArray(v) ? v.filter(okRec) : [];
+  }
+
+  /** 기록들을 달별 파일에 더한다 (이미 있는 id는 건너뜀). 실패하면 onError로 알리고 false */
+  function append(list) {
+    try {
+      const groups = groupByMonth(list);
+      for (const m of Object.keys(groups)) if (okMonth(m)) sec().writeJson(file(m), mergeMonth(readMonth(m), groups[m]));
+      cache = null;
+      return true;
+    } catch (err) {
+      onError(err);
+      return false;
+    }
+  }
+  const readAll = () => (cache = cache || months().flatMap(readMonth));
+  const find = (id) => (okRecordId(id) ? readAll().find((r) => r.id === id) || null : null);
+
+  /** 보관된 기록 하나를 지운다 → true | false (없음) */
+  function remove(id) {
+    if (!okRecordId(id)) return false;
+    for (const m of months()) {
+      const list = readMonth(m);
+      if (!list.some((r) => r.id === id)) continue;
+      const next = list.filter((r) => r.id !== id);
+      try {
+        if (next.length) sec().writeJson(file(m), next);
+        else fsMod.unlinkSync(file(m));
+      } catch (err) {
+        onError(err);
+        return false;
+      }
+      cache = null;
+      return true;
+    }
+    return false;
+  }
+
+  /** 보관 파일을 모두 지운다 → 지운 파일 수 */
+  function clear() {
+    let n = 0;
+    for (const m of months()) {
+      try {
+        fsMod.unlinkSync(file(m));
+        n++;
+      } catch (err) {
+        onError(err);
+      }
+    }
+    cache = null;
+    return n;
+  }
+
+  /** 달별 개수 { months: [{ month, count }], total } */
+  function info() {
+    const rows = months().map((m) => ({ month: m, count: readMonth(m).length }));
+    return { months: rows, total: rows.reduce((n, x) => n + x.count, 0) };
+  }
+
+  return { append, readAll, find, remove, clear, info };
+}
+
 let userDir = null;
 const records = createRecordStore({ dir: () => path.join(userDir, 'history') });
 const history = createHistory((list, info) => records.save(list, info));
+const archive = createFileArchive({ dir: () => path.join(userDir, 'history-archive') });
 
-/** 앱을 켤 때: 저장된 기록을 읽어 옵니다. 없거나 깨졌으면 빈 기록으로 시작합니다. max: 설정의 최대 개수 */
-function init(userDataDir, { max } = {}) {
+/** 보관을 켜고 끈다: 켜면 최대 개수를 넘은 기록이 달별 보관 파일로 가고, 끄면 예전처럼 지운다 */
+function setArchive(on) {
+  history.setArchive(on ? (list) => archive.append(list) : null);
+}
+
+/** 앱을 켤 때: 저장된 기록을 읽어 옵니다. 없거나 깨졌으면 빈 기록으로 시작합니다. max: 설정의 최대 개수, archive: 넘친 기록 보관 */
+function init(userDataDir, { max, archive: keep } = {}) {
   userDir = userDataDir;
   history.load(loadOrMigrate(records, path.join(userDataDir, 'history.json')));
+  setArchive(keep === true); // 줄이기보다 먼저 정한다 (줄어드는 기록도 보관되게)
   if (max) history.setMax(max);
 }
 
@@ -228,4 +323,4 @@ function flush() {
   records.flush(); // 저장소가 미뤄 둔 것 · 쓰는 중인 것 → 지금 동기로
 }
 
-module.exports = { init, ...history, flush, createSecureSaver, createRecordStore, loadOrMigrate, cleanLegacy };
+module.exports = { init, ...history, setArchive, archive, flush, createSecureSaver, createRecordStore, createFileArchive, loadOrMigrate, cleanLegacy };

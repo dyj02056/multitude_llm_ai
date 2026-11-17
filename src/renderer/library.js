@@ -479,6 +479,7 @@
     $('#libCopy').hidden = !!c.isNew;
     $('#libCopy').textContent = c.readonly ? tr('library.copyEdit') : tr('library.copy');
     $('#libExportMd').hidden = isTpl || !!c.isNew;
+    $('#libShare').hidden = !!c.readonly || !!c.isNew; // 내 항목만 공유 (v0.35.0)
     $('#libUse').hidden = !!c.isNew;
     $('#libUse').textContent = isTpl ? tr('library.useTemplate') : lib.activeSkills.includes(c.item?.id) ? tr('library.skillOff') : tr('library.skillOn');
     // 스킬 전용: 보내는 글 고르기 · 예시 절 빼기 · 알림 끄기 · AI로 압축
@@ -853,6 +854,11 @@
     if (c?.kind === 'skill' && c.item) download(`${safeName(c.item.name)}.SKILL.md`, PL.toSkillMd(c.item), 'text/markdown');
   });
 
+  $('#libShare').addEventListener('click', () => {
+    const c = current();
+    if (c?.item && !c.readonly && !c.isNew) window.shareLibraryItem(c.kind, c.item.id, $('#libShare'));
+  });
+
   $('#libExport').addEventListener('click', () => {
     if (!lib.templates.length && !lib.skills.length && !lib.presets.length) return alert(tr('library.nothingToExport'));
     download(`multitude-llm-library-${new Date().toISOString().slice(0, 10)}.json`, PL.exportLibrary(lib), 'application/json');
@@ -870,7 +876,10 @@
     e.target.value = '';
     if (!file) return;
     try {
-      const got = PL.importLibrary(await readSmallText(file));
+      const text = await readSmallText(file);
+      // 설정 옮기기 · 하나만 공유 파일(.mla.json)이면 그 확인 창으로 (겹치는 항목은 덮어쓰기 / 둘 다 남기기)
+      if (/"kind"\s*:\s*"multitude-llm-settings(-encrypted)?"/.test(text.slice(0, 2000)) && window.openTransferText) return window.openTransferText(text, file.name);
+      const got = PL.importLibrary(text);
       const room = { t: PL.LIMITS.templates - lib.templates.length, s: PL.LIMITS.skills - lib.skills.length };
       const t = got.templates.slice(0, Math.max(0, room.t));
       const s = got.skills.slice(0, Math.max(0, room.s));

@@ -472,16 +472,28 @@ $('#langSelect').addEventListener('change', (e) => host.setSettings({ lang: e.ta
 $('#historyMaxSelect').addEventListener('change', async (e) => {
   const n = Number(e.target.value);
   const count = (await host.history.list('').catch(() => [])).filter((r) => r.source !== 'side').length;
-  if (count > n && !confirm(t('settings.historyMaxShrink', { n, drop: count - n }))) {
+  if (count > n && !confirm(t(state.historyArchive ? 'settings.historyMaxShrinkArchive' : 'settings.historyMaxShrink', { n, drop: count - n }))) {
     e.target.value = String(state.historyMax);
     return;
   }
   host.setSettings({ historyMax: n });
 });
 
+// 넘친 기록 보관 (v0.35.0): 켜면 최대 개수를 넘은 기록을 지우지 않고 달별 보관 파일로 옮긴다
+$('#historyArchiveToggle').addEventListener('change', (e) => host.setSettings({ historyArchive: e.target.checked }));
+
+/** 설정의 보관 설명 뒤에 지금 보관된 기록 수를 붙인다 */
+async function refreshArchiveNote() {
+  const note = $('#historyArchiveNote');
+  note.textContent = t('settings.historyArchiveNote');
+  const info = await host.history.archiveInfo?.().catch(() => null);
+  if (info?.total) note.textContent += ' ' + t('settings.historyArchiveCount', { n: info.total, m: info.months.length });
+}
+
 $('#sendPreviewToggle').addEventListener('change', (e) => host.setSettings({ sendPreview: e.target.checked }));
 $('#retryOnceToggle').addEventListener('change', (e) => host.setSettings({ retryOnce: e.target.checked })); // v0.26.0
 $('#autoRecommendToggle').addEventListener('change', (e) => host.setSettings({ autoRecommend: e.target.checked })); // v0.27.0
+$('#recommendOrderSelect').addEventListener('change', (e) => host.setSettings({ recommendOrder: e.target.value })); // 추천 줄 세우기 기준 (v0.35.0)
 $('#commitOfferToggle').addEventListener('change', (e) => host.setSettings({ commitOffer: e.target.checked })); // v0.28.0 (Windows 앱)
 for (const box of document.querySelectorAll('[data-notify]')) {
   box.addEventListener('change', () => host.setSettings({ notify: { [box.dataset.notify]: box.checked } }));
@@ -624,10 +636,13 @@ function renderSettings() {
     ),
   );
   maxSel.value = String(state.historyMax);
+  $('#historyArchiveToggle').checked = !!state.historyArchive;
+  refreshArchiveNote();
   // 보내기 전 미리보기 · OS 알림 종류별 켜기 (v0.25.0)
   $('#sendPreviewToggle').checked = !!state.sendPreview;
   $('#retryOnceToggle').checked = state.retryOnce !== false;
   $('#autoRecommendToggle').checked = !!state.autoRecommend; // v0.27.0
+  $('#recommendOrderSelect').value = state.recommendOrder || 'completion';
   // 적용 후 커밋 제안 (v0.28.0): git이 있는 Windows 앱에서만 보인다
   for (const id of ['#commitOfferRow', '#commitOfferNote']) $(id).hidden = !host.git?.commit;
   $('#commitOfferToggle').checked = state.commitOffer !== false;

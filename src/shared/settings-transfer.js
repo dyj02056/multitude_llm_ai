@@ -26,8 +26,8 @@
   const MAX_FILE_CHARS = 5 * 1024 * 1024;
   const MIN_PASSWORD = 8;
   // 옮기는 설정 (이 순서로 보여 준다)
-  const KEYS = ['selected', 'layout', 'synthTarget', 'autoSynth', 'answerTimeoutMin', 'historyMax', 'notify', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer', 'lang', 'local'];
-  const BOOL_KEYS = ['autoSynth', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer'];
+  const KEYS = ['selected', 'layout', 'synthTarget', 'autoSynth', 'answerTimeoutMin', 'historyMax', 'notify', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer', 'historyArchive', 'lang', 'local'];
+  const BOOL_KEYS = ['autoSynth', 'sendPreview', 'retryOnce', 'autoRecommend', 'commitOffer', 'historyArchive'];
   const ID = /^[a-z0-9-]{1,40}$/;
 
   /** 오류 (화면이 code로 문구를 고른다: json · kind · version · size · password · crypto) */
@@ -81,6 +81,43 @@
       settings: cleanSettings(settings),
       library: { templates: lib.templates || [], skills: lib.skills || [], presets: lib.presets || [] },
     };
+  }
+
+  /**
+   * 하나만 공유 (v0.35.0): 템플릿 · 스킬 · 프리셋 하나를 설정 옮기기와 같은 .mla.json 파일 모양으로 (설정 칸은 비움).
+   * 프리셋은 그것이 쓰는 스킬과 템플릿(라이브러리에 있으면)도 함께 담는다. 스킬의 이전 버전(versions)은 지운 글이 남아 있을 수 있어 넣지 않는다.
+   * → { name, counts: { templates, skills, presets }, payload } | null (그런 항목이 없음)
+   */
+  function buildShare({ kind, id, library, app = '', appVersion = '', now = Date.now() } = {}) {
+    const lib = library || {};
+    const find = (list) => (Array.isArray(list) ? list : []).find((x) => x && x.id === id);
+    const strip = (s) => ({ ...s, versions: [] });
+    let templates = [];
+    let skills = [];
+    let presets = [];
+    let name = '';
+    if (kind === 'template') {
+      const x = find(lib.templates);
+      if (!x) return null;
+      templates = [x];
+      name = x.name;
+    } else if (kind === 'skill') {
+      const x = find(lib.skills);
+      if (!x) return null;
+      skills = [strip(x)];
+      name = x.name;
+    } else if (kind === 'preset') {
+      const x = find(lib.presets);
+      if (!x) return null;
+      const want = new Set(Array.isArray(x.skills) ? x.skills : []);
+      skills = (lib.skills || []).filter((s) => s && want.has(s.id)).map(strip);
+      const tid = x.template && x.template.id;
+      templates = tid ? (lib.templates || []).filter((tp) => tp && tp.id === tid) : [];
+      presets = [x];
+      name = x.name;
+    } else return null;
+    const payload = buildExport({ settings: {}, library: { templates, skills, presets }, app, appVersion, now });
+    return { name: String(name || kind).slice(0, 60), counts: { templates: templates.length, skills: skills.length, presets: presets.length }, payload };
   }
 
   /** 파일 글 → { encrypted: true, envelope } | { encrypted: false, data } (모양이 틀리면 code가 있는 Error) */
@@ -160,8 +197,8 @@
     );
   }
 
-  /** 암호화된 파일(parseFile의 envelope) → 풀어 낸 내용 { settings, library, … }. 비밀번호가 틀리면 code 'password' */
-  async function decrypt(envelope, password, { subtle } = {}) {
+  /** 암호화된 파일(parseFile의 envelope) → 풀어 낸 글 (안의 종류는 보지 않음, 기록 옮기기도 같이 씀). 비밀번호가 틀리면 code 'password' */
+  async function decryptText(envelope, password, { subtle } = {}) {
     const S = subtleOf(subtle);
     if (!S) throw fail('crypto');
     const e = envelope || {};
@@ -178,6 +215,12 @@
     } catch {
       throw fail('password'); // AES-GCM은 비밀번호가 틀리거나 글이 바뀌면 풀지 못한다
     }
+    return plain;
+  }
+
+  /** 암호화된 설정 옮기기 파일 → 풀어 낸 내용 { settings, library, … } */
+  async function decrypt(envelope, password, opts) {
+    const plain = await decryptText(envelope, password, opts);
     const inner = parseFile(plain);
     if (inner.encrypted) throw fail('kind');
     return inner.data;
@@ -252,6 +295,6 @@
 
   return {
     KIND, ENC_KIND, VERSION, ITERATIONS, MIN_ITERATIONS, MIN_PASSWORD, KEYS,
-    pickSettings, cleanSettings, buildExport, parseFile, readPayload, encrypt, decrypt, diffSettings, conflicts, mergeLibrary,
+    pickSettings, cleanSettings, buildExport, buildShare, parseFile, readPayload, encrypt, decrypt, decryptText, diffSettings, conflicts, mergeLibrary,
   };
 });

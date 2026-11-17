@@ -96,9 +96,11 @@
     local: { enabled: false, baseUrl: MLA.localLLM.DEFAULT_BASE, model: '', contextTokens: MLA.localLLM.DEFAULT_CONTEXT }, // 로컬 LLM 패널 (선택 기능, v0.16.0 · 컨텍스트 한도 v0.29.0)
     autoUpdate: true, // 새 버전 알림 (v0.20.0)
     historyMax: 500, // 기록 최대 개수 (v0.24.0)
+    historyArchive: false, // 넘친 기록을 달별 보관으로 (v0.35.0, 기본 끔)
     notify: { ...MLA.notify.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
     sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
     retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
+    recommendOrder: 'completion', // 추천 줄 세우기 기준 (v0.35.0): completion · rating · speed
     autoRecommend: false, // 추천 조합 제안 (v0.27.0, 기본 끔): 질문 종류의 추천 조합이 지금 대상과 다르면 [추천 조합으로 바꾸기]만 띄운다
     lang: 'auto', // 화면 언어 (v0.30.0)
   };
@@ -138,6 +140,9 @@
   // 예전 'history' 칸(배열 전체)은 처음 읽을 때 옮기고 지운다.
   const historyStore = createAreaStore(chrome.storage.local, { onError: (err) => console.error('[storage] 기록 저장 실패:', err.message) });
   const history = createHistory(historyStore.save);
+  // 최대 개수를 넘은 기록의 보관 (v0.35.0, shared/history-archive.js): 'history:a:YYYY-MM' 칸, 설정에서 켠 때만
+  const historyArchive = MLA.historyArchive.createAreaArchive(chrome.storage.local, { onError: (err) => console.error('[storage] 기록 보관 실패:', err.message) });
+  const setArchiveOn = (on) => history.setArchive(on ? (list) => void historyArchive.append(list) : null);
   // 사이드탭 기록 (v0.21.0): 사이드탭이 'history:side'에 쓰고, 앱 탭 기록 화면이 함께 보여 준다.
   // 같은 칸을 두 화면이 함께 쓰면 서로 덮어쓸 수 있어서 칸을 나눴다. 앱 탭은 지우기만 한다.
   const sideHistory = createHistory((records) => store('history:side', records));
@@ -145,6 +150,26 @@
     if (area === 'local' && changes['history:side']) sideHistory.load(changes['history:side'].newValue || []);
   });
   const byNewest = (a, b) => b.at - a.at;
+
+  // 셀렉터 편집기: 고칠 수 있는 서비스(웹 서비스만), 보여 줄 모습, 고친 뒤 입력창 다시 찾기
+  const webService = (id) => (typeof id === 'string' ? SERVICES.find((s) => s.id === id) : null);
+  function selectorView(id) {
+    const svc = webService(id);
+    if (!svc) return null;
+    const local = X.getLocalSelectors(id);
+    return {
+      id,
+      name: svc.name,
+      fields: remoteCore.LOCAL_FIELDS,
+      local,
+      inherited: Object.fromEntries(remoteCore.LOCAL_FIELDS.map((f) => [f, (svc[f] || []).filter((x) => !(local[f] || []).includes(x))])),
+    };
+  }
+  function reprobe(id) {
+    diag.reset(id); // 새 셀렉터로 다시 확인한다
+    if (X.panels.has(id)) probePanel(id);
+    pushState();
+  }
 
   // ---------- 화면에 알리기 (Electron의 webContents.send 대신) ----------
 
@@ -270,6 +295,7 @@
       answerTimeoutMin: prefs.answerTimeoutMin,
       timeoutChoices: TIMEOUT_CHOICES,
       historyMax: prefs.historyMax,
+      historyArchive: prefs.historyArchive === true,
       historyMaxChoices: MAX_CHOICES,
       remoteSelectors: prefs.remoteSelectors,
       remote: X.remoteStatus,
@@ -281,6 +307,7 @@
       sendPreview: prefs.sendPreview,
       retryOnce: prefs.retryOnce,
       autoRecommend: prefs.autoRecommend,
+      recommendOrder: prefs.recommendOrder,
       onboarded: prefs.onboarded, // 첫 사용 안내를 봤는지 (v0.31.0)
       lang: prefs.lang, // 언어 설정 (v0.30.0) · uiLang = 지금 쓰는 언어
       uiLang: MLA.i18n.getLang(),
@@ -606,24 +633,34 @@
     getAnswer: (id) => (typeof id === 'string' ? rounds.answer(id) : null),
     history: {
       // filters (v0.27.0): 기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석/이어 묻기 · 태그 · 즐겨찾기 (shared/history-search.js가 다시 검사)
-      list: async (query, filters) => {
+      list: async (query, filters, opts) => {
         const q = typeof query === 'string' ? query : '';
         const f = HS.cleanFilters(filters);
-        return [...history.list(q, f), ...sideHistory.list(q, f)].sort(byNewest);
+        const archived = opts && opts.archive === true ? await historyArchive.readAll() : undefined; // 보관 포함 (v0.35.0)
+        return [...history.list(q, f, archived), ...sideHistory.list(q, f)].sort(byNewest);
       },
-      get: async (id) => history.get(id) || sideHistory.get(id),
+      get: async (id) => history.get(id) || sideHistory.get(id) || (okRecordId(id) ? await historyArchive.find(id) : null),
+      archiveInfo: async () => historyArchive.info(),
+      // 기록 옮기기로 받은 기록 더하기 (Windows 앱 history:import와 같음, 모양은 history-core cleanRecord가 다시 검사)
+      import: async (list) => (Array.isArray(list) && list.length <= 5000 ? history.importRecords(list) : { added: 0, duplicate: 0, invalid: 0, overflow: 0, error: 'size' }),
       // 태그 · 즐겨찾기 (v0.27.0, Windows 앱 main/ipc/history.js와 같은 검사). 사이드탭 기록은 사이드탭이 쓰는 칸이라 바꾸지 않는다
       setTags: async (id, tags) => (okRecordId(id) && Array.isArray(tags) && tags.length <= 50 ? history.setTags(id, tags.filter((x) => typeof x === 'string').map((x) => x.slice(0, 200))) : null),
       setStar: async (id, on) => (okRecordId(id) && typeof on === 'boolean' ? history.setStar(id, on) : null),
       thread: async (threadId) => (okRecordId(threadId) ? history.thread(threadId) : []),
       tags: async () => history.tags(),
-      recommend: async () => history.recommend(),
+      recommend: async (order) => history.recommend({ order: MLA.recommend.ORDERS.includes(order) ? order : 'completion' }), // 줄 세우는 기준 (v0.35.0)
+      speed: async () => history.speed(), // 시간대별 응답 속도 (v0.35.0)
       stats: async () => history.stats(),
       // 답변 평가 (Windows 앱 history:feedback과 같음): 지금 라운드 기록의 그 AI 답변에 1 · -1 · 0(지우기) → 남긴 값 | null
       feedback: async (svcId, value) =>
         roundHistoryId && typeof svcId === 'string' && [1, -1, 0].includes(value) ? history.setFeedback(roundHistoryId, svcId, value) : null,
-      remove: async (id) => (history.get(id) ? history.remove(id) : sideHistory.remove(id)),
+      remove: async (id) => {
+        if (history.get(id)) return history.remove(id);
+        if (sideHistory.get(id)) return sideHistory.remove(id);
+        return historyArchive.remove(id); // 보관된 기록
+      },
       clear: async () => {
+        await historyArchive.clear(); // 보관도 함께 (남겨 두면 지운 기록이 보관에 남기 때문)
         history.clear();
         sideHistory.clear();
       },
@@ -674,10 +711,10 @@
     },
     // 내보내기 (v0.14.0): 다운로드 권한 없이, 이 탭에서 파일 링크를 눌러 크롬의 다운로드로 저장한다
     saveFile: async ({ name, text, kind } = {}) => {
-      const types = { md: 'text/markdown', html: 'text/html', mla: 'application/json' }; // mla: 설정 옮기기 (v0.29.0, .mla.json)
+      const types = { md: 'text/markdown', html: 'text/html', mla: 'application/json', mlah: 'application/json' }; // mla: 설정 옮기기 (v0.29.0, .mla.json), mlah: 기록 옮기기 (v0.35.0, .mla-history.json)
       if (!types[kind] || typeof text !== 'string') return { ok: false, error: MLA.i18n.t('ext.host.badSave') };
       const url = URL.createObjectURL(new Blob([text], { type: `${types[kind]};charset=utf-8` }));
-      const ext = kind === 'mla' ? 'mla.json' : kind;
+      const ext = kind === 'mla' ? 'mla.json' : kind === 'mlah' ? 'mla-history.json' : kind;
       const base = String(name || `${MLA.i18n.t('ext.host.answerFile')}.${ext}`).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 120);
       const a = Object.assign(document.createElement('a'), { href: url, download: base.endsWith(`.${ext}`) ? base : `${base}.${ext}` });
       document.body.append(a);
@@ -695,7 +732,7 @@
       savePrefs();
       pushState();
     },
-    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, lang, onboarded } = {}) => {
+    setSettings: ({ answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, historyArchive: keepArchive, notify, sendPreview, retryOnce, autoRecommend, recommendOrder, lang, onboarded } = {}) => {
       if (typeof onboarded === 'boolean') prefs.onboarded = onboarded; // 첫 사용 안내를 봤는지 (v0.31.0)
       // 화면 언어 (v0.30.0): 'auto' · 'ko' · 'en'만. 화면은 state.uiLang을 보고 다시 그리고, background · 사이드탭은 저장소 변화를 듣는다
       if (MLA.i18n.LANG_PREFS.includes(lang)) {
@@ -703,12 +740,17 @@
         applyLang(lang);
       }
       if (typeof autoRecommend === 'boolean') prefs.autoRecommend = autoRecommend; // 추천 조합 제안 (v0.27.0)
+      if (MLA.recommend.ORDERS.includes(recommendOrder)) prefs.recommendOrder = recommendOrder; // 추천 줄 세우기 기준 (v0.35.0)
       if (TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
       // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0) — 아는 종류의 true/false만
       const notifyPatch = MLA.notify.cleanPatch(notify);
       if (notifyPatch) prefs.notify = MLA.notify.normalizePrefs({ ...prefs.notify, ...notifyPatch });
       if (typeof sendPreview === 'boolean') prefs.sendPreview = sendPreview;
       if (typeof retryOnce === 'boolean') prefs.retryOnce = retryOnce; // 실패하면 한 번 다시 보내기 (v0.26.0)
+      if (typeof keepArchive === 'boolean') {
+        prefs.historyArchive = keepArchive; // 넘친 기록을 달별 보관으로 (v0.35.0) — 아래 setMax보다 먼저 정한다
+        setArchiveOn(keepArchive);
+      }
       if (MAX_CHOICES.includes(historyMax)) {
         prefs.historyMax = historyMax;
         history.setMax(historyMax);
@@ -723,6 +765,28 @@
       pushState();
     },
     refreshRemote: () => refreshRemote(),
+    // 셀렉터 편집기 (v0.35.0, Windows 앱 selectors:* 와 같음): 입력창 · 중지 · 답변 읽기 셀렉터만 이 확장에서 직접 고친다
+    selectors: {
+      get: async (id) => selectorView(id),
+      set: async (id, patch) => {
+        if (!webService(id) || !patch || typeof patch !== 'object' || Array.isArray(patch)) return { ok: false };
+        X.setLocalSelectors(id, patch);
+        reprobe(id);
+        return { ok: true, view: selectorView(id) };
+      },
+      reset: async (id) => {
+        if (!webService(id)) return { ok: false };
+        X.setLocalSelectors(id, {});
+        reprobe(id);
+        return { ok: true, view: selectorView(id) };
+      },
+    },
+    // 진단 정보를 채운 GitHub 이슈 양식 (주소는 항상 이 저장소의 issues/new — 제목 · 본문만 받음)
+    openIssue: async (title, body) => {
+      if (typeof title !== 'string' || typeof body !== 'string' || body.length > 20000) return { ok: false };
+      await chrome.tabs.create({ url: UPD.issueUrl(title, body) });
+      return { ok: true };
+    },
     // 새 버전 알림 (v0.20.0): 확장은 받기 · 설치가 없다 (git pull 후 chrome://extensions에서 ↻)
     update: {
       check: () => checkUpdate(),
@@ -799,12 +863,16 @@
     prefs.sendPreview = prefs.sendPreview === true;
     prefs.retryOnce = prefs.retryOnce !== false;
     prefs.autoRecommend = prefs.autoRecommend === true;
+    if (!MLA.recommend.ORDERS.includes(prefs.recommendOrder)) prefs.recommendOrder = 'completion';
     prefs.lang = MLA.i18n.normalizeLangPref(prefs.lang);
     applyLang(prefs.lang); // 적어 둔 값과 달랐으면 첫 state의 uiLang을 보고 화면이 다시 그린다
     history.load(await historyStore.load());
+    prefs.historyArchive = prefs.historyArchive === true;
+    setArchiveOn(prefs.historyArchive);
     history.setMax(prefs.historyMax);
     sideHistory.load(await load('history:side', []));
     // 마지막으로 받은 원격 셀렉터를 먼저 적용한다 (새로 받아 오는 것은 아래에서).
+    await X.loadLocalSelectors();
     await loadRemoteCache();
 
     const me = await chrome.tabs.getCurrent();

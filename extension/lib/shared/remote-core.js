@@ -124,6 +124,40 @@
     return out;
   }
 
+  // 이 PC에서 직접 고친 셀렉터 (v0.35.0): 원격과 같은 범위 — 입력창 · 중지 · 답변 읽기 셀렉터만. 보내기 · 로그인 버튼 · 파일 넣기 칸은 받지 않는다.
+  const LOCAL_FIELDS = ['input', 'stop', 'response'];
+
+  /**
+   * 내가 고친 셀렉터 검사: { [서비스 id]: { input?, stop?, response? } } → { overrides: 같은 모양(검사한 것만), ignored: ['id.칸', …] }
+   * 아는 서비스 · 아는 칸만, 모양이 틀린 셀렉터는 버린다 (한 칸 20개 · 300자까지, 중괄호 불가).
+   */
+  function sanitizeLocal(map, services) {
+    const overrides = {};
+    const ignored = [];
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return { overrides, ignored };
+    for (const [id, raw] of Object.entries(map)) {
+      if (!(services || []).some((s) => s.id === id) || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const out = {};
+      for (const f of LOCAL_FIELDS) {
+        if (!Array.isArray(raw[f])) continue;
+        const list = [...new Set(raw[f].filter(validSelector))].slice(0, MAX_ITEMS);
+        if (list.length) out[f] = list;
+      }
+      for (const k of Object.keys(raw)) if (!LOCAL_FIELDS.includes(k)) ignored.push(`${id}.${k}`);
+      if (Object.keys(out).length) overrides[id] = out;
+    }
+    return { overrides, ignored };
+  }
+
+  /** 내가 고친 셀렉터를 앞에 얹는다 (원격 · 앱에 들어 있던 것은 뒤에 남겨 내 값이 틀려도 계속 찾을 수 있게). apply() 다음에 부른다 */
+  function applyLocal(services, local) {
+    for (const svc of services) {
+      const o = local && local[svc.id];
+      if (!o) continue;
+      for (const f of LOCAL_FIELDS) if (o[f] && o[f].length) svc[f] = [...new Set([...o[f], ...(svc[f] || [])])];
+    }
+  }
+
   /** 원격 데이터 전체를 검사한다. 형식이 틀리면 null. 모르는 서비스는 버린다. */
   function sanitize(data, services) {
     if (!data || typeof data !== 'object' || !Number.isInteger(data.version)) return null;
@@ -265,6 +299,9 @@
     SIG_URL,
     SELECTORS_PUBLIC_KEY,
     sanitize,
+    sanitizeLocal,
+    applyLocal,
+    LOCAL_FIELDS,
     snapshotBase,
     apply,
     riskyRegex,

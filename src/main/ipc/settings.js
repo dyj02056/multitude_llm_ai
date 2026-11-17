@@ -6,9 +6,11 @@
 // [쉽게 말하면] 설정(?) 화면과 라이브러리 화면에서 바꾼 값을 검사해 저장하는 곳입니다.
 
 const L = require('../../shared/local-llm');
-const { RELEASES_URL } = require('../../shared/update-core');
+const { RELEASES_URL, issueUrl, ISSUE_BASE } = require('../../shared/update-core');
+const { LOCAL_FIELDS } = require('../../shared/remote-core');
 const { normalizeLibrary } = require('../../shared/prompt-lib');
 const notifyCore = require('../../shared/notify');
+const { ORDERS } = require('../../shared/recommend');
 const { t, LANG_PREFS, getLang } = require('../../shared/i18n');
 
 const ASK_MAX = 200000; // local:ask 글자 수 한도 (v0.29.0)
@@ -24,7 +26,7 @@ function register(ctx) {
 
   // 설정 화면(?)에서 바꾼 값 저장: 답변 최대 대기 시간, 기록 최대 개수, 사이트 셀렉터 자동 갱신, 새 버전 자동 확인,
   // OS 알림 종류별 켜기 · 보내기 전 미리보기 (v0.25.0)
-  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, notify, sendPreview, retryOnce, autoRecommend, commitOffer, lang, onboarded } = {}) => {
+  ipcMain.on('settings:set', (_e, { answerTimeoutMin, remoteSelectors, autoUpdate, historyMax, historyArchive, notify, sendPreview, retryOnce, autoRecommend, recommendOrder, commitOffer, lang, onboarded } = {}) => {
     const prefs = ctx.prefs();
     if (typeof onboarded === 'boolean') prefs.onboarded = onboarded; // 첫 사용 안내를 봤는지 (v0.31.0)
     // 화면 언어 (v0.30.0): 'auto' · 'ko' · 'en'만. 본체 글(창 · 알림 · 오류)은 바로 바뀌고, 화면은 state.uiLang을 보고 다시 그린다
@@ -37,8 +39,13 @@ function register(ctx) {
     if (typeof sendPreview === 'boolean') prefs.sendPreview = sendPreview;
     if (typeof retryOnce === 'boolean') prefs.retryOnce = retryOnce; // 실패하면 한 번 다시 보내기 (v0.26.0)
     if (typeof autoRecommend === 'boolean') prefs.autoRecommend = autoRecommend; // 추천 조합 제안 (v0.27.0)
+    if (ORDERS.includes(recommendOrder)) prefs.recommendOrder = recommendOrder; // 추천 줄 세우기 기준 (v0.35.0)
     if (typeof commitOffer === 'boolean') prefs.commitOffer = commitOffer; // 적용 후 커밋 제안 (v0.28.0, Windows 앱)
     if (ctx.TIMEOUT_CHOICES.includes(answerTimeoutMin)) prefs.answerTimeoutMin = answerTimeoutMin;
+    if (typeof historyArchive === 'boolean') {
+      prefs.historyArchive = historyArchive; // 넘친 기록을 달별 보관 파일로 (v0.35.0) — 아래 setMax보다 먼저 정한다
+      history.setArchive(historyArchive);
+    }
     if (ctx.MAX_CHOICES.includes(historyMax)) {
       prefs.historyMax = historyMax;
       history.setMax(historyMax); // 줄이면 오래된 기록부터 지운다 (화면에서 확인을 받은 뒤 보낸다)
@@ -116,6 +123,40 @@ function register(ctx) {
   ipcMain.handle('update:download', () => ctx.updater()?.download());
   ipcMain.handle('update:install', () => ctx.updater()?.install() || false);
   ipcMain.on('update:openReleases', () => shell.openExternal(RELEASES_URL));
+
+  // 셀렉터 편집기 (v0.35.0): 입력창 · 중지 · 답변 읽기 셀렉터만 이 PC에서 직접 고친다 (보내기 · 로그인 버튼 · 파일 넣기 칸은 받지 않음)
+  const webService = (id) => (typeof id === 'string' ? ctx.allServices().find((s) => s.id === id && !isLocal(id)) : null);
+  const selectorView = (svc) => {
+    const local = remote.getLocal(svc.id);
+    const effective = Object.fromEntries(LOCAL_FIELDS.map((f) => [f, [...(svc[f] || [])]]));
+    return { id: svc.id, name: svc.name, fields: LOCAL_FIELDS, local, inherited: Object.fromEntries(LOCAL_FIELDS.map((f) => [f, effective[f].filter((x) => !(local[f] || []).includes(x))])) };
+  };
+  ipcMain.handle('selectors:get', (_e, id) => {
+    const svc = webService(id);
+    return svc ? selectorView(svc) : null;
+  });
+  ipcMain.handle('selectors:set', (_e, id, patch) => {
+    const svc = webService(id);
+    if (!svc || !patch || typeof patch !== 'object' || Array.isArray(patch)) return { ok: false };
+    const r = remote.setLocal(id, patch);
+    if (r.ok) ctx.reprobe(id); // 새 셀렉터로 입력창을 다시 찾아 본다
+    return r.ok ? { ok: true, view: selectorView(svc) } : r;
+  });
+  ipcMain.handle('selectors:reset', (_e, id) => {
+    const svc = webService(id);
+    if (!svc) return { ok: false };
+    const r = remote.setLocal(id, {});
+    if (r.ok) ctx.reprobe(id);
+    return r.ok ? { ok: true, view: selectorView(svc) } : r;
+  });
+  // 진단 정보를 채운 GitHub 이슈 양식을 연다. 주소는 항상 이 저장소의 issues/new — 화면에서는 제목 · 본문만 받는다
+  ipcMain.handle('issue:open', async (_e, title, body) => {
+    if (typeof title !== 'string' || typeof body !== 'string' || body.length > 20000) return { ok: false };
+    const url = issueUrl(title, body);
+    if (!url.startsWith(`${ISSUE_BASE}?`)) return { ok: false };
+    await shell.openExternal(url);
+    return { ok: true };
+  });
 
   ipcMain.handle('shortcuts:list', () => ctx.shortcutList());
 

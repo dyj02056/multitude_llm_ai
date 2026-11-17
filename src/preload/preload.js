@@ -52,8 +52,17 @@ contextBridge.exposeInMainWorld('host', {
   setView: (value) => ipcRenderer.send('view:set', value),
   getAnswers: () => ipcRenderer.invoke('answers:get'),
   getAnswer: (id) => ipcRenderer.invoke('answer:get', id),
+  // 셀렉터 편집기 (v0.35.0) · GitHub 이슈 양식
+  selectors: {
+    get: (id) => ipcRenderer.invoke('selectors:get', id),
+    set: (id, patch) => ipcRenderer.invoke('selectors:set', id, patch),
+    reset: (id) => ipcRenderer.invoke('selectors:reset', id),
+  },
+  openIssue: (title, body) => ipcRenderer.invoke('issue:open', title, body),
   history: {
-    list: (query, filters) => ipcRenderer.invoke('history:list', query, filters),
+    list: (query, filters, opts) => ipcRenderer.invoke('history:list', query, filters, opts),
+    archiveInfo: () => ipcRenderer.invoke('history:archiveInfo'),
+    import: (list) => ipcRenderer.invoke('history:import', list),
     get: (id) => ipcRenderer.invoke('history:get', id),
     stats: () => ipcRenderer.invoke('history:stats'),
     // 태그 · 즐겨찾기 · 대화 줄기 · 종류별 추천 (v0.27.0)
@@ -61,7 +70,8 @@ contextBridge.exposeInMainWorld('host', {
     setStar: (id, on) => ipcRenderer.invoke('history:setStar', id, on),
     thread: (threadId) => ipcRenderer.invoke('history:thread', threadId),
     tags: () => ipcRenderer.invoke('history:tags'),
-    recommend: () => ipcRenderer.invoke('history:recommend'),
+    recommend: (order) => ipcRenderer.invoke('history:recommend', order),
+    speed: () => ipcRenderer.invoke('history:speed'),
     // 답변 평가: 지금 라운드 기록의 그 AI 답변에 1 · -1 · 0(지우기) → 남긴 값 | null
     feedback: (svcId, value) => ipcRenderer.invoke('history:feedback', svcId, value),
     remove: (id) => ipcRenderer.invoke('history:delete', id),

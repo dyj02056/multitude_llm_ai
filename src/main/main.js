@@ -34,6 +34,7 @@ const L = require('../shared/local-llm');
 const watchCore = require('../shared/watch');
 const { pageLimitCheck } = require('../shared/page');
 const history = require('./history');
+const recommendCore = require('../shared/recommend');
 const { normalizeMax, MAX_CHOICES } = require('../shared/history-core');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
@@ -115,10 +116,12 @@ let prefs = {
   local: { enabled: false, baseUrl: L.DEFAULT_BASE, model: '', contextTokens: L.DEFAULT_CONTEXT }, // 로컬 LLM 패널 (선택 기능, v0.16.0 · 컨텍스트 한도 v0.29.0)
   autoUpdate: true, // 새 버전 자동 확인 (알리기만, v0.20.0)
   historyMax: 500, // 기록 최대 개수 (v0.24.0, 100 · 500 · 1000 · 2000)
+  historyArchive: false, // 최대 개수를 넘은 기록을 지우지 않고 달별 보관 파일로 (v0.35.0, 기본 끔)
   notify: { ...notifyCore.DEFAULT_PREFS }, // OS 알림 종류별 켜기 (v0.25.0, 기본 모두 켬)
   sendPreview: false, // 보내기 전 미리보기 (v0.25.0, 기본 끔)
   retryOnce: true, // 보내기 실패면 잠깐 뒤 한 번 다시 보내기 (v0.26.0, 기본 켬)
   commitOffer: true, // 적용 후 커밋 제안 (v0.28.0, 기본 켬): 적용이 끝나면 [커밋하기]를 보여 준다 (누를 때만 커밋)
+  recommendOrder: 'completion', // 추천 줄 세우기 기준 (v0.35.0): completion · rating · speed
   autoRecommend: false, // 추천 조합 제안 (v0.27.0, 기본 끔): 질문 종류의 추천 조합이 지금 대상과 다르면 [추천 조합으로 바꾸기]만 띄운다
   lang: 'auto', // 화면 언어 (v0.30.0): 'auto'(Windows 언어가 한국어면 한국어, 아니면 영어) · 'ko' · 'en'
 };
@@ -146,10 +149,12 @@ function loadPrefs() {
   prefs.layout = normalizeLayout(prefs.layout);
   if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
   prefs.historyMax = normalizeMax(prefs.historyMax);
+  prefs.historyArchive = prefs.historyArchive === true;
   prefs.notify = notifyCore.normalizePrefs(prefs.notify);
   prefs.sendPreview = prefs.sendPreview === true;
   prefs.retryOnce = prefs.retryOnce !== false;
   prefs.autoRecommend = prefs.autoRecommend === true;
+  if (!recommendCore.ORDERS.includes(prefs.recommendOrder)) prefs.recommendOrder = 'completion';
   prefs.commitOffer = prefs.commitOffer !== false;
   prefs.uiZoom = normalizeZoom(prefs.uiZoom);
   prefs.lang = i18n.normalizeLangPref(prefs.lang);
@@ -400,6 +405,7 @@ function pushState() {
     autoSynth: prefs.autoSynth,
     answerTimeoutMin: prefs.answerTimeoutMin,
     historyMax: prefs.historyMax,
+    historyArchive: prefs.historyArchive,
     historyMaxChoices: MAX_CHOICES,
     timeoutChoices: TIMEOUT_CHOICES,
     remoteSelectors: prefs.remoteSelectors,
@@ -412,6 +418,7 @@ function pushState() {
     sendPreview: prefs.sendPreview,
     retryOnce: prefs.retryOnce,
     autoRecommend: prefs.autoRecommend,
+    recommendOrder: prefs.recommendOrder,
     commitOffer: prefs.commitOffer,
     onboarded: prefs.onboarded, // 첫 사용 안내를 봤는지 (v0.31.0, renderer/onboarding.js)
     lang: prefs.lang, // 언어 설정 (v0.30.0) · uiLang = 지금 쓰는 언어
@@ -774,6 +781,11 @@ require('./ipc/settings').register({
   applyLang,
   allServices,
   refreshRemote,
+  reprobe: (id) => {
+    diag.reset(id); // 새 셀렉터로 다시 확인한다
+    if (panels.has(id)) probePanel(id);
+    pushState();
+  },
   localChat: () => localChat,
   closeLocalPanel,
   askLocal,
@@ -850,7 +862,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     cleanupTemp(); // 지난번에 남은 첨부 임시 파일
     loadPrefs();
-    history.init(app.getPath('userData'), { max: prefs.historyMax });
+    history.init(app.getPath('userData'), { max: prefs.historyMax, archive: prefs.historyArchive });
     remote.init(app.getPath('userData'), SERVICES, { remoteUrl: dev.remoteUrl });
     if (prefs.remoteSelectors) {
       refreshRemote();

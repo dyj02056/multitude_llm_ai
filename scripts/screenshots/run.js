@@ -81,6 +81,11 @@ const SCENES = [
   { name: '57-fix-loop', page: 'app' },
   { name: '58-related-files', page: 'app' },
   { name: '59-branch-apply', page: 'app' },
+  // v0.35.0
+  { name: '60-history-archive', page: 'app' },
+  { name: '61-history-transfer', page: 'app' },
+  { name: '62-recommend-speed', page: 'app' },
+  { name: '63-selector-editor', page: 'app' },
   { name: '41-side-recall', page: 'side', width: 420 },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];

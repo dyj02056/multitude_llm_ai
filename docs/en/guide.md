@@ -156,6 +156,14 @@ Run the analysis again (also with another judge) and earlier analyses are kept: 
 
 **hist** (`Ctrl+H`) keeps the last 500 questions (change it in `?` › History size: 100–2000) with every answer, synthesis and analysis (file names only, not file contents). Search, copy as Markdown, reuse a question, or save as **MD 저장** (Markdown) / **HTML 저장** (a self-contained report; print it to PDF).
 
+**Archive (v0.35.0).** In settings, **Move overflow records to archive files instead of deleting them** (off by default) sends the oldest records beyond the maximum to monthly archive files (Windows app: `history-archive/archive-YYYY-MM.json` in the user data folder, encrypted; extension: extension storage) instead of deleting them. Turn on **Include archived records** in the filters to search them too (rows are tagged `archived`; view and delete only). **Clear history** also deletes the archive; stats and recommendations do not count archived records.
+
+**Transfer picked records (v0.35.0).** Tick records in the list, then **To transfer file** → optional password (8+ chars, twice) → a `.mla-history.json` file. On another PC or in the other app / extension use **Import records…**: it shows "N records, M already exist and will be skipped" and only adds them when you press **Import**. This is a different file from the settings transfer file (settings files never contain history) and is only made when you click. Side-panel records are not transferred. The file holds your questions and answers as plain text, so a password is recommended. Up to 2000 records / about 18 MB per file.
+
+![Include archived records](../screenshots/en/60-history-archive.png)
+
+![Importing a history transfer file](../screenshots/en/61-history-transfer.png)
+
 History stays on this PC. Questions sent from the extension's side panel appear with a `side` tag.
 
 **Filters, tags and stars (v0.27.0).** **필터** (Filters) under the search box opens: period (all · today · 7 days · 30 days · date range), rating (`+1` / `−1` / not rated), sent from (app / side panel, extension only), tag, AI (any of), and checkboxes for starred, with project, synthesis, analysis, hand-offs/debates. In the record detail, **☆** stars a record and the tag box adds tags (Enter, comma separated; up to 10 tags of 30 characters). Tick the boxes in the list to save several records as **one** MD/HTML document (**MD로 묶어 저장** / **HTML로 묶어 저장**), oldest first.
@@ -172,6 +180,8 @@ History stays on this PC. Questions sent from the extension's side panel appear 
 
 - **AI별 응답 통계** (response stats per AI): questions, completed (%), timeouts / no answer, send failures, usage limits hit, median time to first response and to completion, average length, **만족도** (satisfaction, e.g. `75% (3/4)`).
 - **질문 종류별 추천** (suggestions by question kind, v0.27.0): questions are labelled project / code / long text / general. Per kind and AI the app counts only facts — answers, completion rate, median time to finish, satisfaction of rated answers — never an accuracy score, and suggests up to 3 AIs with at least 5 answers of that kind. Shown on the model picker (`코드 질문에는 보통: A · B · C`, "pick these" only ticks boxes) and in settings. **추천 조합 자동 선택** (off by default) only shows a **추천 조합으로 바꾸기** chip when the typed question's suggested set differs from your targets; targets change only when you click it.
+- **Recommendation order and speed by time of day** (v0.35.0): choose what comes first when ranking suggestions — completion (default), your ratings, or speed. Ratings now include a half "good" vote for finished answers you did not rate in records you starred ★. A table shows the median time to finish per AI by time of day sent (night 0–5, morning 6–11, afternoon 12–17, evening 18–23; cells with fewer than 3 answers show `·`).
+- **Fix selectors by hand** (v0.35.0): in the diagnosis window (the ⚠ badge, or **Diagnose** in the site status table) you can type the input, answer-reading and stop-button selectors for a site, one per line. They are tried first, the built-in and remote ones stay behind them, and they are saved on this PC only (never sent anywhere). Send / login buttons and file inputs cannot be edited (app updates only). **Open GitHub issue** opens an issue form filled with the same diagnostic info as *Copy diagnostic info* plus your selectors — it shows the text first, contains no questions or answers, and you can edit it on GitHub.
 - **서비스 화면 상태** (site status): whether the app can still find each site's input box, send button and answer area. If a site changes its layout, the panel shows `⚠ 화면이 바뀐 것 같음`; click it to open the self-check window (`셀렉터 지금 확인` = re-check selectors now, `진단 정보 복사` = copy diagnostics without your content).
 
 | Shortcut | Action |
@@ -197,7 +207,7 @@ In the project sidebar the file tree is one tab stop: `↑` `↓` move, `→` ex
 
 - **Templates** can contain variables like `{{language}}` or `{{tone|friendly}}` (with a default). `{q}` marks where your question goes. Before sending, the app asks for the variable values.
 - **Skills** are SKILL.md-style instruction sets (up to 3 at once). They are added in front of the first question of each chat. Long skills can be shortened with **AI로 압축** (compress with AI).
-- Import / export the library as JSON.
+- Import / export the library as JSON. **Share file** (v0.35.0) saves one template, skill or preset as a `.mla.json` file (a preset brings its skills and template; skill version history is left out; the file is not encrypted). The receiver opens it with Library › Import or Settings › Move settings › Import.
 - **Work presets** (v0.29.0): `preset:` left of the input, or the **프리셋** tab. A preset stores the template (with variable values), active skills in order, panels, targets, layout, synthesis judge + auto synthesis and debate settings, and applies them in one click. If the panels differ, you confirm before the panels are reopened.
 - **Skill versions** (v0.29.0): every save keeps the previous body (up to 10). Under the editor, **이전 버전** shows a diff against the current body and **이 버전으로 되돌리기** restores it as a new save.
 

@@ -149,12 +149,82 @@
     return name ? { name } : null;
   }
 
+  // 기록 하나 검사 (v0.35.0): 기록 옮기기 파일 · 보관 파일에서 읽은 기록을 믿지 않고 아는 칸 · 맞는 모양만 남긴다.
+  const MAX_ANSWERS = 12;
+  const MAX_SYNTH = 40;
+  const MAX_FILES = 30;
+  const SYNTH_MODES = new Set(['analysis', 'debate', 'factcheck']);
+  const num = (v) => (Number.isFinite(v) && v >= 0 && v < 1e12 ? Math.round(v) : undefined);
+
+  function cleanMetrics(m) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+    const out = {};
+    if (typeof m.sendOk === 'boolean') out.sendOk = m.sendOk;
+    if (typeof m.limit === 'boolean') out.limit = m.limit;
+    for (const k of ['firstMs', 'doneMs', 'chars']) if (num(m[k]) !== undefined) out[k] = num(m[k]);
+    return Object.keys(out).length ? out : null;
+  }
+
+  /** 기록 하나 검사 → 깨끗한 기록 | null (id가 안전하지 않으면 받지 않음) */
+  function cleanRecord(r) {
+    if (!r || typeof r !== 'object' || Array.isArray(r) || !okRecordId(r.id)) return null;
+    const targets = [...new Set((Array.isArray(r.targets) ? r.targets : []).filter(okSvcId))].slice(0, MAX_ANSWERS);
+    const answers = {};
+    if (r.answers && typeof r.answers === 'object' && !Array.isArray(r.answers)) {
+      for (const k of Object.keys(r.answers).slice(0, 40)) {
+        const a = r.answers[k];
+        if (!okSvcId(k) || !a || typeof a !== 'object' || Object.keys(answers).length >= MAX_ANSWERS) continue;
+        const metrics = cleanMetrics(a.metrics);
+        answers[k] = { name: str(a.name, MAX_NAME) || k, state: stateOf(a.state), text: str(a.text, MAX_CHAIN_TEXT), md: str(a.md, MAX_CHAIN_TEXT), ...(metrics ? { metrics } : {}) };
+      }
+    }
+    const files = (Array.isArray(r.files) ? r.files : [])
+      .filter((x) => x && typeof x === 'object')
+      .slice(0, MAX_FILES)
+      .map((x) => ({ name: str(x.name, 200), size: num(x.size) || 0, type: str(x.type, 100) }));
+    const synth = (Array.isArray(r.synth) ? r.synth : [])
+      .filter((x) => x && typeof x === 'object')
+      .slice(0, MAX_SYNTH)
+      .map((x) => ({
+        judge: str(x.judge, MAX_NAME),
+        at: Number.isFinite(x.at) && x.at > 0 ? Math.round(x.at) : Date.now(),
+        text: str(x.text, MAX_CHAIN_TEXT),
+        md: str(x.md, MAX_CHAIN_TEXT),
+        ...(SYNTH_MODES.has(x.mode) ? { mode: x.mode } : {}),
+        ...(Array.isArray(x.names) ? { names: x.names.filter((n) => typeof n === 'string').slice(0, 12).map((n) => n.slice(0, MAX_NAME)) } : {}),
+      }));
+    const fb = feedbackOf(r);
+    const chain = (Array.isArray(r.chain) ? r.chain : []).map(cleanChain).filter(Boolean).slice(-MAX_CHAIN);
+    const tags = HS.cleanTags(r.tags);
+    const proj = cleanProject(r.project);
+    const page = r.page && typeof r.page === 'object' && !Array.isArray(r.page) ? { title: str(r.page.title, 300), url: str(r.page.url, 2000) } : null;
+    return {
+      id: r.id,
+      at: Number.isFinite(r.at) && r.at > 0 ? Math.round(r.at) : Date.now(),
+      question: str(r.question, MAX_CHAIN_TEXT),
+      targets,
+      files,
+      answers,
+      synth,
+      ...(r.source === 'side' ? { source: 'side' } : {}),
+      ...(page ? { page } : {}),
+      ...(okRecordId(r.threadId) ? { threadId: r.threadId } : {}),
+      ...(RC.KINDS.includes(r.kind) ? { kind: r.kind } : {}),
+      ...(proj ? { project: proj } : {}),
+      ...(Object.keys(fb).length ? { feedback: { ...fb } } : {}),
+      ...(chain.length ? { chain } : {}),
+      ...(tags.length ? { tags } : {}),
+      ...(r.star === true ? { star: true } : {}),
+    };
+  }
+
   /**
    * save(records, info): 바뀐 기록을 저장한다. 답변이 끝날 때마다 바뀌므로 잠깐 모았다가 한 번에 부른다.
    * info = { dirty: [바뀐 기록 id], order: 목록이 바뀌었는가 } (맨 위 설명 참고). max: 최대 개수 (setMax로 바꿈)
    */
-  function createHistory(save, { max = MAX_RECORDS } = {}) {
+  function createHistory(save, { max = MAX_RECORDS, archive = null } = {}) {
     let records = [];
+    let archiveFn = typeof archive === 'function' ? archive : null; // 최대 개수를 넘은 기록을 지우지 않고 받아 갈 곳 (v0.35.0)
     let saveTimer = null;
     let limit = normalizeMax(max);
     let dirty = new Set();
@@ -190,14 +260,56 @@
       records = Array.isArray(data) ? data : [];
     }
 
-    /** 최대 개수를 바꾼다. 줄이면 오래된 기록부터 지운다 → 지운 개수 */
+    /** 보관 함수를 바꾼다 (null이면 넘친 기록을 지움). fn(기록 배열) — 넘친 기록을 달별 보관 파일로 옮김 (v0.35.0) */
+    function setArchive(fn) {
+      archiveFn = typeof fn === 'function' ? fn : null;
+    }
+
+    /** 넘친(맨 뒤) 기록을 떼어 낸다: 보관이 켜져 있으면 보관 함수에 넘기고, 아니면 지운다 → 뗀 개수 */
+    function trim() {
+      if (records.length <= limit) return 0;
+      const over = records.splice(limit);
+      if (archiveFn) {
+        try {
+          archiveFn(over);
+        } catch {}
+      }
+      return over.length;
+    }
+
+    /** 최대 개수를 바꾼다. 줄이면 오래된 기록부터 지우거나(보관이 꺼진 경우) 보관 파일로 옮긴다 → 덜어 낸 개수 */
     function setMax(n) {
       limit = normalizeMax(n);
-      const over = records.length - limit;
-      if (over <= 0) return 0;
-      records.length = limit;
-      changed();
+      const over = trim();
+      if (over) changed();
       return over;
+    }
+
+    /**
+     * 기록 옮기기로 받은 기록을 더한다 (v0.35.0): cleanRecord로 검사하고, 이미 있는 id는 건너뛰고, 시각 순으로 끼워 넣는다.
+     * 최대 개수를 넘으면 가장 오래된 것부터 보관 파일로(보관이 꺼져 있으면 버림).
+     * → { added, duplicate, invalid, overflow } (overflow: 최대 개수를 넘어 덜어 낸 수 — 가져온 것일 수도 있음)
+     */
+    function importRecords(list) {
+      const have = new Set(records.map((r) => r.id));
+      const fresh = [];
+      let duplicate = 0;
+      let invalid = 0;
+      for (const raw of Array.isArray(list) ? list : []) {
+        const r = cleanRecord(raw);
+        if (!r) invalid++;
+        else if (have.has(r.id)) duplicate++;
+        else {
+          have.add(r.id);
+          fresh.push(r);
+        }
+      }
+      if (!fresh.length) return { added: 0, duplicate, invalid, overflow: 0 };
+      records = [...records, ...fresh].sort((a, b) => (b.at || 0) - (a.at || 0));
+      const overflow = trim();
+      for (const r of fresh) changed(r.id);
+      changed();
+      return { added: fresh.length, duplicate, invalid, overflow };
     }
 
     function add({ question, targets, files = [], source, page, threadId, kind, project }) {
@@ -217,7 +329,7 @@
         ...(proj ? { project: proj } : {}), // 프로젝트 맥락을 붙여 보냄 (v0.27.0) — 이름만
       };
       records.unshift(rec);
-      if (records.length > limit) records.length = limit;
+      trim();
       changed(rec.id);
       changed();
       return rec.id;
@@ -278,12 +390,18 @@
      * 목록용 요약. query가 있으면 질문 · 답변 · 종합 · 이어 묻기 · 태그 글에서 찾는다 (대소문자 무시).
      * filters (v0.27.0): shared/history-search.js cleanFilters 모양 — 기간 · AI · 평가 · 보낸 곳 · 프로젝트 · 종합/분석/이어 묻기 · 태그 · 즐겨찾기
      */
-    function list(query = '', filters) {
-      return HS.filterRecords(records, query, filters).map(summary);
+    function list(query = '', filters, archived) {
+      if (!Array.isArray(archived) || !archived.length) return HS.filterRecords(records, query, filters).map((r) => summary(r));
+      // 보관 포함 (v0.35.0): 보관된 기록도 함께 찾는다 (최근 것부터, 목록 줄에 archived 표시)
+      const ids = new Set(records.map((r) => r.id));
+      const extra = archived.filter((r) => r && typeof r === 'object' && !ids.has(r.id));
+      const old = new Set(extra.map((r) => r.id));
+      const all = [...records, ...extra].sort((a, b) => (b.at || 0) - (a.at || 0));
+      return HS.filterRecords(all, query, filters).map((r) => summary(r, old.has(r.id)));
     }
 
     /** 기록 하나 → 목록 한 줄 (글은 앞부분만) */
-    function summary(r) {
+    function summary(r, archivedRow = false) {
       const synth = Array.isArray(r.synth) ? r.synth : [];
       const answers = r.answers && typeof r.answers === 'object' ? Object.values(r.answers) : [];
       const tags = HS.tagsOf(r);
@@ -305,6 +423,7 @@
         ...(r.project && typeof r.project.name === 'string' ? { project: r.project.name } : {}),
         ...(r.star === true ? { star: true } : {}),
         ...(tags.length ? { tags } : {}),
+        ...(archivedRow ? { archived: true } : {}),
       };
     }
 
@@ -343,7 +462,10 @@
     const tags = () => HS.tagCounts(records);
 
     /** 질문 종류별 추천 조합 (shared/recommend.js) — 남은 기록으로만 센다 */
-    const recommend = () => RC.recommend(records);
+    const recommend = (opts) => RC.recommend(records, opts);
+
+    /** 시간대별 응답 속도 (v0.35.0, shared/recommend.js) */
+    const speed = () => RC.speedByTime(records);
 
     /** 지금 기록 전체 (사이드탭 기록을 앱 탭과 맞출 때) */
     const all = () => records;
@@ -409,7 +531,7 @@
       changed();
     }
 
-    return { load, add, setAnswer, setFeedback, addSynth, addChain, list, get, setTags, setStar, thread, tags, recommend, stats, remove, clear, all, flush, setMax, max: () => limit };
+    return { load, add, importRecords, setArchive, setAnswer, setFeedback, addSynth, addChain, list, get, setTags, setStar, thread, tags, recommend, speed, stats, remove, clear, all, flush, setMax, max: () => limit };
   }
 
   /**
@@ -487,6 +609,7 @@
     cleanChain,
     chainOf,
     cleanProject,
+    cleanRecord,
     MAX_CHAIN,
     planWrites,
     okRecordId,

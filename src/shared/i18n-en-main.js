@@ -198,4 +198,5 @@
   'main.shortcut.zoom': 'Zoom the app in · out · reset (AI site panels keep their own size)',
   'main.shortcut.back': "Return to the panels from compare, changes, file editor, git console, library, history, or help (cancels variable input)",
   'main.remote.sigMismatch': "The signature does not match",
+  "main.save.mlah": "Multitude LLM history",
 });

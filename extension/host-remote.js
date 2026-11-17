@@ -14,6 +14,30 @@
 
   const remoteBase = remoteCore.snapshotBase(SERVICES);
   let remoteStatus = { source: 'builtin' };
+  // 이 PC에서 직접 고친 셀렉터 (v0.35.0, 'localSelectors' 칸): 앱에 들어 있던 값 → 원격 값 → 내가 고친 값(맨 앞) 순으로 얹는다
+  let localSel = {};
+  let currentRemote = {};
+  const applyAll = (overrides) => {
+    currentRemote = overrides;
+    remoteCore.apply(SERVICES, remoteBase, overrides);
+    remoteCore.applyLocal(SERVICES, localSel);
+  };
+  async function loadLocalSelectors() {
+    localSel = remoteCore.sanitizeLocal(await X.load('localSelectors', {}), SERVICES).overrides;
+    applyAll(currentRemote);
+  }
+  const getLocalSelectors = (id) => ({ ...(localSel[id] || {}) });
+  /** 서비스 하나의 내 셀렉터를 바꾼다 (patch가 비면 지움) → { ok, local } */
+  function setLocalSelectors(id, patch) {
+    const clean = remoteCore.sanitizeLocal({ [id]: patch }, SERVICES);
+    const next = { ...localSel };
+    if (clean.overrides[id]) next[id] = clean.overrides[id];
+    else delete next[id];
+    localSel = next;
+    X.store('localSelectors', next);
+    applyAll(currentRemote);
+    return { ok: true, local: getLocalSelectors(id) };
+  }
   // 서명 확인 (remote-core.js에 공개 키가 있을 때만). 이 크롬이 Ed25519를 지원하지 않으면 실패로 보고 지금 값을 유지한다.
   const remoteVerifier = remoteCore.subtleVerifier(crypto.subtle);
   const sigFailed = () => MLA.i18n.t('ext.host.sigFailed');
@@ -35,7 +59,7 @@
       if (!check.ok) return console.warn('[remote] 저장해 둔 셀렉터 서명 확인 실패', check.detail || '');
       const cached = remoteCore.sanitize(remoteCore.parseBytes(packed.bytes), SERVICES);
       if (!cached) return;
-      remoteCore.apply(SERVICES, remoteBase, cached.overrides);
+      applyAll(cached.overrides);
       remoteStatus = { source: 'cache', version: cached.version, updated: cached.updated };
     } catch {}
   }
@@ -59,7 +83,7 @@
       }
       const clean = remoteCore.sanitize(remoteCore.parseBytes(bytes), SERVICES);
       if (!clean) throw new Error(MLA.i18n.t('ext.host.badFormat'));
-      remoteCore.apply(SERVICES, remoteBase, clean.overrides);
+      applyAll(clean.overrides);
       X.store('remoteSelectors', remoteCore.packCache(bytes, sig));
       // 새 셀렉터를 받았으면 자가진단 기록을 지우고 다시 확인한다
       if (clean.version !== remoteStatus.version) {
@@ -86,7 +110,7 @@
   }
 
   function resetRemote() {
-    remoteCore.apply(SERVICES, remoteBase, {});
+    applyAll({});
     remoteStatus = { source: 'builtin' };
   }
 
@@ -117,7 +141,7 @@
     return updateStatus;
   }
 
-  Object.assign(X, { UPD, checkUpdate, loadRemoteCache, refreshRemote, resetRemote });
+  Object.assign(X, { UPD, checkUpdate, loadRemoteCache, refreshRemote, resetRemote, loadLocalSelectors, getLocalSelectors, setLocalSelectors });
   // 값이 바뀌는 상태는 읽을 때마다 지금 값을 준다
   Object.defineProperties(X, {
     remoteStatus: { get: () => remoteStatus, enumerable: true },

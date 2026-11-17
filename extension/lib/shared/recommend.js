@@ -18,6 +18,15 @@
   const MANY_FILES = 3; // 첨부가 이만큼 이상이면 긴 글
   const MIN_SAMPLE = 5; // 추천에 넣으려면 그 종류에서 받은 답이 이만큼은 있어야 한다
   const TOP = 3;
+  const ORDERS = ['completion', 'rating', 'speed']; // 줄 세우는 기준 (v0.35.0): 완료율 먼저(기본) · 평가 먼저 · 속도 먼저
+  const STAR_VOTE = 0.5; // ★ 표시한 기록에서 따로 평가하지 않은 AI의 끝난 답은 "좋았음" 반 표 (v0.35.0)
+  const BUCKETS = [
+    { id: 'night', from: 0, to: 5 },
+    { id: 'morning', from: 6, to: 11 },
+    { id: 'afternoon', from: 12, to: 17 },
+    { id: 'evening', from: 18, to: 23 },
+  ]; // 시간대별 응답 속도 (이 PC의 시간대로 질문을 보낸 시각)
+  const MIN_SPEED_SAMPLE = 3; // 한 칸에 이만큼은 있어야 중앙값을 보여 준다
 
   // 코드 같은 모양: 하나만 보여도 코드인 것(2점)과, 둘 이상 보여야 코드인 것(1점)
   const STRONG_HINTS = [
@@ -67,9 +76,15 @@
     return Math.round(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2);
   };
 
+  /** 만족도 = (좋았음 + ★ 반 표) / (좋았음 + ★ 반 표 + 별로였음). 표가 하나도 없으면 null */
+  function satisfactionOf({ good = 0, bad = 0, starred = 0 }) {
+    const up = good + STAR_VOTE * starred;
+    return up + bad ? up / (up + bad) : null;
+  }
+
   /**
    * 종류 × AI 숫자: records → { [kind]: { records, rows: [{ id, name, answers, done, completion, doneMedianMs, good, bad, satisfaction }] } }
-   * answers = 결과가 남은 답 수(보내기 실패 포함), completion = 완료 / answers, satisfaction = 좋았음 / 평가 수 (평가가 없으면 null)
+   * answers = 결과가 남은 답 수(보내기 실패 포함), completion = 완료 / answers, satisfaction = 좋았음(+ ★ 반 표) / 표 수 (표가 없으면 null)
    */
   function kindStats(records) {
     const out = Object.fromEntries(KINDS.map((k) => [k, { records: 0, by: new Map() }]));
@@ -81,7 +96,7 @@
       for (const id of r.targets) {
         const a = r.answers && typeof r.answers === 'object' ? r.answers[id] : null;
         if (!a || typeof a !== 'object' || typeof id !== 'string') continue; // 결과가 없는 답(기다리는 중 · 앱이 닫힘)은 세지 않는다
-        if (!k.by.has(id)) k.by.set(id, { id, name: a.name || id, answers: 0, done: 0, good: 0, bad: 0, ms: [] });
+        if (!k.by.has(id)) k.by.set(id, { id, name: a.name || id, answers: 0, done: 0, good: 0, bad: 0, starred: 0, ms: [] });
         const row = k.by.get(id);
         if (a.name) row.name = a.name;
         row.answers++;
@@ -89,6 +104,7 @@
         if (a.state === 'done' && a.metrics && Number.isFinite(a.metrics.doneMs)) row.ms.push(a.metrics.doneMs);
         if (fb[id] === 1) row.good++;
         else if (fb[id] === -1) row.bad++;
+        else if (r.star === true && a.state === 'done') row.starred++; // ★ 기록 · 따로 평가하지 않은 끝난 답 (반 표)
       }
     }
     const res = {};
@@ -97,7 +113,7 @@
         ...row,
         completion: row.answers ? row.done / row.answers : 0,
         doneMedianMs: median(ms),
-        satisfaction: row.good + row.bad ? row.good / (row.good + row.bad) : null,
+        satisfaction: satisfactionOf(row),
       }));
       res[kind] = { records: out[kind].records, rows };
     }
@@ -105,34 +121,69 @@
   }
 
   /**
-   * 줄 세우기: 완료율 높은 순 → 만족도(평가가 있는 것 먼저, 높은 순) → 완료까지 시간 중앙값 빠른 순 → 답 많은 순.
-   * 점수를 새로 만들지 않고 사실 숫자를 이 순서로만 비교한다.
+   * 줄 세우기: 점수를 새로 만들지 않고 사실 숫자를 기준 순서대로만 비교한다 (같으면 다음 것을 본다).
+   *   order 'completion'(기본): 완료율 높은 순 → 만족도 → 완료까지 시간 중앙값 빠른 순 → 답 많은 순
+   *   order 'rating': 만족도(표가 있는 것 먼저, 높은 순) → 완료율 → 시간 → 답 많은 순
+   *   order 'speed': 시간 중앙값 빠른 순 → 완료율 → 만족도 → 답 많은 순
    */
-  function compareRows(a, b) {
-    if (b.completion !== a.completion) return b.completion - a.completion;
-    const sa = a.satisfaction == null ? -1 : a.satisfaction;
-    const sb = b.satisfaction == null ? -1 : b.satisfaction;
-    if (sb !== sa) return sb - sa;
-    const ta = a.doneMedianMs == null ? Infinity : a.doneMedianMs;
-    const tb = b.doneMedianMs == null ? Infinity : b.doneMedianMs;
-    if (ta !== tb) return ta - tb;
-    return b.answers - a.answers;
+  function compareRows(a, b, order = 'completion') {
+    const sat = (r) => (r.satisfaction == null ? -1 : r.satisfaction);
+    const time = (r) => (r.doneMedianMs == null ? Infinity : r.doneMedianMs);
+    const by = {
+      completion: [(r) => -r.completion, (r) => -sat(r), time, (r) => -r.answers],
+      rating: [(r) => -sat(r), (r) => -r.completion, time, (r) => -r.answers],
+      speed: [time, (r) => -r.completion, (r) => -sat(r), (r) => -r.answers],
+    }[ORDERS.includes(order) ? order : 'completion'];
+    for (const key of by) {
+      const x = key(a);
+      const y = key(b);
+      if (x !== y) return x < y ? -1 : 1;
+    }
+    return 0;
   }
 
   /**
    * 종류별 추천: records → { [kind]: { records, picks: [id] (최대 3개), rows: [줄 세운 것 (표본이 모자란 것은 뒤, enough: false)] } }
    * 답이 minSample(기본 5)개보다 적은 AI는 추천(picks)에 넣지 않는다.
    */
-  function recommend(records, { minSample = MIN_SAMPLE, top = TOP } = {}) {
+  function recommend(records, { minSample = MIN_SAMPLE, top = TOP, order = 'completion' } = {}) {
     const st = kindStats(records);
     const res = {};
     for (const kind of KINDS) {
       const rows = st[kind].rows.map((r) => ({ ...r, enough: r.answers >= minSample }));
-      const ok = rows.filter((r) => r.enough).sort(compareRows);
+      const ok = rows.filter((r) => r.enough).sort((a, b) => compareRows(a, b, order));
       const rest = rows.filter((r) => !r.enough).sort((a, b) => b.answers - a.answers);
       res[kind] = { records: st[kind].records, picks: ok.slice(0, top).map((r) => r.id), rows: [...ok, ...rest] };
     }
     return res;
+  }
+
+  /**
+   * 시간대별 응답 속도 (v0.35.0): 끝난 답의 "보낸 뒤 끝날 때까지"(metrics.doneMs) 중앙값을 AI × 시간대로 센다.
+   * → { buckets: ['night', 'morning', 'afternoon', 'evening'], rows: [{ id, name, total, cells: [{ n, medianMs (n이 minSample보다 적으면 null) }] }] } (끝난 답이 많은 AI부터)
+   * 질문을 보낸 시각(기록의 at)을 이 PC의 시간대로 본다. 정확도가 아니라 걸린 시간만 센다.
+   */
+  function speedByTime(records, { minSample = MIN_SPEED_SAMPLE } = {}) {
+    const by = new Map();
+    for (const r of Array.isArray(records) ? records : []) {
+      if (!r || typeof r !== 'object' || !Array.isArray(r.targets) || !Number.isFinite(r.at)) continue;
+      const hour = new Date(r.at).getHours();
+      const b = BUCKETS.findIndex((x) => hour >= x.from && hour <= x.to);
+      if (b < 0) continue;
+      for (const id of r.targets) {
+        const a = r.answers && typeof r.answers === 'object' ? r.answers[id] : null;
+        if (!a || typeof a !== 'object' || typeof id !== 'string' || a.state !== 'done' || !a.metrics || !Number.isFinite(a.metrics.doneMs)) continue;
+        if (!by.has(id)) by.set(id, { id, name: a.name || id, total: 0, ms: BUCKETS.map(() => []) });
+        const row = by.get(id);
+        if (a.name) row.name = a.name;
+        row.total++;
+        row.ms[b].push(a.metrics.doneMs);
+      }
+    }
+    const rows = [...by.values()]
+      .map(({ ms, ...row }) => ({ ...row, cells: ms.map((xs) => ({ n: xs.length, medianMs: xs.length >= minSample ? median(xs) : null })) }))
+      .sort((x, y) => y.total - x.total);
+    return { buckets: BUCKETS.map((x) => x.id), rows };
   }
 
   /**
@@ -146,5 +197,5 @@
     return { ids, differs };
   }
 
-  return { KINDS, LONG_CHARS, MANY_FILES, MIN_SAMPLE, classifyQuestion, codeScore, kindOf, kindStats, compareRows, recommend, suggestTargets };
+  return { KINDS, ORDERS, BUCKETS, STAR_VOTE, LONG_CHARS, MANY_FILES, MIN_SAMPLE, MIN_SPEED_SAMPLE, classifyQuestion, codeScore, kindOf, kindStats, satisfactionOf, compareRows, recommend, speedByTime, suggestTargets };
 });

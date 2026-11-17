@@ -90,6 +90,25 @@
     return '';
   }
 
+  const ISSUE_BASE = `https://github.com/${REPO}/issues/new`;
+  const MAX_ISSUE_URL = 7000; // 주소가 이보다 길면 GitHub가 거절할 수 있어 글을 줄인다
+
+  /**
+   * GitHub "새 이슈" 양식 주소 (v0.35.0): 제목 · 본문을 채워 둔다. 주소는 항상 이 저장소의 issues/new로만 만든다.
+   * 본문이 길면 끝을 잘라 주소 길이를 맞춘다. → 주소 글
+   */
+  function issueUrl(title, body) {
+    const ttl = String(title || '').replace(/[\u0000-\u001f]+/g, ' ').trim().slice(0, 200);
+    let text = String(body || '').slice(0, 20000);
+    const make = (b) => `${ISSUE_BASE}?title=${encodeURIComponent(ttl)}&body=${encodeURIComponent(b)}`;
+    let url = make(text);
+    while (url.length > MAX_ISSUE_URL && text.length > 100) {
+      text = text.slice(0, Math.floor(text.length * 0.85));
+      url = make(`${text}\n…`);
+    }
+    return url;
+  }
+
   /** 크롬 확장: GitHub main의 package.json 내용 → 최신 버전 문자열 | null */
   function versionFromPackage(text) {
     try {
@@ -100,5 +119,5 @@
     }
   }
 
-  return { REPO, RELEASES_URL, PACKAGE_URL, FIRST_CHECK_MS, CHECK_EVERY_MS, parseVersion, compareVersions, isNewer, normalizeStatus, statusText, badgeText, versionFromPackage };
+  return { REPO, ISSUE_BASE, RELEASES_URL, PACKAGE_URL, issueUrl, FIRST_CHECK_MS, CHECK_EVERY_MS, parseVersion, compareVersions, isNewer, normalizeStatus, statusText, badgeText, versionFromPackage };
 });

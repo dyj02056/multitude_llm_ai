@@ -577,7 +577,7 @@ function renderDiagTable() {
   const ids = state.rects.map((r) => r.id).filter((id) => state.services.find((s) => s.id === id)?.kind !== 'local');
   const table = $('#diagTable');
   const head = document.createElement('tr');
-  for (const label of [t('ui.stats.service'), ...D.PARTS.map((p) => D.PART_TEXT[p]), t('ui.stats.limit'), t('ui.diag.state')]) head.append(Object.assign(document.createElement('th'), { textContent: label }));
+  for (const label of [t('ui.stats.service'), ...D.PARTS.map((p) => D.PART_TEXT[p]), t('ui.stats.limit'), t('ui.diag.state'), t('selector.col')]) head.append(Object.assign(document.createElement('th'), { textContent: label }));
   const LEVEL = { ok: t('ui.diag.level.ok'), warn: t('ui.diag.level.warn'), broken: t('ui.diag.changedBadge'), unknown: t('ui.diag.level.unknown') };
   const STATE = { ok: t('ui.diag.part.ok'), warn: t('ui.diag.part.warn'), fail: t('ui.diag.part.fail'), unknown: t('ui.diag.part.unknown') };
   const rows = ids.map((id) => {
@@ -604,6 +604,9 @@ function renderDiagTable() {
     st.textContent = LEVEL[d.level];
     if (d.notes.length) st.title = d.notes.join('\n');
     tr.append(st);
+    const fix = document.createElement('td'); // 진단 · 셀렉터 고치기 (v0.35.0)
+    fix.append(button(t('selector.open'), t('selector.openTitle', { name: svc?.name || id }), () => openDiag(id)));
+    tr.append(fix);
     return tr;
   });
   table.replaceChildren(head, ...(rows.length ? rows : [Object.assign(document.createElement('tr'), { textContent: t('ui.diag.noPanels') })]));

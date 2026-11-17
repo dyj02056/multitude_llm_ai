@@ -130,6 +130,24 @@ Object.assign(record, { threadId: 'tpyjs', kind: 'general', star: true, tags: ['
 for (const [i, a] of Object.values(record.answers).entries()) a.metrics = { doneMs: 9000 + i * 2500 };
 const fakeHistory = createHistory(() => {});
 fakeHistory.load([record, ...S.HISTORY(now, selected)]);
+// v0.35.0: 최대 개수를 넘어 보관 파일로 옮겨진 오래된 기록 (보관 포함 검색 장면)
+const ARCHIVED = ['날씨 API 오류 처리 방법', 'React 상태 관리 라이브러리 비교', '회의록 요약용 프롬프트 다듬기', 'SQL 인덱스 튜닝 체크리스트', '영문 이메일 말투 고치기'].map((q, i) => ({
+  id: `arch${i}`,
+  at: now - (140 + i * 11) * 86400e3,
+  question: q,
+  targets: selected.slice(0, 2),
+  files: [],
+  synth: [],
+  answers: Object.fromEntries(selected.slice(0, 2).map((id, j) => [id, { name: id, state: 'done', text: `${q}에 대한 예전 답변입니다.`, md: `${q}에 대한 예전 답변입니다.`, metrics: { doneMs: 8000 + j * 3000 } }])),
+}));
+// 셀렉터 편집기 장면의 가짜 값: DeepSeek는 답변 읽기 셀렉터를 직접 고쳐 둔 상태
+const selView = (id, local = {}) => ({
+  id,
+  name: { gemini: 'Gemini', chatgpt: 'ChatGPT', deepseek: 'DeepSeek', perplexity: 'Perplexity' }[id] || id,
+  fields: ['input', 'stop', 'response'],
+  local,
+  inherited: { input: ['textarea#chat-input', 'div[contenteditable="true"]'], stop: ['button[aria-label="Stop"]'], response: ['.ds-markdown', '.chat-message .markdown'].filter((x) => !(local.response || []).includes(x)) },
+});
 
 // 서비스 화면 상태 표 예시: 셋은 정상, DeepSeek은 답변 영역을 못 찾음 (실제로는 shared/diag.js가 채움)
 const ok = { input: 'ok', send: 'ok', response: 'ok', level: 'ok', message: '', hint: '', notes: [], limit: null, limitHint: '' };
@@ -178,7 +196,7 @@ function push() {
     mode, chatView, layout, selected, maxSelected: 6,
     attachLimits: { maxFiles: 10, maxFileBytes: 25 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024 },
     synthTarget: LOCAL_JUDGE ? 'local' : 'gemini', autoSynth: false, answerTimeoutMin: 20, timeoutChoices: [5, 10, 20, 30, 60], historyMax: 500, historyMaxChoices: [100, 500, 1000, 2000],
-    remoteSelectors: true, remote: { source: 'remote', version: 12, updated: '2026-11-08', checkedAt: now - 3600e3 }, diag: ['15-screen-status', '25-diag'].includes(scene) ? DIAG : {},
+    historyArchive: true, recommendOrder: 'completion', remoteSelectors: true, remote: { source: 'remote', version: 12, updated: '2026-11-08', checkedAt: now - 3600e3 }, diag: ['15-screen-status', '25-diag', '63-selector-editor'].includes(scene) ? DIAG : {},
     services: all.map((s) => ({ id: s.id, name: s.name, color: s.color, url: s.url, kind: s.kind || 'web', accept: uploadOf(s).accept, maxFileBytes: fileBytesOf(s) })),
     local: { enabled: LOCAL || LOCAL_JUDGE, baseUrl: 'http://localhost:11434', model: 'qwen2.5:7b', contextTokens: 8192 },
     autoUpdate: true,
@@ -207,13 +225,16 @@ window.host = {
   getAnswers: async () => answers,
   getAnswer: async (id) => answers.answers.find((a) => a.id === id) || null,
   history: {
-    list: async (q, f) => fakeHistory.list(q || '', f),
-    get: async (id) => fakeHistory.get(id),
+    list: async (q, f, opts) => fakeHistory.list(q || '', f, opts && opts.archive ? ARCHIVED : undefined),
+    get: async (id) => fakeHistory.get(id) || ARCHIVED.find((r) => r.id === id) || null,
+    archiveInfo: async () => ({ total: ARCHIVED.length, months: [{ month: '2026-06', count: 3 }, { month: '2026-05', count: 2 }] }),
+    import: async (list) => ({ added: list.length - 1, duplicate: 1, invalid: 0, overflow: 0 }),
+    speed: async () => fakeHistory.speed(),
     setTags: async (id, tags) => fakeHistory.setTags(id, tags),
     setStar: async (id, on) => fakeHistory.setStar(id, on),
     thread: async (tid) => fakeHistory.thread(tid),
     tags: async () => fakeHistory.tags(),
-    recommend: async () => fakeHistory.recommend(),
+    recommend: async (order) => fakeHistory.recommend({ order }),
     stats: async () => ({ rows: answers.answers.map((a, i) => ({ id: a.id, name: a.name, asked: 24 - i, sent: 24 - i, done: 22 - i, timeout: i % 2, noAnswer: 0, sendFail: 0, limit: i === 3 ? 1 : 0, firstMedianMs: 2100 + i * 900, doneMedianMs: 9000 + i * 2500, charsAvg: 1400 - i * 120 })) }),
     remove: async () => true,
     clear: async () => true,
@@ -221,6 +242,12 @@ window.host = {
   },
   copyText: async () => true,
   saveFile: async () => ({ ok: true }),
+  selectors: {
+    get: async (id) => selView(id, id === 'deepseek' ? { response: ['.chat-message:last-of-type .markdown'] } : {}),
+    set: async (id, patch) => ({ ok: true, view: selView(id, patch) }),
+    reset: async (id) => ({ ok: true, view: selView(id) }),
+  },
+  openIssue: async () => ({ ok: true }),
   local: { setPrefs: async () => ({ ok: true }), models: async () => ({ ok: true, models: ['qwen2.5:7b', 'llama3.1:8b'] }), ask: async () => ({ ok: true, text: '- 버그 먼저' }) },
   shortcuts: async () => shortcutList({}),
   runSynth: async () => ({ ok: true }),
@@ -379,6 +406,48 @@ window.addEventListener('DOMContentLoaded', async () => {
     [...document.querySelectorAll('#hfServices .chip')].find((c) => c.textContent === 'ChatGPT')?.click();
     await sleep(200);
     for (const box of [...document.querySelectorAll('.history-pick')].slice(0, 2)) box.click();
+  }
+  // v0.35.0 기록 보관: 거르기를 펼쳐 "보관된 기록 포함"을 켠 모습
+  if (scene === '60-history-archive') {
+    click('#historyBtn');
+    await sleep(300);
+    click('#historyFilterBtn');
+    await sleep(150);
+    $('#hfArchive').click();
+    await sleep(300);
+    click('#historyFilterBtn'); // 거르기 칸을 접어 목록이 보이게
+    click('#historyGroup button[data-group="records"]');
+    await sleep(300);
+    $('#historyList').scrollTop = 99999; // 보관된(오래된) 기록은 목록 맨 아래
+    await sleep(200);
+    [...document.querySelectorAll('.history-item')].find((r) => /보관됨|archived/.test(r.textContent))?.click();
+    await sleep(300);
+  }
+  // v0.35.0 기록 옮기기: 기록 두 개를 고르고, 옮기기 파일을 가져오는 확인 칸
+  if (scene === '61-history-transfer') {
+    click('#historyBtn');
+    await sleep(300);
+    click('#historyGroup button[data-group="records"]');
+    await sleep(300);
+    for (const box of [...document.querySelectorAll('.history-pick')].slice(0, 2)) box.click();
+    await sleep(150);
+    const file = { kind: 'multitude-llm-history', version: 1, exportedAt: '2026-11-12T10:20:00.000Z', app: 'extension', appVersion: '0.35.0', count: 4, records: [
+      { id: 'r1', at: now - 5 * 60e3, question: S.QUESTION, targets: ['gemini'], answers: {} },
+      ...['번역 톤 맞추기', '엑셀 함수 정리', '이력서 문장 다듬기'].map((q, i) => ({ id: `imp${i}`, at: now - (20 + i) * 86400e3, question: q, targets: ['gemini'], answers: {} })),
+    ] };
+    const dt = new DataTransfer();
+    dt.items.add(new File([JSON.stringify(file)], 'multitude-llm-history-2026-11-12.mla-history.json', { type: 'application/json' }));
+    $('#historyImportFile').files = dt.files;
+    $('#historyImportFile').dispatchEvent(new Event('change'));
+    await sleep(500);
+  }
+  // v0.35.0 셀렉터 편집기: DeepSeek의 ⚠ 표시 → 자가진단 창 → [셀렉터 직접 고치기]
+  if (scene === '63-selector-editor') {
+    const badge = [...document.querySelectorAll('.panel-head .diag-badge')].find((b) => !b.hidden && /화면이|changed/.test(b.textContent));
+    badge?.click();
+    await sleep(300);
+    click('#diagFixSel');
+    await sleep(400);
   }
   if (scene === '33-history-thread') {
     click('#historyBtn');
@@ -546,7 +615,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   if (scene === '06-settings-shortcuts') click('#helpBtn');
   // 설정 화면의 표들: 그 칸이 맨 위에 오게 스크롤
-  const helpAt = { '15-screen-status': '#diagTable', '17-stats': '#statsTable', '20-local-llm-settings': '#localEnabled', '34-recommend-stats': '#recommendTable' }[scene];
+  const helpAt = { '15-screen-status': '#diagTable', '17-stats': '#statsTable', '20-local-llm-settings': '#localEnabled', '34-recommend-stats': '#recommendTable', '62-recommend-speed': '#recommendTable' }[scene];
   if (helpAt) {
     click('#helpBtn');
     await sleep(500);
@@ -556,7 +625,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       await sleep(300);
       for (const d of [...document.querySelectorAll('.rec-kind')].slice(0, 2)) d.open = true;
     }
-    box.scrollTop = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 60;
+    box.scrollTop = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - (scene === '62-recommend-speed' ? 180 : 60);
   }
   if (scene === '12-library') {
     click('#libraryBtn');
