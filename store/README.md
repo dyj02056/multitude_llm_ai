@@ -160,6 +160,16 @@ The header-removal and cookie rules apply only to frames of the 11 listed AI sit
 
 ---
 
+**대시보드 › 테스트 안내 탭의 "추가 안내" 칸은 500자 제한**이라 아래 짧은 판을 붙여 넣습니다(493자). "사용자 인증 정보"(사용자 이름 · 비밀번호)는 **비워 둡니다** — 이 확장에는 자체 계정이 없고, 개인 AI 서비스 계정을 심사용으로 넘기지 않습니다. 위의 긴 판은 참고용입니다.
+
+```
+No account on our side is needed.
+A) No sign-in: click the toolbar icon, select Duck.ai, confirm. Type a question, press Enter; the panel answers. If Duck.ai shows a consent screen, press its agree button.
+B) Sign in & send: a signed-out panel shows "Sign-in needed" and a "Login tab" button. Click it, sign in in the new tab, come back; the panel reloads by itself. Then send.
+C) Side panel: press Alt+Shift+S on any page.
+Sign-in pages refuse to load in frames, so sign-in uses a normal tab.
+```
+
 ## 4. 심사에서 걸릴 수 있는 점 (미리 알아 둘 것)
 
 - **다른 사이트의 iframe 차단 헤더 제거 · 쿠키 · 토큰 복사**는 심사에서 자세히 보는 동작입니다. 위 권한 설명처럼 "이 확장의 탭 안, 이 11개 사이트에만, 닫으면 지움"을 분명히 적었습니다. 그래도 반려되면 반려 메일의 정책 이름을 보고 해당 기능(예: Qwen · Z.ai 토큰 브리지)을 스토어판에서 빼는 것을 검토합니다.
