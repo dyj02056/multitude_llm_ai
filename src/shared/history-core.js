@@ -72,6 +72,7 @@
   //   debate   : { round, rounds, answers: [{ id, name, state, text, md }] } — 토론 한 라운드 (결론은 synth의 mode 'debate')
   const CHAIN_KINDS = new Set(['handoff', 'fallback', 'debate']);
   const CHAIN_INTENTS = new Set(['review', 'counter', 'continue']);
+  const DEBATE_ROLES = new Set(['pro', 'con', 'rebut']);
   const MAX_CHAIN = 60; // 기록 하나의 chain 최대 개수
   const MAX_CHAIN_TEXT = 200000; // 글 하나 최대 길이
   const MAX_NAME = 80;
@@ -90,9 +91,17 @@
       const answers = (Array.isArray(e.answers) ? e.answers : [])
         .filter((x) => x && typeof x === 'object' && okSvcId(x.id))
         .slice(0, 6)
-        .map((x) => ({ id: x.id, name: str(x.name, MAX_NAME) || x.id, state: stateOf(x.state), text: str(x.text, MAX_CHAIN_TEXT), md: str(x.md, MAX_CHAIN_TEXT) }));
+        .map((x) => ({
+          id: x.id,
+          name: str(x.name, MAX_NAME) || x.id,
+          state: stateOf(x.state),
+          text: str(x.text, MAX_CHAIN_TEXT),
+          md: str(x.md, MAX_CHAIN_TEXT),
+          ...(DEBATE_ROLES.has(x.role) ? { role: x.role } : {}), // 토론 역할 (v0.32.0)
+        }));
       if (!answers.length) return null;
-      return { kind: 'debate', round, rounds: Number.isInteger(rounds) && rounds >= round ? rounds : round, at, answers };
+      const note = str(e.note, 4000).trim(); // 이 라운드 앞에 사용자가 끼워 넣은 말 (v0.32.0)
+      return { kind: 'debate', round, rounds: Number.isInteger(rounds) && rounds >= round ? rounds : round, at, answers, ...(note ? { note } : {}) };
     }
     if (!okSvcId(e.from) || !okSvcId(e.to) || e.from === e.to) return null;
     if (e.kind === 'handoff' && !CHAIN_INTENTS.has(e.intent)) return null;

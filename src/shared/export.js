@@ -62,7 +62,9 @@
       if (c.kind === 'debate') {
         const parts = (Array.isArray(c.answers) ? c.answers : [])
           .filter((x) => x && (x.md || x.text))
-          .map((x) => ({ name: String(x.name || x.id || ''), text: x.md || x.text }));
+          .map((x) => ({ name: String(x.name || x.id || '') + (['pro', 'con', 'rebut'].includes(x.role) ? ` (${t(`debate.role.${x.role}`)})` : ''), text: x.md || x.text }));
+        // 라운드 앞에 사용자가 끼워 넣은 말 (v0.32.0)
+        if (c.note) parts.unshift({ name: t('chain.userNote'), text: String(c.note) });
         if (parts.length) out.push({ title: t('chain.debateRound', { round: c.round, rounds: c.rounds || c.round }), parts });
       } else if (c.md || c.text) {
         const what = c.kind === 'handoff' ? t(`handoff.intent.${c.intent}`) : t('chain.fallback');

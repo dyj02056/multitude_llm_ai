@@ -512,6 +512,7 @@
       sendElsewhere,
       startDebate: (cfg) => debate.start(cfg),
       stopDebate: () => debate.stop(),
+      interjectDebate: (text) => debate.interject(text), // 라운드 사이 끼어들기 (v0.32.0)
       debateDone: () => debate.whenDone(),
     };
   }

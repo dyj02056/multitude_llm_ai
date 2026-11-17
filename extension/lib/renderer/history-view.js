@@ -327,7 +327,8 @@ async function renderHistoryDetail(id) {
     if (col) flashColumn(col, columns[idx].text, query);
   };
   // 분석이 2개 이상이면 둘을 골라 나란히 비교 (v0.26.0)
-  const extra = analyses.length >= 2 ? [analysisCompareBlock(analyses, { onJump: jump })] : analyses.length ? [analysisBlock(analyses[0], { onJump: jump })] : [];
+  const sources = columns.map((c) => ({ name: c.name, text: c.text })); // 출처 칸 (v0.32.0)
+  const extra = analyses.length >= 2 ? [analysisCompareBlock(analyses, { onJump: jump, sources })] : analyses.length ? [analysisBlock(analyses[0], { onJump: jump, sources })] : [];
   // 이어 묻기 · 토론 (v0.26.0): 답변 칸 아래에 일어난 순서대로 — 답변 칸을 가리지 않게 접어 둔다 (누르면 펼침)
   const chain = Array.isArray(rec.chain) ? rec.chain : [];
   const after = [];

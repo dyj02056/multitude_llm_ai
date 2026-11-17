@@ -333,7 +333,7 @@ test('ipc/chain: 요청을 등록하고 id · 의도 · 열린 패널 · 토론 
     stopDebate: () => ({ ok: true }),
   };
   require('../src/main/ipc/chain').register({ ipcMain, rounds: () => rounds, hasPanel: (id) => ['a', 'b'].includes(id) });
-  assert.deepEqual([...ipcMain.handle_.keys()].sort(), ['chain:handoff', 'debate:start', 'debate:stop', 'prompt:elsewhere', 'prompt:resend']);
+  assert.deepEqual([...ipcMain.handle_.keys()].sort(), ['chain:handoff', 'debate:interject', 'debate:start', 'debate:stop', 'prompt:elsewhere', 'prompt:resend']);
   const h = (ch, ...a) => ipcMain.handle_.get(ch)(null, ...a);
   assert.equal(h('chain:handoff', 'a', 'b', 'evil').ok, false);
   assert.equal(h('chain:handoff', 'a', 'zz', 'review').ok, false);

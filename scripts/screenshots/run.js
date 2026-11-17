@@ -66,6 +66,13 @@ const SCENES = [
   { name: '23-plan-split', page: 'app' },
   { name: '46-onboarding', page: 'app' },
   { name: '47-file-tree', page: 'app' },
+  // v0.32.0
+  { name: '48-compare-align', page: 'app' },
+  { name: '49-compare-table', page: 'app' },
+  { name: '50-compare-code', page: 'app' },
+  { name: '51-analysis-rate', page: 'app' },
+  { name: '52-debate-roles', page: 'app' },
+  { name: '53-debate-note', page: 'app' },
   { name: '41-side-recall', page: 'side', width: 420 },
   { name: '24-side-panel', page: 'side', width: 420 },
 ];

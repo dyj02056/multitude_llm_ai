@@ -22,6 +22,24 @@
   const DEFAULT_ROUNDS = 2;
   const MAX_SOURCE_CHARS = 12000; // 넘기는 답변 하나 (요청 글이 입력 한도를 넘지 않게)
   const MAX_DEBATE_CHARS = 6000; // 토론에서 다른 AI 답변 하나
+  const ROLES = ['pro', 'con', 'rebut']; // 토론 역할 (v0.32.0): 찬성 · 반대 · 반론 전담. 역할이 없으면 예전처럼 자유롭게
+  const MAX_NOTE_CHARS = 4000; // 라운드 사이에 사용자가 끼워 넣는 말의 최대 길이
+
+  /** 화면이 보낸 토론 설정의 역할 · 끼어들기 칸 검사 (본체 ipc/chain.js · 확장 host.js 공용) → { roles?, interject? } */
+  function cleanDebateExtras(c, okId = () => true) {
+    const roles = {};
+    if (c && c.roles && typeof c.roles === 'object' && !Array.isArray(c.roles)) for (const [id, r] of Object.entries(c.roles).slice(0, 6)) if (okId(id) && ROLES.includes(r)) roles[id] = r;
+    return { ...(Object.keys(roles).length ? { roles } : {}), ...(c && c.interject === true ? { interject: true } : {}) };
+  }
+
+  /** 역할 목록 정리: 참가 AI 중 아는 역할만 → { [id]: 'pro' | 'con' | 'rebut' } (역할이 없으면 빈 객체) */
+  function cleanRoles(raw, participants) {
+    const out = {};
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      for (const id of participants || []) if (ROLES.includes(raw[id])) out[id] = raw[id];
+    }
+    return out;
+  }
 
   function clip(text, max) {
     const s = String(text || '');
@@ -51,7 +69,7 @@
    * 토론 한 라운드의 요청 글 (참가 AI 하나에게). others: [{ name, text }] — 다른 참가 AI의 최신 답변
    * round · rounds: 몇 번째 라운드 / 모두 몇 라운드
    */
-  function buildDebatePrompt({ question, round, rounds, selfName, others }) {
+  function buildDebatePrompt({ question, round, rounds, selfName, others, role, note }) {
     const blocks = (others || []).map((o) => `${t('prompt.debate.latestOf', { name: o.name })}\n${clip(o.text, MAX_DEBATE_CHARS)}`).join('\n\n');
     const last = round >= rounds;
     return [
@@ -62,6 +80,8 @@
       '',
       blocks,
       '',
+      ...(ROLES.includes(role) ? [t(`prompt.debate.role.${role}`), ''] : []),
+      ...(String(note || '').trim() ? [t('prompt.debate.note', { note: clip(String(note).trim(), MAX_NOTE_CHARS) }), ''] : []),
       selfName ? t('prompt.debate.askSelf', { name: selfName }) : t('prompt.debate.ask'),
       `${t('prompt.debate.steps')}${last ? t('prompt.debate.last') : ''}`,
     ].join('\n');
@@ -69,9 +89,13 @@
 
   /** 토론 판정 요청 글. positions: [{ name, text }] — 참가 AI의 마지막 입장 */
   function buildDebateJudgePrompt({ question, positions, rounds }) {
-    const blocks = (positions || []).map((p) => `${t('prompt.judge.finalOf', { name: p.name })}\n${clip(p.text, MAX_DEBATE_CHARS)}`).join('\n\n');
+    const withRole = (positions || []).some((p) => ROLES.includes(p.role));
+    const blocks = (positions || [])
+      .map((p) => `${ROLES.includes(p.role) ? t('prompt.judge.finalOfRole', { name: p.name, role: t(`debate.role.${p.role}`) }) : t('prompt.judge.finalOf', { name: p.name })}\n${clip(p.text, MAX_DEBATE_CHARS)}`)
+      .join('\n\n');
     return [
       t('prompt.judge.head', { rounds }),
+      ...(withRole ? [t('prompt.judge.roleNote')] : []),
       '',
       t('prompt.origQuestion'),
       String(question || '').trim() || t('prompt.noQuestion'),
@@ -98,7 +122,9 @@
     const rounds = Number.isInteger(n) && n >= 1 && n <= MAX_ROUNDS ? n : DEFAULT_ROUNDS;
     const judge =
       typeof c.judge === 'string' && judges.includes(c.judge) ? c.judge : judges.includes(defaultJudge) ? defaultJudge : participants[0];
-    return { ok: true, participants, rounds, judge };
+    const roles = cleanRoles(c.roles, participants);
+    // 역할 · 끼어들기는 정한 경우에만 결과에 싣는다 (예전 설정과 같은 모양을 지킨다)
+    return { ok: true, participants, rounds, judge, ...(Object.keys(roles).length ? { roles } : {}), ...(c.interject === true ? { interject: true } : {}) };
   }
 
   return {
@@ -107,6 +133,10 @@
     MIN_PARTICIPANTS,
     MAX_ROUNDS,
     DEFAULT_ROUNDS,
+    ROLES,
+    MAX_NOTE_CHARS,
+    cleanRoles,
+    cleanDebateExtras,
     buildHandoffPrompt,
     buildDebatePrompt,
     buildDebateJudgePrompt,

@@ -44,6 +44,7 @@ const RENDERER_FILES = [
   'renderer.js',
   'renderer-views.js',
   'chain-views.js',
+  'compare-modes.js', // 답변 비교 보기 방식 (v0.32.0)
   'history-view.js',
   'recommend-ui.js',
   'renderer-compose.js',

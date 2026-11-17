@@ -51,6 +51,38 @@ const answers = {
 const NAMES4 = ['Gemini', 'ChatGPT', 'DeepSeek', 'Perplexity'];
 const analysis2 = { judge: 'Gemini', at: now - 10 * 60e3, text: S.ANALYSIS_MD2, md: S.ANALYSIS_MD2, mode: 'analysis', names: NAMES4 };
 if (scene === '30-analysis-compare') answers.analyses = [analysis2, answers.analysis];
+// v0.32.0 합의율 · 출처 장면: 답변에 링크를 넣는다
+if (scene === '51-analysis-rate') {
+  for (const a of answers.answers) a.text = a.md = `${a.text}\n\n참고: https://docs.python.org/3/tutorial/ · [MDN JavaScript 안내](https://developer.mozilla.org/docs/Web/JavaScript/Guide)${a.id === 'gemini' || a.id === 'chatgpt' ? ' · https://survey.stackoverflow.co/2025' : ''}`;
+}
+// v0.32.0 문단 맞추기 장면: 같은 이야기를 다르게 쓴 네 답변
+if (scene === '48-compare-align') {
+  const say = {
+    gemini: '파이썬은 문법이 단순해 배우기 쉽습니다.\n\n데이터 분석과 인공지능 분야에서 가장 많이 쓰입니다.\n\n실행 속도는 느린 편이라 무거운 계산에는 확장 모듈을 씁니다.',
+    chatgpt: '파이썬은 배우기 쉬운 언어입니다.\n\n데이터 분석 · AI 분야에서 많이 씁니다.\n\n오픈소스라서 무료로 쓸 수 있습니다.\n\n실행 속도가 느린 편이라 C 확장으로 보완합니다.',
+    deepseek: '문법이 간결해서 입문용으로 좋습니다.\n\n데이터 분석, 머신러닝, 자동화에 널리 쓰입니다.',
+    perplexity: '출처에 따르면 파이썬은 입문자가 가장 많이 고르는 언어입니다.\n\n데이터 분석과 AI 분야에서 쓰임이 큽니다.\n\n성능이 필요한 부분은 다른 언어로 확장합니다.',
+  };
+  for (const a of answers.answers) if (say[a.id]) a.text = a.md = say[a.id];
+}
+// v0.32.0 표 비교 장면: 같은 항목을 다르게 채운 표
+if (scene === '49-compare-table') {
+  const table = (rows) => `비교표입니다.\n\n| 항목 | Python | JavaScript |\n|---|---|---|\n${rows.map((r) => `| ${r.join(' | ')} |`).join('\n')}`;
+  const t = {
+    gemini: table([['주 용도', '데이터 분석 · AI', '웹 화면'], ['출시 연도', '1991', '1995'], ['타입', '동적', '동적'], ['성능', '느린 편', '빠른 편']]),
+    chatgpt: table([['주 용도', '데이터 분석 · AI 분야', '웹 화면 · 서버'], ['출시', '1991', '1996'], ['타입', '동적', '동적'], ['생태계', 'NumPy · PyTorch', 'React · Vue']]),
+    deepseek: table([['용도', '데이터 · AI', '웹'], ['성능', '느린 편 (C 확장으로 보완)', 'V8 JIT로 빠른 편']]),
+  };
+  for (const a of answers.answers) if (t[a.id]) a.text = a.md = t[a.id];
+  answers.answers = answers.answers.filter((a) => a.id !== 'perplexity').concat([{ ...answers.answers.find((a) => a.id === 'perplexity'), text: '표 없이 글로만 답했습니다.', md: '표 없이 글로만 답했습니다.' }]);
+}
+// v0.32.0 코드만 장면: 두 답변에 코드를 넣는다
+if (scene === '50-compare-code') {
+  const code = (body) => `\n\n\`\`\`js\n${body}\n\`\`\``;
+  answers.answers[0].text = answers.answers[0].md = `합계를 구하는 함수입니다.${code('const total = (xs) => xs.reduce((n, x) => n + x, 0);')}`;
+  answers.answers[1].text = answers.answers[1].md = `반복문으로 풀 수도 있습니다.${code('function total(xs) {\n  let n = 0;\n  for (const x of xs) n += x;\n  return n;\n}')}`;
+  answers.answers[2].text = answers.answers[2].md = `설명만 드립니다: reduce로 더하면 됩니다.`;
+}
 if (PROJ) for (const a of answers.answers) if (S.PROJECT_ANSWERS[a.id]) Object.assign(a, { text: S.PROJECT_ANSWERS[a.id], md: S.PROJECT_ANSWERS[a.id] });
 // 잘린 답 (21 · 22): Gemini의 답이 출력 한도로 마지막 파일 중간에서 끊겼다 (코드 블록이 닫히지 않음)
 if (['21-truncation-guard', '22-continue'].includes(scene)) {
@@ -349,6 +381,33 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (scene === '28-debate') {
     click('#debateBtn');
     await sleep(400);
+  }
+  // v0.32.0: 토론 역할 · 끼어들기 / 비교 보기 방식 / 합의율 · 출처
+  if (scene === '52-debate-roles' || scene === '53-debate-note') {
+    for (const id of ['gemini', 'chatgpt', 'deepseek']) emit('panel:status', { id, answer: 'done', chars: S.ANSWERS[id].length });
+    await sleep(100);
+    if (scene === '52-debate-roles') {
+      click('#debateBtn');
+      await sleep(400);
+      const roles = [...document.querySelectorAll('#debateParts select')];
+      for (const [i, r] of ['pro', 'con', 'rebut'].entries()) if (roles[i]) roles[i].value = r;
+      $('#debateInterject').checked = true;
+    } else {
+      emit('synth:status', { mode: 'debate', state: 'paused', round: 1, rounds: 2 });
+      await sleep(300);
+      $('#interjectText').value = '속도뿐 아니라 배우는 비용도 따져 줘';
+    }
+  }
+  if (['48-compare-align', '49-compare-table', '50-compare-code', '51-analysis-rate'].includes(scene)) {
+    click('#compareBtn');
+    await sleep(500);
+    const mode = { '48-compare-align': 'align', '49-compare-table': 'table', '50-compare-code': 'code' }[scene];
+    if (mode) {
+      $('#compareMode').value = mode;
+      $('#compareMode').dispatchEvent(new Event('change'));
+    }
+    if (scene === '51-analysis-rate') click('#compareTabs button[data-ctab="analysis"]');
+    await sleep(300);
   }
   if (['29-debate-result', '30-analysis-compare', '31-analysis-jump'].includes(scene)) {
     click('#compareBtn');

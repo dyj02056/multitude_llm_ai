@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('host', {
   debate: {
     start: (cfg) => ipcRenderer.invoke('debate:start', cfg),
     stop: () => ipcRenderer.invoke('debate:stop'),
+    interject: (text) => ipcRenderer.invoke('debate:interject', text),
   },
   copyAnswer: (id) => ipcRenderer.invoke('answer:copy', id),
   setView: (value) => ipcRenderer.send('view:set', value),

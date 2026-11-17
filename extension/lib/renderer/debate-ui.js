@@ -26,11 +26,18 @@
   };
   const openIds = () => (state?.rects || []).map((r) => r.id);
   const nameOf = (id) => state?.services.find((s) => s.id === id)?.name || id;
-  const checked = () => [...document.querySelectorAll('#debateParts input:checked')].map((b) => b.value);
+  const checked = () => [...document.querySelectorAll('#debateParts input[type="checkbox"]:checked')].map((b) => b.value);
+  /** 참가 AI마다 고른 역할 { id: 'pro' | 'con' | 'rebut' } (역할 없음은 뺀다, v0.32.0) */
+  const rolesPicked = () => {
+    const out = {};
+    for (const s of document.querySelectorAll('#debateParts select')) if (s.value && checked().includes(s.dataset.id)) out[s.dataset.id] = s.value;
+    return out;
+  };
 
   function limitChecks() {
     const full = checked().length >= CH.MAX_PARTICIPANTS;
-    for (const b of document.querySelectorAll('#debateParts input')) b.disabled = full && !b.checked;
+    for (const b of document.querySelectorAll('#debateParts input[type="checkbox"]')) b.disabled = full && !b.checked;
+    for (const s of document.querySelectorAll('#debateParts select')) s.disabled = !checked().includes(s.dataset.id); // 고르지 않은 AI는 역할도 없다
     const n = checked().length;
     $('#debateSub').textContent = t('debate.sub', { n, max: CH.MAX_PARTICIPANTS });
     $('#debateStart').disabled = n < CH.MIN_PARTICIPANTS || !open?.question;
@@ -46,7 +53,13 @@
         label.style.setProperty('--svc', state.services.find((s) => s.id === id)?.color || 'var(--border)');
         const box = Object.assign(document.createElement('input'), { type: 'checkbox', value: id, checked: pick.includes(id) });
         box.addEventListener('change', limitChecks);
-        label.append(box, ' ', el('span', '', nameOf(id)));
+        // 역할 (v0.32.0): 없음 · 찬성 · 반대 · 반론 전담
+        const role = el('select', 'debate-role');
+        role.dataset.id = id;
+        role.setAttribute('aria-label', t('debate.roleLabel', { name: nameOf(id) }));
+        role.append(...['', ...CH.ROLES].map((r) => Object.assign(document.createElement('option'), { value: r, textContent: t(`debate.role.${r || 'none'}`) })));
+        role.value = CH.ROLES.includes(defaults?.roles?.[id]) ? defaults.roles[id] : '';
+        label.append(box, ' ', el('span', '', nameOf(id)), ' ', role);
         return label;
       }),
     );
@@ -55,6 +68,7 @@
       ...Array.from({ length: CH.MAX_ROUNDS }, (_, i) => Object.assign(document.createElement('option'), { value: String(i + 1), textContent: t('debate.roundsOption', { n: i + 1 }) })),
     );
     rounds.value = String(defaults?.rounds >= 1 && defaults.rounds <= CH.MAX_ROUNDS ? defaults.rounds : CH.DEFAULT_ROUNDS);
+    $('#debateInterject').checked = defaults?.interject === true;
     const judge = $('#debateJudge');
     // 판정: 열린 패널 + (켜 두었으면) 패널 없는 로컬 LLM (v0.29.0, renderer-compose.js judgeChoices)
     const judges = judgeChoices();
@@ -89,7 +103,14 @@
   }
 
   async function start() {
-    const cfg = { participants: checked(), rounds: Number($('#debateRounds').value), judge: $('#debateJudge').value };
+    const roles = rolesPicked();
+    const cfg = {
+      participants: checked(),
+      rounds: Number($('#debateRounds').value),
+      judge: $('#debateJudge').value,
+      ...(Object.keys(roles).length ? { roles } : {}),
+      ...($('#debateInterject').checked ? { interject: true } : {}),
+    };
     $('#debateStart').disabled = true;
     const r = await host.debate.start(cfg).catch((err) => ({ ok: false, error: err.message }));
     if (!r?.ok) {
@@ -104,6 +125,7 @@
 
   /** 진행 상태 → 입력창 아래 안내 글 · 멈추기 버튼 */
   function statusText({ state: st, round, rounds, waiting, judge, error }) {
+    if (st === 'paused') return t('debate.statusPaused', { round, rounds });
     if (st === 'running') return waiting?.length ? t('debate.statusRound', { round, rounds, names: waiting.join(', ') }) : t('debate.statusRoundDone', { round, rounds });
     if (st === 'judging') return t('debate.statusJudging', { judge });
     if (st === 'done') return t('debate.statusDone', { judge });
@@ -111,17 +133,62 @@
     return t('debate.statusError', { error: error || '' });
   }
 
+  // ---------- 끼어들기 (v0.32.0): 라운드 사이에 멈추면 한마디를 받는다 ----------
+  let note = null; // { dialog, pending, round, rounds } — 끼어들기 창이 열려 있을 때
+  let paused = null; // { round, rounds } — 토론이 한마디를 기다리는 중 (창을 닫아도 [끼어들기] 단추로 다시 연다)
+
+  function closeNote() {
+    if (!note) return;
+    const { dialog } = note;
+    note = null;
+    $('#interjectModal').hidden = true;
+    if (dialog && state?.chatView === 'dialog') host.setView('panels');
+  }
+  function openNote() {
+    if (!paused || note) return;
+    const dialog = state?.chatView === 'panels';
+    note = { dialog, pending: dialog };
+    if (dialog) host.setView('dialog');
+    $('#interjectSub').textContent = t('debate.note.sub', paused);
+    $('#interjectText').value = '';
+    $('#interjectStatus').textContent = '';
+    $('#interjectModal').hidden = false;
+    $('#interjectText').focus();
+  }
+  async function sendNote(text) {
+    const r = await host.debate.interject(text).catch((err) => ({ ok: false, error: err.message }));
+    if (!r?.ok) {
+      $('#interjectStatus').textContent = r?.error || t('debate.errStart');
+      return;
+    }
+    paused = null;
+    $('#debateNote').hidden = true;
+    closeNote();
+  }
+
   host.on('synth:status', (patch) => {
     if (patch.mode !== 'debate') return;
-    running = patch.state === 'running' || patch.state === 'judging';
+    paused = patch.state === 'paused' ? { round: patch.round, rounds: patch.rounds } : null;
+    running = patch.state === 'running' || patch.state === 'paused' || patch.state === 'judging';
     $('#sendHint').textContent = statusText(patch);
     $('#debateStop').hidden = !running;
     $('#debateBtn').hidden = running;
+    $('#debateNote').hidden = !paused;
+    if (paused) openNote(); // 멈춘 순간 바로 창을 띄운다
+    else if (note) closeNote();
     if (patch.state === 'done' && state?.chatView === 'compare') renderCompare();
   });
 
   /** 화면 상태가 올 때마다 (renderer-compose.js): 창을 띄운 화면을 떠났으면 닫는다 */
   window.onDebateState = () => {
+    if (note) {
+      if (note.pending) {
+        if (state.chatView === 'dialog') note.pending = false;
+      } else if (note.dialog && state.chatView !== 'dialog') {
+        note.dialog = false; // 이미 다른 화면 — 창만 닫는다. 토론은 [끼어들기] 단추로 이어 갈 수 있다
+        closeNote();
+      }
+    }
     if (!open) return;
     if (open.pending) {
       if (state.chatView === 'dialog') open.pending = false;
@@ -134,6 +201,23 @@
   };
 
   $('#debateBtn').addEventListener('click', openDialog);
+  $('#debateNote').addEventListener('click', openNote);
+  $('#interjectSend').addEventListener('click', () => sendNote($('#interjectText').value));
+  $('#interjectSkip').addEventListener('click', () => sendNote(''));
+  $('#interjectStop').addEventListener('click', async () => {
+    const r = await host.debate.stop().catch(() => null);
+    if (!r?.ok) $('#interjectStatus').textContent = r?.error || t('debate.errStop');
+    else closeNote();
+  });
+  $('#interjectModal').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closeNote(); // 창만 닫는다 — 토론은 그대로 멈춰 있고 [끼어들기]로 다시 열 수 있다
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      sendNote($('#interjectText').value);
+    }
+  });
   $('#debateStop').addEventListener('click', async () => {
     const r = await host.debate.stop().catch(() => null);
     if (!r?.ok) $('#sendHint').textContent = r?.error || t('debate.errStop');

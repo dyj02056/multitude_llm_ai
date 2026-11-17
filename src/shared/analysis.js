@@ -313,5 +313,109 @@
     return { onlyA: A.map((_, i) => i).filter((i) => !inA.has(i)), onlyB: B.map((_, i) => i).filter((i) => !usedB.has(i)), same };
   }
 
-  return { SECTIONS, sectionOf, parseAnalysis, sentences, similarity, diffMarks, changedRatio, tokens, paragraphs, relatedParagraphs, compareAnalyses };
+  // ---------- 합의율 (v0.32.0) ----------
+  // 이견 표의 한 줄에서 "AI 몇 개 중 몇 개가 같은 입장인가"를 센다. 입장 글이 서로 비슷하면(숫자가 같고 글자 · 낱말이 많이 겹침) 같은 입장 묶음으로 보고,
+  // 가장 큰 묶음의 크기가 "같은 입장 AI 수"다. 글의 뜻을 아는 것이 아니라 겹침으로 어림하는 것이라, 화면은 "어림"이라고 알린다.
+  const POSITION_SAME = 0.6;
+  const NOT_STATED_RE = /^(언급\s*(없음|없습니다|하지\s*않(음|았음|았다|았습니다))|not\s+mentioned|no\s+mention|not\s+stated|해당\s*(AI|없음))\.?$/i;
+  const realText = (v) => {
+    const s = String(v || '').trim();
+    // "언급 없음" · "not mentioned"처럼 입장이 아닌 칸은 입장으로 세지 않는다 (분석 요청 글은 "언급 없으면 -"라고 하지만 AI는 자주 글로 쓴다)
+    return s && !/^[-—–]+$/.test(s) && !NONE_RE.test(s) && !NOT_STATED_RE.test(s) ? s : '';
+  };
+  function wordOverlap(a, b) {
+    const x = tokens(a);
+    const y = tokens(b);
+    if (!x.size || !y.size) return 0;
+    let both = 0;
+    for (const w of x) if (y.has(w)) both++;
+    return (2 * both) / (x.size + y.size);
+  }
+  /** 두 입장 글의 비슷한 정도 0~1 (숫자가 다르면 0) */
+  const positionSimilarity = (a, b) => (numbersOf(a) !== numbersOf(b) ? 0 : Math.max(similarity(a, b), wordOverlap(a, b)));
+
+  /**
+   * 이견 한 줄(parseAnalysis의 disagreements 항목)의 합의 정도 → { agree, of, spoke, groups } | null
+   *   agree: 같은 입장인 AI 수(가장 큰 묶음), of: 비교한 AI 수(names가 있으면 그 수, 없으면 입장을 쓴 AI 수), spoke: 입장을 쓴 AI 수, groups: 묶음 수
+   * 입장 글이 없는 줄(글머리표만 있는 이견)은 알 수 없어 null.
+   */
+  function agreementOf(d, names = []) {
+    const pos = (d?.positions || []).filter((p) => realText(p.text));
+    if (!pos.length) return null;
+    const groups = [];
+    for (const p of pos) {
+      const g = groups.find((x) => positionSimilarity(x[0].text, p.text) >= POSITION_SAME);
+      if (g) g.push(p);
+      else groups.push([p]);
+    }
+    const agree = Math.max(...groups.map((g) => g.length));
+    return { agree, of: Math.max(names.length, pos.length), spoke: pos.length, groups: groups.length };
+  }
+
+  /**
+   * 분석 결과(parseAnalysis의 ok 결과) 전체의 합의율 → { rate(0~100 | null), common, disputed, rows: [agreementOf | null] }
+   * 공통 의견 한 개는 "모두 같음"(1)으로, 이견 한 개는 입장을 쓴 AI 가운데 같은 입장인 AI의 비율(agree / spoke)로 세어 평균을 낸다 — 입장을 쓰지 않은 AI는
+   * 갈림이 아니라 "말이 없음"이라 깎지 않는다 (줄마다 보이는 "n/of 같음"은 비교한 모든 AI 기준). 이견의 입장을 알 수 없으면 0으로 센다(보수적).
+   * 항목이 하나도 없으면 rate는 null.
+   */
+  function agreementSummary(res, names = []) {
+    if (!res || !res.ok) return { rate: null, common: 0, disputed: 0, rows: [] };
+    const rows = res.disagreements.map((d) => agreementOf(d, names));
+    const items = res.common.length + rows.length;
+    const score = res.common.length + rows.reduce((n, r) => n + (r ? r.agree / r.spoke : 0), 0);
+    return { rate: items ? Math.round((score / items) * 100) : null, common: res.common.length, disputed: rows.length, rows };
+  }
+
+  // ---------- 출처 모으기 (v0.32.0) ----------
+  const MD_LINK_RE = /\[([^\]\n]{1,200})\]\((https?:\/\/[^\s)]+)\)/gi;
+  const BARE_URL_RE = /https?:\/\/[^\s<>"'`\])}]+/gi;
+  const TRAIL_RE = /[.,;:!?)\]}。、'"]+$/;
+
+  /** 주소 정리: 끝의 문장부호 · #조각 · utm_* 추적 값을 떼고 http(s)만. 못 읽으면 null */
+  function cleanUrl(raw) {
+    try {
+      const u = new URL(String(raw).replace(TRAIL_RE, ''));
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+      u.hash = '';
+      for (const k of [...u.searchParams.keys()]) if (/^utm_/i.test(k)) u.searchParams.delete(k);
+      return u.href.replace(/\/$/, '');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 답변들에 나온 링크를 주소별로 모은다. items: [{ name, text }] (답변 · 분석 글)
+   * → [{ url, host, title, names: [그 링크를 쓴 AI], count }] — 여러 AI가 쓴 링크가 앞, 같으면 처음 나온 순. 최대 max개
+   */
+  function extractSources(items, { max = 30 } = {}) {
+    const by = new Map();
+    for (const it of items || []) {
+      const text = String(it?.text || '');
+      const add = (raw, title) => {
+        const url = cleanUrl(raw);
+        if (!url) return;
+        let e = by.get(url);
+        if (!e) {
+          e = { url, host: new URL(url).hostname.replace(/^www\./, ''), title: '', names: [], count: 0, order: by.size };
+          by.set(url, e);
+        }
+        e.count++;
+        if (title && !e.title) e.title = String(title).trim();
+        if (it.name && !e.names.includes(it.name)) e.names.push(it.name);
+      };
+      // 마크다운 링크를 먼저 (제목을 얻음), 그 주소를 뺀 나머지에서 맨 주소를 찾는다
+      const rest = text.replace(MD_LINK_RE, (_m, title, url) => {
+        add(url, title);
+        return ' ';
+      });
+      for (const m of rest.matchAll(BARE_URL_RE)) add(m[0], '');
+    }
+    return [...by.values()]
+      .sort((a, b) => b.names.length - a.names.length || a.order - b.order)
+      .slice(0, max)
+      .map(({ order, ...e }) => e);
+  }
+
+  return { SECTIONS, sectionOf, parseAnalysis, sentences, similarity, diffMarks, changedRatio, tokens, paragraphs, relatedParagraphs, compareAnalyses, agreementOf, agreementSummary, extractSources, positionSimilarity };
 });

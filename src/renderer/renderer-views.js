@@ -14,15 +14,17 @@
 //   분석: 판정 AI(종합 담당)가 공통 의견 · 이견 표 · 근거 부족 · 최종 답변으로 정리한 결과 (shared/analysis.js가 읽음)
 const AN = MLA.analysis;
 const COMPARE_PREFS_KEY = 'mla-compare-view';
-const compareView = { tab: 'answers', diff: false, base: null, answers: [], analysis: null, pending: null, error: null };
+// mode: 답변 탭의 보기 방식 (v0.32.0) 'columns'(나란히, 기본) · 'align'(문단 맞추기) · 'code'(코드만) · 'table'(표 비교) — shared/compare-modes.js
+const compareView = { tab: 'answers', diff: false, mode: 'columns', base: null, answers: [], analysis: null, pending: null, error: null };
 try {
   const saved = JSON.parse(localStorage.getItem(COMPARE_PREFS_KEY) || '{}');
   if (saved.tab === 'analysis') compareView.tab = 'analysis';
   compareView.diff = saved.diff === true;
+  compareView.mode = MLA.compareModes.normalizeMode(saved.mode);
 } catch {}
 const saveCompareView = () => {
   try {
-    localStorage.setItem(COMPARE_PREFS_KEY, JSON.stringify({ tab: compareView.tab, diff: compareView.diff }));
+    localStorage.setItem(COMPARE_PREFS_KEY, JSON.stringify({ tab: compareView.tab, diff: compareView.diff, mode: compareView.mode }));
   } catch {}
 };
 
@@ -82,8 +84,13 @@ function renderCompareAnswers() {
   toggle.setAttribute('aria-pressed', String(compareView.diff));
   toggle.disabled = withText.length < 2;
 
+  // 보기 방식 (v0.32.0): 나란히가 아니면 같은 답변 글을 다르게 나눠 보여 준다. 기준 답변 고르기는 문단 맞추기 · 코드 차이에도 쓴다
+  const mode = MLA.compareModes.normalizeMode(compareView.mode);
+  $('#compareMode').value = mode;
+  select.hidden = withText.length < 2 || !(compareView.diff || mode === 'align' || mode === 'code');
   const base = compareView.diff && withText.length >= 2 ? answers.find((a) => a.id === compareView.base) : null;
   const cols = $('#compareCols');
+  if (window.renderCompareMode(cols, answers, compareView.base, compareView.diff)) return;
   cols.style.gridTemplateColumns = `repeat(${Math.max(answers.length, 1)}, minmax(0, 1fr))`;
   cols.replaceChildren(
     ...answers.map((a) => {
@@ -118,8 +125,8 @@ function renderCompareAnalysis() {
   }
   // 다시 분석했으면(분석 2개 이상) 두 분석을 골라 나란히 비교할 수 있다 (v0.26.0, chain-views.js)
   const list = compareView.analyses?.length ? compareView.analyses : [compareView.analysis];
-  if (list.length >= 2) return box.replaceChildren(...pending, analysisCompareBlock(list, { onJump: jumpToAnswer }));
-  box.replaceChildren(...pending, analysisBlock(compareView.analysis, { onJump: jumpToAnswer }));
+  if (list.length >= 2) return box.replaceChildren(...pending, analysisCompareBlock(list, { onJump: jumpToAnswer, sources: compareView.answers }));
+  box.replaceChildren(...pending, analysisBlock(compareView.analysis, { onJump: jumpToAnswer, sources: compareView.answers }));
 }
 
 /**
@@ -151,8 +158,9 @@ function flashColumn(col, text, query) {
  * 분석 결과 하나를 그립니다 (비교 화면 · 기록 화면 공용).
  * entry: { judge, at, md, text, names }, onJump(name, query): 이견 · 근거 부족의 AI 이름을 눌렀을 때 (query: 관련 문단을 찾을 글)
  * unique: 다시 분석 비교에서 이 분석에만 있는 이견 쟁점 번호(Set) — 그 줄을 강조 (v0.26.0)
+ * sources: [{ name, text }] 답변들 — 있으면 거기 나온 링크를 모아 "출처" 칸을 더한다 (v0.32.0)
  */
-function analysisBlock(entry, { onJump, unique } = {}) {
+function analysisBlock(entry, { onJump, unique, sources } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'analysis';
   const raw = entry.md || entry.text || '';
@@ -169,6 +177,13 @@ function analysisBlock(entry, { onJump, unique } = {}) {
       flash(meta, t('ui.copied'));
     }),
   );
+  // 합의율 (v0.32.0): 공통 의견 + 이견 줄의 "같은 입장 AI 비율"의 평균. 겹침으로 어림한 값이라고 알린다
+  const agree = res.ok ? AN.agreementSummary(res, names) : null;
+  if (agree && agree.rate !== null) {
+    const chip = span('an-rate', t('analysis.rate', { n: agree.rate }));
+    chip.title = t('analysis.rateTitle', { common: agree.common, disputed: agree.disputed });
+    head.insertBefore(chip, head.children[1] || null);
+  }
   wrap.append(head);
 
   if (!res.ok) {
@@ -232,6 +247,7 @@ function analysisBlock(entry, { onJump, unique } = {}) {
     const tbody = document.createElement('tbody');
     res.disagreements.forEach((d, di) => {
       const row = document.createElement('tr');
+      const ag = agree.rows[di]; // 같은 입장인 AI 수 (입장 글이 없는 줄은 null)
       const td = (text, cls) => {
         const c = document.createElement('td');
         if (cls) c.className = cls;
@@ -239,6 +255,11 @@ function analysisBlock(entry, { onJump, unique } = {}) {
         return c;
       };
       const topic = td(d.topic, 'an-topic');
+      if (ag) {
+        const b = span('an-agree-badge', t('analysis.agreeBadge', { agree: ag.agree, of: ag.of }));
+        b.title = t('analysis.agreeTitle', { agree: ag.agree, of: ag.of, spoke: ag.spoke });
+        topic.append(' ', b);
+      }
       if (unique?.has(di)) {
         row.classList.add('an-unique'); // 다시 분석 비교: 이 분석에만 있는 쟁점
         topic.append(' ', span('an-unique-badge', t('analysis.onlyHere')));
@@ -296,9 +317,32 @@ function analysisBlock(entry, { onJump, unique } = {}) {
   fin.querySelector('h3').append(copyFinal);
   fin.append(finBody);
 
+  // 출처 (v0.32.0): 답변 · 분석에 나온 링크를 주소별로 모은다. 앱에서는 링크를 열지 않고 복사만 한다 (패널 밖으로 나가는 이동을 만들지 않음)
+  const srcItems = [...(sources || []).map((a) => ({ name: a.name, text: a.text })), { name: entry.judge, text: raw }];
+  const found = AN.extractSources(srcItems);
+  const src = section(t('analysis.sources'), found.length);
+  src.classList.add('an-sources');
+  src.append(
+    found.length
+      ? list(found, (li, s) => {
+          li.append(span('an-src-host', s.host), ' ');
+          const link = span('an-src-url', s.title || s.url);
+          link.title = s.url;
+          li.append(link, ' ');
+          for (const n of s.names) li.append(nameChip(n, s.url), ' ');
+          li.append(
+            button(t('ui.copy'), t('analysis.copyLink'), async (e) => {
+              await host.copyText(s.url);
+              flash(e.target, t('ui.copied'));
+            }),
+          );
+        })
+      : span('muted-label', t('analysis.noSources')),
+  );
+
   const grid = document.createElement('div');
   grid.className = 'analysis-grid';
-  grid.append(dis, common, weak, fin);
+  grid.append(dis, common, weak, fin, src);
   wrap.append(grid);
   return wrap;
 }
@@ -354,6 +398,11 @@ $('#compareTabs').addEventListener('click', (e) => {
 });
 $('#diffToggle').addEventListener('click', () => {
   compareView.diff = !compareView.diff;
+  saveCompareView();
+  renderCompareAnswers();
+});
+$('#compareMode').addEventListener('change', (e) => {
+  compareView.mode = MLA.compareModes.normalizeMode(e.target.value);
   saveCompareView();
   renderCompareAnswers();
 });

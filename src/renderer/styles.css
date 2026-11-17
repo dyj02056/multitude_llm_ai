@@ -384,6 +384,13 @@ body[data-view="compare"] #panels { display: none !important; }
 .an-count { font-size: 11px; min-width: 20px; text-align: center; padding: 0 6px; border-radius: var(--r-sm); border: 1px solid var(--border); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .analysis-sec ul { margin: 0; padding-left: 18px; line-height: 1.6; font-size: 12.5px; user-select: text; }
 .an-agree { color: var(--ok-text); font-size: 12.5px; }
+/* 합의율 · 같은 입장 수 · 출처 (v0.32.0) */
+.an-rate { font-size: 11.5px; padding: 0 8px; border-radius: var(--r-sm); border: 1px solid rgba(63, 185, 80, .5); color: var(--ok-text); }
+.an-agree-badge { font-size: 10.5px; font-weight: 400; padding: 0 5px; border-radius: var(--r-sm); border: 1px solid var(--border); color: var(--text-2); white-space: nowrap; }
+.an-sources ul { margin: 0; padding-left: 18px; }
+.an-sources li { margin: 3px 0; line-height: 1.7; user-select: text; word-break: break-all; }
+.an-src-host { font-weight: 700; color: var(--accent-text); }
+.an-src-url { color: var(--text-2); }
 .an-table-wrap { overflow-x: auto; }
 .an-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.55; user-select: text; }
 .an-table th, .an-table td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--border); }
@@ -1069,6 +1076,9 @@ body[data-view="compress"] #panels { display: none !important; }
 .debate-parts { display: flex; gap: 6px; flex-wrap: wrap; }
 .debate-part { padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); box-shadow: inset 2px 0 0 var(--svc); }
 .debate-part:has(input:disabled) { opacity: .5; }
+.debate-part { display: inline-flex; align-items: center; }
+.debate-role { background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 0 4px; font-size: 11px; }
+#interjectText { width: 100%; background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 6px 8px; font: inherit; resize: vertical; user-select: text; }
 .debate-question { margin: 0; padding: 6px 10px; border-left: 2px solid var(--ok); color: var(--text-2); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 #debateStatus[data-kind="warn"] { color: var(--warn-text); }
 #compare:not([data-ctab="answers"]) .only-ctab-answers,
@@ -1094,6 +1104,28 @@ body[data-view="compress"] #panels { display: none !important; }
 .chain-answer summary .name { font-weight: 700; }
 .chain-answer summary button { margin-left: auto; padding: 0 8px; font-size: 11.5px; }
 .chain-body { white-space: pre-wrap; word-break: break-word; line-height: 1.6; font-size: 12.5px; padding: 6px 0 2px; max-height: 360px; overflow: auto; user-select: text; }
+/* 답변 비교 보기 방식 (v0.32.0) */
+.compare-cols.cmp-mode { display: block; overflow: auto; }
+.cmp-wrap { padding: 2px 2px 12px; }
+.cmp-note { margin: 0 0 8px; }
+.cmp-empty { padding: 14px 4px; }
+.cmp-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); }
+.cmp-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg-2); box-shadow: inset 0 -2px 0 var(--svc, var(--border)); position: sticky; top: 0; z-index: 1; font-weight: 700; color: var(--text-2); }
+.cmp-head .dot { background: var(--svc); }
+.cmp-cell { padding: 6px 8px; background: var(--bg); white-space: pre-wrap; word-break: break-word; line-height: 1.55; user-select: text; min-width: 0; }
+.cmp-cell.base { background: var(--panel-solid); }
+.cmp-cell.none { color: var(--muted); text-align: center; }
+.cmp-cell.only { background: var(--warn-soft); }
+.cmp-cell.loose { background: rgba(88, 166, 255, .07); }
+.cmp-key { font-weight: 700; }
+.cmp-key.flag { box-shadow: inset 2px 0 0 var(--warn); }
+.cmp-th { color: var(--muted); }
+.cmp-tline { margin: 1px 0; }
+.cmp-codecol { background: var(--bg); min-width: 0; }
+.cmp-code { margin: 0; padding: 8px 10px; overflow: auto; font: 12px/1.5 var(--mono); background: var(--bg); border-top: 1px solid var(--border); user-select: text; white-space: pre; }
+.cmp-code[data-lang]::before { content: attr(data-lang); display: block; color: var(--muted); font-size: 10.5px; margin-bottom: 4px; }
+.cmp-line.new { background: rgba(210, 153, 34, .22); }
+#compareMode { background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 1px 6px; font-size: 11.5px; }
 .compare-body mark.an-hit { background: var(--accent-soft); color: inherit; outline: 1px solid rgba(88, 166, 255, .55); border-radius: 2px; }
 .an-table tr.an-unique td { background: var(--warn-soft); }
 .an-unique-badge { font-size: 10.5px; font-weight: 400; padding: 0 5px; border-radius: var(--r-sm); border: 1px solid rgba(210, 153, 34, .55); color: var(--warn-text); white-space: nowrap; }

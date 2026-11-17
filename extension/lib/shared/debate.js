@@ -14,7 +14,7 @@
   'use strict';
 
   const t = (key, vars) => (i18n ? i18n.t(key, vars) : key);
-  const { buildDebatePrompt, buildDebateJudgePrompt, normalizeDebate } = chain;
+  const { buildDebatePrompt, buildDebateJudgePrompt, normalizeDebate, MAX_NOTE_CHARS } = chain;
 
   /**
    * d:
@@ -23,11 +23,12 @@
    *   judgeIds() → [id] (없어도 됨, v0.29.0: 판정으로 고를 수 있는 id — 패널 없는 로컬 LLM 포함), fitPositions(judgeId, positions) (없어도 됨)
    *   getRound() → { question, historyId } | null  (지금 라운드 — 공통 입력창으로 마지막에 보낸 질문)
    *   history: { addChain(historyId, entry), addSynth(historyId, entry) }
-   *   status(patch): 진행 상태를 화면에 { state: 'running' | 'judging' | 'done' | 'stopped' | 'error', round, rounds, waiting, judge, error }
+   *   status(patch): 진행 상태를 화면에 { state: 'running' | 'paused' | 'judging' | 'done' | 'stopped' | 'error', round, rounds, waiting, judge, error }
+   'paused'(v0.32.0): 설정에서 "라운드 사이에 끼어들기"를 켰을 때 라운드가 끝나면 사용자의 한마디를 기다린다 → interject(text)로 이어 간다
    *   notify(event), cancel(id): 패널의 답변 감시 멈추기, log
    */
   function createDebate(d) {
-    let run = null; // { stopped, waiting: Set(id), stopP, resolveStop, done: Promise }
+    let run = null; // { stopped, waiting: Set(id), stopP, resolveStop, done: Promise, pendingNote: (text) => void | null }
 
     const fail = (error) => {
       d.status({ state: 'error', error });
@@ -70,12 +71,13 @@
 
     async function loop(cur, r, c, pos) {
       const names = c.participants.map((id) => d.nameOf(id));
+      let note = ''; // 지난 라운드 뒤에 사용자가 끼워 넣은 말 (이번 라운드 요청에만 붙인다)
       for (let i = 1; i <= c.rounds; i++) {
         d.status({ state: 'running', round: i, rounds: c.rounds, waiting: names });
         const results = await Promise.all(
           c.participants.map((id) => {
             const others = c.participants.filter((x) => x !== id).map((x) => ({ name: d.nameOf(x), text: pos.get(x) }));
-            const text = buildDebatePrompt({ question: r.question, round: i, rounds: c.rounds, selfName: d.nameOf(id), others });
+            const text = buildDebatePrompt({ question: r.question, round: i, rounds: c.rounds, selfName: d.nameOf(id), others, role: c.roles?.[id], note });
             return ask(cur, id, text).then((res) => {
               if (!cur.stopped) d.status({ state: 'running', round: i, rounds: c.rounds, waiting: [...cur.waiting].map(d.nameOf) });
               return res;
@@ -83,15 +85,22 @@
           }),
         );
         if (cur.stopped) return stopped();
-        const answers = c.participants.map((id, k) => ({ id, name: d.nameOf(id), state: results[k].state, text: results[k].text || '', md: results[k].md || '' }));
+        const answers = c.participants.map((id, k) => ({ id, name: d.nameOf(id), state: results[k].state, text: results[k].text || '', md: results[k].md || '', ...(c.roles?.[id] ? { role: c.roles[id] } : {}) }));
         for (const a of answers) if (a.state === 'done' && a.md) pos.set(a.id, a.md); // 실패한 AI는 지난 입장 그대로
-        d.history.addChain(r.historyId, { kind: 'debate', round: i, rounds: c.rounds, at: Date.now(), answers });
+        d.history.addChain(r.historyId, { kind: 'debate', round: i, rounds: c.rounds, at: Date.now(), answers, ...(note ? { note } : {}) });
         if (!answers.some((a) => a.state === 'done' && a.md)) return finishError(t('debate.errRoundFailed', { round: i }));
+        // 라운드 사이에 사용자의 한마디 (마지막 라운드 뒤에는 판정으로 바로 간다)
+        note = '';
+        if (c.interject && i < c.rounds) {
+          d.status({ state: 'paused', round: i, rounds: c.rounds });
+          note = await waitNote(cur);
+          if (cur.stopped) return stopped();
+        }
       }
       const judgeName = d.nameOf(c.judge);
       d.status({ state: 'judging', judge: judgeName, rounds: c.rounds });
       // 판정이 로컬 LLM이면 컨텍스트 한도에 맞춰 입장 글을 줄인다 (v0.29.0, rounds.js fitPositions)
-      const all = c.participants.map((id) => ({ name: d.nameOf(id), text: pos.get(id) }));
+      const all = c.participants.map((id) => ({ name: d.nameOf(id), text: pos.get(id), ...(c.roles?.[id] ? { role: c.roles[id] } : {}) }));
       const positions = d.fitPositions ? d.fitPositions(c.judge, all) : all;
       const res = await ask(cur, c.judge, buildDebateJudgePrompt({ question: r.question, positions, rounds: c.rounds }));
       if (cur.stopped) return stopped();
@@ -109,6 +118,23 @@
       }
     }
 
+    /** 라운드 사이: 사용자가 interject()를 부르거나 멈출 때까지 기다린다 → 끼워 넣은 말 (없으면 '') */
+    function waitNote(cur) {
+      return Promise.race([new Promise((res) => (cur.pendingNote = res)), cur.stopP.then(() => '')]).finally(() => {
+        cur.pendingNote = null;
+      });
+    }
+
+    /** 끼어들기: 멈춰 있던 토론에 한마디(없으면 빈 글)를 넣고 다음 라운드로 → { ok } */
+    function interject(text) {
+      if (!run || !run.pendingNote) return { ok: false, error: t('debate.errNotPaused') };
+      const note = String(text || '').trim().slice(0, MAX_NOTE_CHARS);
+      const go = run.pendingNote;
+      run.pendingNote = null; // 두 번 눌러도 한 번만 받는다
+      go(note);
+      return { ok: true, note: !!note };
+    }
+
     /** 멈추기: 기다리던 패널의 답변 감시를 멈추고 토론을 끝낸다 → { ok } */
     function stop() {
       if (!run) return { ok: false, error: t('debate.errNotRunning') };
@@ -118,7 +144,7 @@
       return { ok: true };
     }
 
-    return { start, stop, running: () => !!run, whenDone: () => (run ? run.done : Promise.resolve()) };
+    return { start, stop, interject, running: () => !!run, whenDone: () => (run ? run.done : Promise.resolve()) };
   }
 
   return { createDebate };

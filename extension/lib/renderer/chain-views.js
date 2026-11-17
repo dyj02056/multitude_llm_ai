@@ -43,9 +43,11 @@ function chainCard(c) {
   if (c.kind === 'debate') {
     head.append(span('chain-kind', t('chain.debateRound', { round: c.round, rounds: c.rounds || c.round })), span('muted-label', chainTime(c.at)));
     card.append(head);
+    if (c.note) card.append(chainText(t('chain.userNote'), c.note, 'var(--accent)')); // 라운드 앞에 끼워 넣은 말 (v0.32.0)
     for (const a of c.answers || []) {
       const note = a.state && a.state !== 'done' ? ` · ${ANSWER_STATE_TEXT[a.state] || a.state}` : '';
-      card.append(chainText(`${a.name}${note}`, a.md || a.text || '', svcColor(a.id)));
+      const role = a.role ? ` (${t(`debate.role.${a.role}`)})` : '';
+      card.append(chainText(`${a.name}${role}${note}`, a.md || a.text || '', svcColor(a.id)));
     }
     return card;
   }
@@ -135,7 +137,7 @@ const analysisLabel = (a, i) => t('analysis.pickLabel', { n: i + 1, judge: a.jud
  * 분석이 여러 개일 때(다시 분석): 둘을 골라 나란히. 한쪽에만 있는 이견 쟁점은 강조 (shared/analysis.js compareAnalyses).
  * 처음엔 가장 최근 분석과 그 바로 앞 분석. 하나만 보기로 돌아갈 수도 있다.
  */
-function analysisCompareBlock(list, { onJump } = {}) {
+function analysisCompareBlock(list, { onJump, sources } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'an-compare';
   const pick = { a: list.length - 2, b: list.length - 1, side: true };
@@ -165,7 +167,7 @@ function analysisCompareBlock(list, { onJump } = {}) {
 
   function draw() {
     selA.disabled = !pick.side;
-    if (!pick.side) return out.replaceChildren(analysisBlock(list[pick.b], { onJump }));
+    if (!pick.side) return out.replaceChildren(analysisBlock(list[pick.b], { onJump, sources }));
     const A = list[pick.a];
     const B = list[pick.b];
     const pa = AN.parseAnalysis(A.md || A.text, { names: A.names || [] });
@@ -174,7 +176,7 @@ function analysisCompareBlock(list, { onJump } = {}) {
     const grid = document.createElement('div');
     grid.className = 'an-compare-grid';
     const note = pa.ok && pb.ok ? t('analysis.compareNote', { a: diff.onlyA.length, b: diff.onlyB.length, same: diff.same.length }) : t('analysis.compareBroken');
-    grid.append(analysisBlock(A, { onJump, unique: new Set(diff.onlyA) }), analysisBlock(B, { onJump, unique: new Set(diff.onlyB) }));
+    grid.append(analysisBlock(A, { onJump, sources, unique: new Set(diff.onlyA) }), analysisBlock(B, { onJump, sources, unique: new Set(diff.onlyB) }));
     out.replaceChildren(span('analysis-note', note), grid);
   }
   draw();

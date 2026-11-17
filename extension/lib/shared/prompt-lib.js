@@ -356,7 +356,19 @@
       layout: typeof p.layout === 'string' && /^[a-z]{1,20}$/.test(p.layout) ? p.layout : '',
       synth: { target: okSvc(synth.target), auto: synth.auto === true },
       debate: db
-        ? { participants: svcIds(db.participants, MAX_DEBATE), rounds: Number.isInteger(rounds) && rounds >= 1 && rounds <= MAX_DEBATE ? rounds : 0, judge: okSvc(db.judge) }
+        ? (() => {
+            const participants = svcIds(db.participants, MAX_DEBATE);
+            // 역할 · 라운드 사이 끼어들기 (v0.32.0): 참가 AI의 아는 역할만, 정한 경우에만 싣는다
+            const roles = {};
+            if (db.roles && typeof db.roles === 'object' && !Array.isArray(db.roles)) for (const id of participants) if (['pro', 'con', 'rebut'].includes(db.roles[id])) roles[id] = db.roles[id];
+            return {
+              participants,
+              rounds: Number.isInteger(rounds) && rounds >= 1 && rounds <= MAX_DEBATE ? rounds : 0,
+              judge: okSvc(db.judge),
+              ...(Object.keys(roles).length ? { roles } : {}),
+              ...(db.interject === true ? { interject: true } : {}),
+            };
+          })()
         : null,
     };
   }

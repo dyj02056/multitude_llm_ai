@@ -80,7 +80,7 @@
       [t('preset.sumSynth'), `${p.synth.target ? nameOf(p.synth.target) : t('preset.noneValue')}${p.synth.auto ? ` · ${t('preset.sumAuto')}` : ''}`],
     ];
     if (p.debate) {
-      lines.push([t('preset.sumDebate'), t('preset.sumDebateValue', { names: p.debate.participants.map(nameOf).join(', ') || '-', rounds: p.debate.rounds || '-', judge: p.debate.judge ? nameOf(p.debate.judge) : '-' })]);
+      lines.push([t('preset.sumDebate'), (p.debate.roles && Object.keys(p.debate.roles).length ? `${t('preset.sumDebateRoles', { roles: Object.entries(p.debate.roles).map(([id, r]) => `${nameOf(id)}=${t(`debate.role.${r}`)}`).join(', ') })} · ` : '') + (p.debate.interject ? `${t('preset.sumDebateInterject')} · ` : '') + t('preset.sumDebateValue', { names: p.debate.participants.map(nameOf).join(', ') || '-', rounds: p.debate.rounds || '-', judge: p.debate.judge ? nameOf(p.debate.judge) : '-' })]);
     }
     return lines;
   }

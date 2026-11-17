@@ -5,7 +5,7 @@
 //
 // [쉽게 말하면] 패널 머리줄의 → 넘기기, 패널 아래 [다시 보내기] · [다른 AI로], 토론 창의 [시작] · [멈추기]가 부르는 곳입니다.
 
-const { INTENTS, MAX_ROUNDS } = require('../../shared/chain');
+const { INTENTS, MAX_ROUNDS, MAX_NOTE_CHARS, cleanDebateExtras } = require('../../shared/chain');
 const { t } = require('../../shared/i18n');
 
 const okId = (v) => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(v);
@@ -17,6 +17,7 @@ function cleanDebateCfg(cfg) {
     participants: Array.isArray(c.participants) ? c.participants.filter(okId).slice(0, 6) : [],
     rounds: Number.isInteger(c.rounds) && c.rounds >= 1 && c.rounds <= MAX_ROUNDS ? c.rounds : undefined,
     judge: okId(c.judge) ? c.judge : undefined,
+    ...cleanDebateExtras(c, okId), // 역할 · 라운드 사이 끼어들기 (v0.32.0): 정한 경우에만 싣는다
   };
 }
 
@@ -34,6 +35,8 @@ function register(ctx) {
   ipcMain.handle('prompt:elsewhere', (_e, from, to) => (okId(from) && okId(to) && ctx.hasPanel(to) ? ctx.rounds().sendElsewhere(from, to) : closed));
   ipcMain.handle('debate:start', (_e, cfg) => ctx.rounds().startDebate(cleanDebateCfg(cfg)));
   ipcMain.handle('debate:stop', () => ctx.rounds().stopDebate());
+  // 라운드 사이 끼어들기 (v0.32.0): 글만 받는다 (4000자까지, 비어도 됨 — 그냥 이어 가기)
+  ipcMain.handle('debate:interject', (_e, text) => ctx.rounds().interjectDebate(typeof text === 'string' ? text.slice(0, MAX_NOTE_CHARS) : ''));
 }
 
 module.exports = { register, cleanDebateCfg };

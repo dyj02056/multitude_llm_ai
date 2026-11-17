@@ -575,9 +575,11 @@
           participants: Array.isArray(c.participants) ? c.participants.filter(okChainId).slice(0, 6) : [],
           rounds: Number.isInteger(c.rounds) && c.rounds >= 1 && c.rounds <= MLA.chain.MAX_ROUNDS ? c.rounds : undefined,
           judge: okChainId(c.judge) ? c.judge : undefined,
+          ...MLA.chain.cleanDebateExtras(c, okChainId), // 역할 · 라운드 사이 끼어들기 (v0.32.0)
         });
       },
       stop: async () => rounds.stopDebate(),
+      interject: async (text) => rounds.interjectDebate(typeof text === 'string' ? text.slice(0, MLA.chain.MAX_NOTE_CHARS) : ''),
     },
     copyAnswer: async (id) => {
       const { text, copied, total } = await rounds.collectMarkdown(id);

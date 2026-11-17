@@ -67,6 +67,9 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 
 - **Hand-off**: press **→** in a panel header. A bar appears under the panel: pick what to ask — **검토** (review: errors and omissions), **반박** (counter-argue) or **이어서** (continue: go deeper, next steps) — and click the AI that should receive it. Only that AI gets the original question plus this panel's latest answer. The reply is kept in history as a hand-off.
 - **Debate**: press **토론** (Debate) next to the synthesis controls. Pick **2–3** participants, **1–3** rounds (default 2) and a judge AI (default: the synthesis target), then **시작** (Start). Each round every participant gets the other participants' latest answers and is asked to rebut and refine; at the end the judge writes agreements, remaining disagreements and a final answer. The debate starts from the answers to the current question, so send a question first.
+- **Roles** (v0.32.0): next to each participant you can pick **Pro / Con / Rebuttal only**. An AI with a role argues from that side for the whole debate (a rebuttal-only AI looks for weaknesses and counterexamples instead of giving its own conclusion), and the judge is told roles were given. Roles are optional.
+- **Note between rounds** (v0.32.0): tick **Pause between rounds so I can add a note** and, after every round except the last, the debate pauses and a window opens. What you write is added to the **next** round's request for every participant (`Add and continue`, or leave it empty / `Just continue`; `Ctrl+Enter` sends). `Esc` only closes the window — the debate stays paused and the **Add note** button under the input box reopens it. Notes are kept in history and exports as "My note" before that round.
+- **Saving the setup** (v0.32.0): participants, rounds, judge, **roles and the pause setting** are saved in a work preset; picking the preset opens the debate window with them.
 - Progress shows under the input box (`Debate round 1/2 — waiting for …`); **토론 멈추기** (Stop debate) ends it at any time (finished rounds are kept). A notification is shown when it ends.
 - Results appear in **Compare › Hand-offs · Debate** and in **History** (expand the hand-offs line), and are included in MD/HTML exports.
 - A debate sends one extra message per participant per round (2 rounds × 3 AIs = 6, plus 1 for the judge). Use fewer rounds on services with tight usage limits.
@@ -75,11 +78,25 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 
 ![Debate setup](../screenshots/en/28-debate.png)
 
+![Roles and the pause setting](../screenshots/en/52-debate-roles.png)
+
+![Adding a note to a paused debate](../screenshots/en/53-debate-note.png)
+
 ![Compare › Hand-offs · Debate](../screenshots/en/29-debate-result.png)
 
 ## 5. Compare answers
 
 **cmp** (`Ctrl+Shift+D`) shows the last question and each AI's latest answer in columns. Each column can be copied as Markdown.
+
+- **View mode** (v0.32.0, drop-down at the top; remembered): the answer text does not change, only how it is laid out.
+  - **Side by side** (default): the whole answer per column.
+  - **Align paragraphs**: one row per paragraph of the baseline answer (the `Baseline:` list), with the **similar paragraph of every other AI on the same row**, paired one-to-one by word and character overlap. Paragraphs with no counterpart get a yellow row (only that AI has it); paired paragraphs that overlap little are tinted blue. Table lines are shown as `a · b`.
+  - **Code only**: just the code blocks per AI, with the language name; with **Highlight differences** on, lines missing from the baseline's code are highlighted.
+  - **Compare tables**: Markdown tables are matched by the **first column (the item)** and compared cell by cell; values that are not alike (or whose numbers differ) are marked `differs`, items that only some AIs' tables have are marked `missing in some`. The table with the most rows per AI is used.
+
+![Align paragraphs](../screenshots/en/48-compare-align.png)
+
+![Compare tables](../screenshots/en/49-compare-table.png)
 
 - **차이 강조** (Highlight differences): sentences that are not in the reference answer are highlighted; each column shows `새 내용 N%` (new content %). Pick the reference with `기준:`.
 - **분석** (Analysis) tab → **분석 요청**: the judging AI answers in a fixed format, which the app draws as:
@@ -88,10 +105,15 @@ Choose the judging AI in the `종합` dropdown and press **종합 요청** (Requ
 |---|---|---|
 | Disagreements | `이견` | One row per issue: each AI's position and a verdict. Click a cell to jump to that answer; the paragraph (or table/list line) most related to the issue is highlighted (v0.26.0) |
 | Agreements | `공통 의견` | What most AIs agree on |
+| Sources (v0.32.0) | — | Links found in the answers and the analysis, by address (query tracking values, `#fragments` and trailing punctuation removed); AI name tags show who used each link, links used by several AIs come first. The app only **copies** links, it does not open them |
 | Weak claims | `근거 부족` | Claims without support, by AI |
 | Final answer | `최종 답변` | The merged answer, with a copy button |
 
+The header shows an **agreement** figure (v0.32.0): each common point counts as full agreement and each disagreement row counts by the share of position-stating AIs that hold a similar position; averaged. The `2/4 agree` badge on a row means 2 of the 4 compared AIs hold a similar position. "Similar" is estimated from text overlap (same numbers, many shared characters and words), not meaning, so treat the figures as estimates; cells such as "not mentioned" are not counted as positions.
+
 ![Analysis](../screenshots/en/13-analysis.png)
+
+![Agreement figure, per-row counts and the sources section](../screenshots/en/51-analysis-rate.png)
 
 Run the analysis again (also with another judge) and earlier analyses are kept: with two or more, pick two to see them **side by side**; issues found by only one of them are marked `이쪽에만` (only here) (v0.26.0).
 
