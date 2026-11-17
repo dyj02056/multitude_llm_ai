@@ -1220,3 +1220,28 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, summary
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 /* 움직임을 줄이도록 설정한 사용자에게는 깜빡임 · 전환을 끈다 */
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+/* 로드맵 (v0.38.0, roadmap-ui.js) — 진행 그림의 색은 shared/roadmap-charts.js의 CSS가 입힌다 */
+.modal-box.roadmap-box { width: min(980px, 95vw); }
+.rm-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--bg-2); }
+.rm-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 7px 12px; color: var(--text-2); }
+.rm-tabs button[aria-selected="true"] { color: var(--bright); border-bottom-color: var(--accent); }
+.rm-body [hidden] { display: none; }
+.rm-body textarea { width: 100%; box-sizing: border-box; font: 12.5px/1.45 var(--mono); resize: vertical; }
+.rm-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.rm-warn { margin: 6px 0; padding: 6px 8px; border: 1px solid var(--warn); background: var(--warn-soft); color: var(--warn-text); white-space: pre-wrap; font: 12px/1.45 var(--mono); }
+.rm-next { margin: 4px 0 8px; padding: 6px 8px; border-left: 3px solid var(--accent); background: var(--accent-soft); }
+.rm-ms { margin-bottom: 14px; }
+.rm-ms h3, .rm-h { margin: 10px 0 6px; font-size: 13px; color: var(--bright); }
+.rm-task { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 6px 8px; margin: 4px 0; border: 1px solid var(--border); border-left: 4px solid var(--c, var(--border)); border-radius: var(--r-sm); }
+.rm-task.rm-locked { opacity: .65; }
+.rm-task-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rm-glyph-lg { color: var(--c); font-weight: 700; min-width: 1.2em; text-align: center; }
+.rm-acts { display: flex; gap: 4px; grid-column: 1 / -1; flex-wrap: wrap; }
+.rm-accept { grid-column: 1 / -1; }
+.rm-edit { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.rm-field { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
+.rm-field input[type="text"], .rm-field input[type="number"], .rm-field textarea { width: 100%; box-sizing: border-box; }
+.rm-edit-bar { display: flex; gap: 6px; }
+.rm-doc-plan { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 8px; margin: 6px 0; display: flex; flex-direction: column; gap: 4px; }
+.rm-doc-pre { margin: 0; max-height: 220px; overflow: auto; font: 12px/1.45 var(--mono); white-space: pre-wrap; background: var(--field); padding: 6px; user-select: text; }

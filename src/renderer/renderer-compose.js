@@ -444,6 +444,7 @@ host.on('state', (next) => {
   window.onPreviewState?.(); // 보내기 전 미리보기 창: 그 화면을 떠났으면 보내지 않고 닫는다 (send-preview.js)
   window.onDebateState?.(); // 토론 설정 창도 같은 규칙 (debate-ui.js, v0.26.0)
   window.onWorkflowState?.(); // 작업 흐름 설정 창도 같은 규칙 (workflow-ui.js, v0.33.0)
+  window.onRoadmapState?.(); // 로드맵 창도 같은 규칙 (roadmap-ui.js, v0.38.0)
   window.onOnboardState?.(); // 첫 사용 안내: 처음이면 띄우고, 화면을 떠났으면 닫는다 (onboarding.js, v0.31.0)
   if (state.chatView === 'help') renderUpdate();
   // 툴바 이름 뒤의 "~/chat" 같은 경로 = 지금 보는 화면

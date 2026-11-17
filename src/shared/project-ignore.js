@@ -32,6 +32,7 @@
   // L1: 앱 내장 "항상 제외" (.gitignore 문법)
   const L1_RULES = [
     '.git/',
+    '.mla/', // 로드맵 진행 데이터 (v0.38.0) — AI에게 보내지 않는다
     'node_modules/',
     '.env',
     '.env.*',
