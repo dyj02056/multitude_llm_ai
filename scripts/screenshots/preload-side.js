@@ -63,6 +63,7 @@ window.chrome = {
   runtime: {
     id: 'shot',
     getURL: (p) => `shot://repo/extension/${p}`,
+    onMessage: ev(), // v0.38.2부터 사이드탭이 background의 알림(쿠키 바뀜)을 듣는다
     connect: () => {
       const port = { onMessage: ev(), onDisconnect: ev(), disconnect() {} };
       port.postMessage = (m) => m?.type === 'hello' && setTimeout(() => port.onMessage.fire({ type: 'ready' }), 10);

@@ -1,14 +1,13 @@
-/* 사이드탭(크롬 사이드 패널) 전용 모양 (v0.19.0). 색 · 글꼴 · 버튼은 앱과 같은 lib/renderer/styles.css를 쓴다. */
+/* 사이드탭(크롬 사이드 패널) 전용 모양 (v0.19.0, v0.39.0 장식 정리). 색 · 글꼴 · 버튼은 앱과 같은 lib/renderer/styles.css를 쓴다. */
 /* [쉽게 말하면] 폭이 좁은(약 320~600px) 세로 화면이라: 위 막대 → 맥락 줄 → AI 패널(위/아래) → 입력창 순서로 쌓습니다. */
 body.side { display: flex; flex-direction: column; height: 100vh; min-width: 0; }
 
 #spBar { flex: none; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--border); }
-#spBar .brand::after { display: none; }
 #spBar button { padding: 1px 7px; font-size: 11.5px; flex: none; }
 #spBar button.active { background: var(--text); border-color: var(--text); color: var(--bg); }
 .sp-models { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
 .sp-model { display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); color: var(--bright); font-size: 11.5px; white-space: nowrap; }
-.sp-model::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--svc); }
+.sp-model::before { content: ""; width: 6px; height: 6px; border-radius: 1px; background: var(--svc); }
 
 .sp-picker { flex: none; border-bottom: 1px solid var(--border); padding: 6px 8px 8px; background: var(--bg); }
 .sp-picker[hidden] { display: none; }
@@ -16,9 +15,9 @@ body.side { display: flex; flex-direction: column; height: 100vh; min-width: 0; 
 #spPickNote { color: var(--warn-text); }
 .sp-pick-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
 .sp-pick { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; text-align: left; color: var(--text); }
-.sp-pick::before { content: "[ ]"; color: var(--muted); }
+.sp-pick::before { content: ""; width: 12px; height: 12px; flex: none; border: 1px solid var(--control-border); border-radius: 2px; box-sizing: border-box; }
 .sp-pick.on { color: var(--bright); background: var(--accent-soft); }
-.sp-pick.on::before { content: "[x]"; color: var(--ok); }
+.sp-pick.on::before { background: var(--text); border-color: var(--text); box-shadow: inset 0 0 0 2px var(--bg); } /* 고른 칸: 채운 네모 (v0.39.0: "[x]" 글자 대신) */
 .sp-pick .swatch { width: 6px; height: 6px; border-radius: 50%; background: var(--svc); flex: none; }
 
 /* 맥락 줄: ctx: 제목 · 주소 · 글자 수 */
@@ -52,10 +51,9 @@ body.sp-dragging .sp-frame { pointer-events: none; }
 /* 입력창 */
 #spComposer { flex: none; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px 8px; border-top: 1px solid var(--border); }
 .sp-input { position: relative; }
-.sp-input::before { content: "❯"; position: absolute; left: 9px; top: 6px; color: var(--ok); font: 700 13px/1.5 var(--mono); pointer-events: none; }
 #spPrompt {
   width: 100%; resize: none; display: block; background: var(--bg); color: var(--text);
-  border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 6px 10px 6px 24px; font: 12.5px/1.5 var(--mono); user-select: text;
+  border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 6px 10px; font: 13px/1.5 var(--sans); user-select: text;
 }
 #spPrompt::placeholder { color: var(--muted); }
 #spPrompt:focus { border-color: var(--text-2) !important; }
@@ -64,11 +62,10 @@ body.sp-dragging .sp-frame { pointer-events: none; }
 #spHint { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* 템플릿 · 스킬 고르기 (v0.21.0) */
 .sp-foot select { flex: none; max-width: 108px; background: var(--field); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--r-sm); padding: 1px 4px; font-size: 11px; }
-.sp-foot select.on { border-color: rgba(88, 166, 255, .6); color: var(--accent-text); }
+.sp-foot select.on { border-color: rgba(141, 179, 226, .6); color: var(--accent-text); }
 #spHint[data-kind="error"] { color: var(--err-text); }
 #spHint[data-kind="ok"] { color: var(--ok-text); }
 #spSend { padding: 3px 14px; flex: none; }
-#spSend::after { content: " ⏎"; font-weight: 400; }
 
 /* 한 번 누르기 질문 · 이 페이지에서 전에 물어본 것 (v0.29.0) */
 .sp-site { flex: none; display: flex; align-items: center; gap: 4px; padding: 2px 8px; border-bottom: 1px solid var(--border); font-size: 11.5px; background: var(--bg-2); }
@@ -90,7 +87,7 @@ body.sp-dragging .sp-frame { pointer-events: none; }
 .sp-compare-cols { display: flex; gap: 6px; padding: 0 6px 6px; min-height: 0; overflow: auto; }
 .sp-cmp-col { flex: 1 1 0; min-width: 0; font-size: 12px; line-height: 1.5; }
 .sp-cmp-col .sp-cmp-name { display: block; font-weight: 700; margin-bottom: 2px; color: var(--accent-text); }
-.sp-cmp-col mark { background: rgba(210, 153, 34, 0.28); color: inherit; border-radius: 2px; padding: 0 1px; }
+.sp-cmp-col mark { background: rgba(212, 167, 68, 0.28); color: inherit; border-radius: 2px; padding: 0 1px; }
 .sp-quick button.sp-default { border-color: var(--accent); color: var(--accent-text); }
 .sp-quick .sp-toggle[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
 .sp-quick { display: flex; gap: 4px; padding: 4px 6px 0; flex-wrap: wrap; }

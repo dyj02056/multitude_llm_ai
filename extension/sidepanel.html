@@ -16,11 +16,11 @@
        가운데: AI 웹 채팅 1~2개 (2개면 위/아래, 가운데 선을 끌어 비율 조절)
        아래: 질문 입력창 — Enter로 열린 패널 모두에 보냅니다 -->
   <header id="spBar">
-    <strong class="brand" data-path="side">multitude</strong>
+    <strong class="brand">Multitude</strong>
     <div id="spModels" class="sp-models"></div>
     <span class="spacer"></span>
-    <button id="spPick" class="ghost" data-i18n-title="ext.side.pickTitle" aria-expanded="false">models</button>
-    <button id="spApp" class="ghost" data-i18n-title="ext.side.appTitle">app ↗</button>
+    <button id="spPick" class="ghost" data-i18n-title="ext.side.pickTitle" aria-expanded="false" data-i18n="ext.side.models">모델</button>
+    <button id="spApp" class="ghost" data-i18n-title="ext.side.appTitle" data-i18n="ext.side.app">앱 탭 ↗</button>
   </header>
 
   <div id="spPicker" class="sp-picker" hidden>
@@ -29,11 +29,11 @@
   </div>
 
   <div id="spCtx" class="sp-ctx" data-state="none">
-    <span class="sp-ctx-label">ctx:</span>
+    <span class="sp-ctx-label" data-i18n="ext.side.ctxLabel">페이지</span>
     <span id="spCtxText" class="sp-ctx-text"></span>
     <button id="spCtxAuto" class="accent" hidden data-i18n-title="ext.side.ctxAutoTitle" data-i18n="ext.side.ctxAuto"></button>
     <button id="spCtxGrab" class="ghost" data-i18n-title="ext.side.ctxGrabTitle" data-i18n-aria="ext.side.ctxGrabTitle">↻</button>
-    <button id="spCtxToggle" class="ghost" data-i18n-title="ext.side.ctxToggleTitle">on</button>
+    <button id="spCtxToggle" class="ghost" data-i18n-title="ext.side.ctxToggleTitle">켬</button>
     <button id="spCtxClear" class="ghost" data-i18n-title="ext.side.ctxClearTitle" data-i18n-aria="ext.side.ctxClearTitle">✕</button>
   </div>
 
@@ -102,7 +102,7 @@
       <select id="spSkill" data-i18n-title="ext.side.skillTitle" data-i18n-aria="ext.side.skillAria"></select>
       <span id="spHint" class="muted-label" role="status" aria-live="polite" data-i18n="ext.side.hint"></span>
       <span class="spacer"></span>
-      <button id="spSend" class="primary">send</button>
+      <button id="spSend" class="primary" data-i18n="ext.side.send">보내기</button>
     </div>
   </footer>
 

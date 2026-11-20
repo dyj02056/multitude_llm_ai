@@ -146,21 +146,21 @@
 
   // 그림 CSS: 상태 색(--c)은 여기서만 정한다. 앱은 styles.css의 변수(--text · --border …)를, 내보내기 HTML은 CSS_LIGHT를 쓴다.
   const CSS = [
-    '.rm-s-done{--c:#2ea043}.rm-s-verify{--c:#388bfd}.rm-s-doing{--c:#d29922}.rm-s-blocked{--c:#f85149}.rm-s-todo{--c:#8b949e}',
-    '.rm-ring,.rm-bars,.rm-map,.rm-burn{--rm-text:var(--text,#c9d1d9);--rm-sub:var(--text-2,#8b949e);--rm-track:var(--border,#30363d);--rm-node:var(--bg-2,#161b22);max-width:100%}',
+    '.rm-s-done{--c:#4fa36c}.rm-s-verify{--c:#7ea6d8}.rm-s-doing{--c:#d4a744}.rm-s-blocked{--c:#ec7a70}.rm-s-todo{--c:#a8a8a8}',
+    '.rm-ring,.rm-bars,.rm-map,.rm-burn{--rm-text:var(--text,#e2e2e2);--rm-sub:var(--text-2,#a8a8a8);--rm-track:var(--border,#2e2e2e);--rm-node:var(--bg-2,#1d1d1d);max-width:100%}',
     '.rm-ring{width:170px;height:170px;flex:none}.rm-bars,.rm-burn{width:100%;max-width:560px;height:auto}',
     '.rm-arc{stroke:var(--c)}.rm-track{stroke:var(--rm-track)}.rm-seg{fill:var(--c)}.rm-seg.rm-s-todo{fill:none;stroke:var(--c);stroke-dasharray:3 3}',
     // 막대 위 기호: 칠한 칸은 흰색, 노랑(진행 중) 위는 짙은 색, 칠하지 않은 대기 칸은 상태 색 — 흰 바탕 내보내기에서도 보이게 (v0.38.1)
-    '.rm-glyph{fill:#fff;font:700 11px system-ui,sans-serif}.rm-glyph.rm-s-doing{fill:#1f2328}.rm-glyph.rm-s-todo{fill:var(--c)}.rm-node .rm-glyph{fill:var(--c);font-size:13px}',
+    '.rm-glyph{fill:#fff;font:700 11px system-ui,sans-serif}.rm-glyph.rm-s-doing{fill:#1d1d1d}.rm-glyph.rm-s-todo{fill:var(--c)}.rm-node .rm-glyph{fill:var(--c);font-size:13px}',
     '.rm-ring-pct{fill:var(--rm-text);font:700 28px system-ui,sans-serif}.rm-ring-sub{fill:var(--rm-sub);font:12px system-ui,sans-serif}',
     '.rm-label,.rm-pct,.rm-node-t,.rm-col,.rm-tick{fill:var(--rm-text);font:12px system-ui,sans-serif}.rm-col{font-weight:700}.rm-tick{fill:var(--rm-sub);font-size:11px}',
     '.rm-node rect{fill:var(--rm-node);stroke:var(--c);stroke-width:2}.rm-node.rm-s-todo rect{stroke-dasharray:4 3}.rm-node.rm-locked{opacity:.55}.rm-node.rm-current rect{stroke-width:4}.rm-node{cursor:pointer}.rm-node:focus{outline:none}.rm-node:focus rect{stroke-width:4}',
     '.rm-edge{stroke:var(--rm-sub);stroke-width:1.4}.rm-arrowhead{fill:var(--rm-sub)}',
-    '.rm-axis{stroke:var(--rm-sub);stroke-width:1}.rm-est{stroke:#d29922;stroke-width:2;stroke-dasharray:2 4}',
-    '.rm-burn-line{stroke:#388bfd;stroke-width:2.5}.rm-dot{fill:#388bfd}',
+    '.rm-axis{stroke:var(--rm-sub);stroke-width:1}.rm-est{stroke:#d4a744;stroke-width:2;stroke-dasharray:2 4}',
+    '.rm-burn-line{stroke:#7ea6d8;stroke-width:2.5}.rm-dot{fill:#7ea6d8}',
     '.rm-dash-top{display:flex;gap:20px;align-items:center;flex-wrap:wrap}.rm-dash-bars{flex:1 1 320px;min-width:0}.rm-scroll{overflow:auto}.rm-dash h3{margin:14px 0 6px;font-size:13px}.rm-note{font-size:12px;opacity:.8}',
   ].join('\n');
-  const CSS_LIGHT = '.rm-ring,.rm-bars,.rm-map,.rm-burn{--rm-text:#1f2328;--rm-sub:#57606a;--rm-track:#d8dee4;--rm-node:#fff}';
+  const CSS_LIGHT = '.rm-ring,.rm-bars,.rm-map,.rm-burn{--rm-text:#1d1d1d;--rm-sub:#57606a;--rm-track:#d8dee4;--rm-node:#fff}';
 
   const fmtDate = (ms) => {
     const d = new Date(ms);

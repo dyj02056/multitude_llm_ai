@@ -192,7 +192,7 @@ const PX = MLA.patch;
     if (b.split) notes.push(span('cb-warn', t('project.bar.splitCount', { got: b.split.got, total: b.split.total })));
     if (b.continued) notes.push(span(b.continued.error ? 'cb-bad' : 'cb-warn', b.continued.error ? t('project.bar.contFailed') : t('project.bar.contCount', { n: b.continued.rounds })));
 
-    const collect = button('collect', t('project.bar.collectTitle', { ai: ai.name }), () => window.onCollectClick(id));
+    const collect = button(t('project.bar.collect'), t('project.bar.collectTitle', { ai: ai.name }), () => window.onCollectClick(id));
     const view = live.length
       ? button(t('project.bar.view'), t('project.bar.viewTitle'), () => openPreview(ai))
       : button(t('project.bar.viewChanges'), t('project.bar.viewChangesTitle'), () => host.setView('changes'));

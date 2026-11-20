@@ -306,7 +306,7 @@
       host.setSidebar(side);
     }
     $('#projectBtn').classList.toggle('active', !!project.info);
-    $('#projectBtn').textContent = project.info ? `proj:${project.info.name}` : 'proj';
+    $('#projectBtn').textContent = project.info ? t('ui.tb.projectNamed', { name: project.info.name }) : t('ui.tb.project');
     $('#psName').textContent = project.info?.name || '';
     $('#psConnect').hidden = !project.info?.needsPermission;
     $('#projectChip').hidden = !has();

@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.38.2-58a6ff)
+![version](https://img.shields.io/badge/version-0.39.0-8db3e2)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -25,7 +25,7 @@
 | **코드 작업** | 프로젝트 폴더 맥락 보내기 → AI별 수정안 비교 → 미리보기 · 테스트 실행 · 적용 · 되돌리기, 잘린 답변 막기 |
 | **브라우저에서** | 크롬 확장: 같은 앱을 탭 하나로, 오른쪽 클릭으로 웹페이지 질문, **사이드탭**(보고 있는 페이지 옆에 AI 2개) |
 | **실행 형태** | Windows 앱(Electron, Google 계정 하나로 로그인, 자동 업데이트) · 크롬 확장(크롬에 로그인된 계정 그대로) |
-| **디자인** | 터미널(CLI) 느낌의 검정 단색 · 고정폭 글꼴 화면 (v0.19.0~) |
+| **디자인** | 어두운 회색 단색 · 1px 선 · 각진 모서리, 화면 글자는 본문 글꼴 · 코드만 고정폭 (v0.19.0~, v0.39.0 정리) |
 
 ## 구조
 
@@ -175,6 +175,7 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.39.0** | **화면 정리** — 틀(어두운 단색 · 1px 선 · 높이)은 그대로 두고 `❯` · `~/chat` · `[x]` · `##` 같은 기호 장식과 `lib · proj · diff` 같은 영문 약어 버튼을 걷어 냄 · 화면 글자는 본문 글꼴 · 좁은 창(960px)에서도 넘치지 않게 |
 | **v0.38.2** | **크롬 확장 로그인 · 보내기 (웹 스토어 반려 대응)** — "로그인 탭"에서 로그인하면 패널이 **저절로 다시 연결**(↻ 안 눌러도 됨) · 로그아웃이나 Duck.ai 첫 이용 동의 화면 때문에 못 보내면 "입력창을 찾지 못했습니다" 대신 **원인과 할 일**을 알림(동의는 확장이 대신 누르지 않음) · 스토어 설명 · 심사 안내 다시 씀 |
 | **v0.38.1** | **로드맵 고침** — Windows 앱에서 대시보드 그림이 깨지던 문제(CSP), 분해 전에 바꾼 설정 무시, README 붙이기의 `## intro` 제목, 실패 시 새 파일 남음 고침 · 긴 한글 제목 넘침, 같은 마일스톤 화살표, 링 색과 %가 다르던 문제 등 그림 가독성 · 영어 안내 · 코드 구조 문서 갱신 |
 | **v0.38.0** | **로드맵** — 계획서를 마일스톤 · 작업으로 쪼개고(AI 분해 답 검사) 작업마다 진행 상태 기록, **진행 링 · 마일스톤 막대 · 선행 관계 지도 · 번다운** 그림, 프로젝트 폴더에 `docs/procedure.md` · `README.md` 자동 정리(내가 쓴 글 · 기존 README 보호) · 단계마다 사람이 확인하는 반자동 |

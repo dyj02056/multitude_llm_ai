@@ -178,7 +178,7 @@
       url,
       status,
       loginBtn,
-      button('copy', t('ext.side.copyTitle'), () => copyAnswer(svc.id)),
+      button(t('ext.side.copy'), t('ext.side.copyTitle'), () => copyAnswer(svc.id)),
       button('+', t('ext.side.newChat'), () => {
         p.sentKey = '';
         p.skillSent = '';
@@ -451,7 +451,7 @@
     const state = ctxError && !ctx ? 'error' : SP.contextState(ctx, { on: prefs.ctxOn, activeTabId });
     box.dataset.state = state;
     $('#spCtxAuto').hidden = autoRead;
-    $('#spCtxToggle').textContent = prefs.ctxOn ? 'on' : 'off';
+    $('#spCtxToggle').textContent = prefs.ctxOn ? t('ext.side.on') : t('ext.side.off');
     $('#spCtxToggle').setAttribute('aria-pressed', String(prefs.ctxOn));
     if (state === 'error') {
       text.textContent = autoRead ? `${ctxError}` : t('ext.side.ctxRetry', { error: ctxError });

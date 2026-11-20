@@ -145,11 +145,12 @@ app.whenReady().then(async () => {
   const only = process.argv.slice(2).filter((a) => !a.startsWith('-') && !a.endsWith('.js'));
   for (const scene of SCENES.filter((s) => !only.length || only.includes(s.name))) {
     const win = new BrowserWindow({
-      width: STORE ? 1280 : scene.width || 1400,
+      // MLA_SHOT_W=960: 앱 장면을 좁은 창(앱의 가장 작은 폭)으로 찍어 넘침을 본다 (v0.39.0). 사이드탭 장면은 자기 폭 그대로
+      width: STORE ? 1280 : scene.width || Number(process.env.MLA_SHOT_W) || 1400,
       height: STORE ? 800 : 860,
       show: false,
       useContentSize: true,
-      backgroundColor: '#0d1117',
+      backgroundColor: '#161616',
       webPreferences: {
         session: ses,
         preload: path.join(__dirname, scene.page === 'side' ? 'preload-side.js' : 'preload-app.js'),

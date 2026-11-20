@@ -198,7 +198,7 @@ function renderAttachments() {
       chip.className = 'attach-chip';
       chip.title = `${a.file.name} (${fmtSize(a.file.size)})`;
       if (a.url) chip.append(Object.assign(document.createElement('img'), { src: a.url, alt: '' }));
-      else chip.append(span('file-icon', '[f]'));
+      else chip.append(span('file-icon', ''));
       chip.append(span('file-name', a.file.name), span('file-size', fmtSize(a.file.size)));
       chip.append(button('✕', t('ui.attach.remove'), () => removeAttachment(i)));
       return chip;
@@ -447,8 +447,6 @@ host.on('state', (next) => {
   window.onRoadmapState?.(); // 로드맵 창도 같은 규칙 (roadmap-ui.js, v0.38.0)
   window.onOnboardState?.(); // 첫 사용 안내: 처음이면 띄우고, 화면을 떠났으면 닫는다 (onboarding.js, v0.31.0)
   if (state.chatView === 'help') renderUpdate();
-  // 툴바 이름 뒤의 "~/chat" 같은 경로 = 지금 보는 화면
-  $('.brand').dataset.path = state.mode === 'chat' ? (state.chatView === 'panels' || state.chatView === 'dialog' ? 'chat' : state.chatView) : state.mode;
   if (state.mode === 'chat') {
     renderTargets();
     renderSynth();

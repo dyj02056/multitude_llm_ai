@@ -14,31 +14,31 @@
   <!-- 화면 전환: body의 data-mode(로그인·모델 고르기·채팅)와 data-view(패널·비교·변경 제안 …) 값에 따라 styles.css가 필요한 부분만 보여 줍니다. -->
   <!-- 맨 위 툴바: 배치 고르기, 라이브러리, 프로젝트, 변경 제안, 기록, 답변 비교, 복사·새 대화·새로고침, 설정, 모델 선택, 로그아웃 -->
   <header id="toolbar">
-    <strong class="brand" data-path="">multitude</strong>
+    <strong class="brand">Multitude</strong>
     <span class="status-line only-chat" id="statusLine" role="status" aria-live="polite" data-i18n-title="ui.h.statusLine.title"></span>
     <span class="hint" id="hint"></span>
     <div class="spacer"></div>
     <div class="seg only-chat" role="group" data-i18n-aria="ui.h.layout.aria">
-      <button data-layout="grid" data-i18n-title="ui.h.layout.grid.title">grid</button>
-      <button data-layout="row" data-i18n-title="ui.h.layout.row.title">row</button>
-      <button data-layout="main" data-i18n-title="ui.h.layout.main.title">main</button>
-      <button data-layout="tall" data-i18n-title="ui.h.layout.tall.title">2col</button>
+      <button data-layout="grid" data-i18n="ui.tb.grid" data-i18n-title="ui.h.layout.grid.title">격자</button>
+      <button data-layout="row" data-i18n="ui.tb.row" data-i18n-title="ui.h.layout.row.title">가로</button>
+      <button data-layout="main" data-i18n="ui.tb.main" data-i18n-title="ui.h.layout.main.title">큰 칸</button>
+      <button data-layout="tall" data-i18n="ui.tb.tall" data-i18n-title="ui.h.layout.tall.title">2열</button>
     </div>
     <span class="tb-sep only-chat"></span>
-    <button class="only-chat" id="libraryBtn" data-i18n-title="ui.h.libraryBtn.title">lib</button>
-    <button class="only-chat" id="projectBtn" data-i18n-title="ui.h.projectBtn.title">proj</button>
+    <button class="only-chat" id="libraryBtn" data-i18n="ui.tb.library" data-i18n-title="ui.h.libraryBtn.title">라이브러리</button>
+    <button class="only-chat" id="projectBtn" data-i18n="ui.tb.project" data-i18n-title="ui.h.projectBtn.title">프로젝트</button>
     <button class="only-chat" id="roadmapBtn" data-i18n="ui.roadmap.btn" data-i18n-title="ui.roadmap.btnTitle"></button>
-    <button class="only-chat" id="changesBtn" data-i18n-title="ui.h.changesBtn.title">diff</button>
-    <button class="only-chat" id="historyBtn" data-i18n-title="ui.h.historyBtn.title">hist</button>
-    <button class="only-chat" id="compareBtn" data-i18n-title="ui.h.compareBtn.title">cmp</button>
+    <button class="only-chat" id="changesBtn" data-i18n="ui.tb.changes" data-i18n-title="ui.h.changesBtn.title">변경 제안</button>
+    <button class="only-chat" id="historyBtn" data-i18n="ui.tb.history" data-i18n-title="ui.h.historyBtn.title">기록</button>
+    <button class="only-chat" id="compareBtn" data-i18n="ui.tb.compare" data-i18n-title="ui.h.compareBtn.title">비교</button>
     <span class="tb-sep only-chat"></span>
-    <button class="only-chat ghost" id="copyAll" data-i18n-title="ui.h.copyAll.title">copy</button>
-    <button class="only-chat ghost" id="newChatAll" data-i18n-title="ui.h.newChatAll.title">new</button>
-    <button class="only-chat ghost" id="reloadAll" data-i18n-title="ui.h.reloadAll.title">reload</button>
+    <button class="only-chat ghost" id="copyAll" data-i18n="ui.tb.copy" data-i18n-title="ui.h.copyAll.title">복사</button>
+    <button class="only-chat ghost" id="newChatAll" data-i18n="ui.tb.newChat" data-i18n-title="ui.h.newChatAll.title">새 대화</button>
+    <button class="only-chat ghost" id="reloadAll" data-i18n="ui.tb.reload" data-i18n-title="ui.h.reloadAll.title">새로고침</button>
     <span class="tb-sep only-chat"></span>
-    <button class="only-chat" id="sideBtn" hidden data-i18n-title="ui.h.sideBtn.title">side</button>
+    <button class="only-chat" id="sideBtn" hidden data-i18n="ui.tb.side" data-i18n-title="ui.h.sideBtn.title">사이드탭</button>
     <button class="only-chat" id="helpBtn" data-i18n-title="ui.h.helpBtn.title" data-i18n-aria="ui.h.helpBtn.title">?</button>
-    <button class="only-chat" id="pickBtn" data-i18n-title="ui.h.pickBtn.title">models</button>
+    <button class="only-chat" id="pickBtn" data-i18n="ui.tb.models" data-i18n-title="ui.h.pickBtn.title">모델</button>
     <button class="only-auth danger" id="logoutBtn" data-i18n="ui.h.logoutBtn"></button>
   </header>
 
@@ -84,7 +84,7 @@
   <!-- 프로젝트 사이드바: 파일 나무, 제외 규칙, 보낼 서비스, 올리는 방식, git 콘솔 버튼 (project.js) -->
   <aside id="projectSide" class="project-side">
     <div class="ps-head">
-      <span class="ps-title">~/<b id="psName"></b></span>
+      <span class="ps-title"><b id="psName"></b></span>
       <button id="psRescan" data-i18n-title="ui.h.psRescan.title" data-i18n-aria="ui.a11y.rescan">⟳</button>
       <button id="psHide" data-i18n-title="ui.h.psHide.title" data-i18n-aria="ui.h.psHide.title">⟨</button>
       <button id="psClose" class="danger" data-i18n-title="ui.h.psClose.title" data-i18n-aria="ui.h.psClose.title">✕</button>

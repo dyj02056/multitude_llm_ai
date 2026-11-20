@@ -86,6 +86,12 @@ const localModelOf = (id) => {
 const svcLabel = (svc) => (svc?.kind === 'local' ? `${t('ui.local.name')}${LOCAL_PANEL_IDX[svc.id] ? ` ${LOCAL_PANEL_IDX[svc.id] + 1}` : ''}` : svc?.name || '');
 
 // 기호만 있는 버튼 (v0.30.0): 설명(title)과 화면 읽기 이름(aria-label)을 사전 키로 달아 언어를 바꾸면 apply()가 다시 쓴다
+// 글자도 사전에서 오는 버튼: 언어를 바꾸면 i18n.js가 data-i18n으로 다시 쓴다 (v0.39.0)
+function i18nText(b, key) {
+  b.dataset.i18n = key;
+  return b;
+}
+
 function tbutton(label, key, onClick) {
   const b = button(label, t(key), onClick);
   b.dataset.i18nTitle = key;
@@ -216,8 +222,8 @@ function createPanel(svc) {
   const handoffBtn = tbutton('→', 'handoff.btnTitle', () => window.onHandoffClick?.(svc.id));
   handoffBtn.className = 'handoff-btn';
   // 답변 평가 (v0.23): 공통 입력창 질문의 답변이 끝나면 띄운다. 같은 것을 다시 누르면 지운다.
-  const goodBtn = tbutton('[+1]', 'ui.panel.good', () => setFeedback(svc.id, 1));
-  const badBtn = tbutton('[-1]', 'ui.panel.bad', () => setFeedback(svc.id, -1));
+  const goodBtn = tbutton('+1', 'ui.panel.good', () => setFeedback(svc.id, 1));
+  const badBtn = tbutton('−1', 'ui.panel.bad', () => setFeedback(svc.id, -1));
   for (const b of [goodBtn, badBtn]) {
     b.classList.add('fb-btn');
     b.setAttribute('aria-pressed', 'false');
@@ -238,10 +244,10 @@ function createPanel(svc) {
     collectBtn,
     needBtn,
     loginBtn,
-    tbutton('copy', 'ui.panel.copyLatest', async () => {
+    i18nText(tbutton(t('ui.panel.copyBtn'), 'ui.panel.copyLatest', async () => {
       const r = await host.copyAnswer(svc.id);
       flash(status, r.copied ? t('ui.panel.answerCopied') : t('ui.copyAnswers.none'));
-    }),
+    }), 'ui.panel.copyBtn'),
     handoffBtn,
     focusBtn,
     tbutton('+', 'ui.panel.newChat', () => host.panelAction(svc.id, 'newchat')),
@@ -793,7 +799,7 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
       p.status.textContent = `${SEND_TEXT.sent} · ${warn}`;
       p.status.dataset.state = 'send-attach-warn';
       p.attachBadge.hidden = false;
-      p.attachBadge.textContent = `[+] ${warn}`;
+      p.attachBadge.textContent = warn;
       p.attachBadge.title = attach.error || warn;
     }
     if (send === 'sent') {
@@ -818,14 +824,14 @@ host.on('panel:status', ({ id, loading, url, error, login, send, answer, chars, 
   renderStatusLine();
 });
 
-// 툴바의 상태줄: "2/3 ready" — 열린 패널 중 쓸 수 있는(로그인된) 패널 수 (v0.19.0)
+// 툴바의 상태줄: "3개 중 2개 준비됨" — 열린 패널 중 쓸 수 있는(로그인된) 패널 수 (v0.19.0)
 function renderStatusLine() {
   const el = $('#statusLine');
   if (!el) return;
   const all = [...panels.values()];
   const ready = all.filter((p) => p.dot.classList.contains('ready')).length;
   const bad = all.some((p) => p.dot.classList.contains('error'));
-  el.textContent = all.length ? `${ready}/${all.length} ready` : '';
+  el.textContent = all.length ? t('ui.statusLine', { ready, n: all.length }) : '';
   el.dataset.state = bad ? 'error' : all.length && ready === all.length ? 'ok' : 'wait';
   if (Date.now() < remoteFlashUntil && state?.remote?.version) {
     const rb = span('remote-badge', `selectors v${state.remote.version}`);

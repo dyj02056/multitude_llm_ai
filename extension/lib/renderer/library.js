@@ -197,7 +197,7 @@
     const { len } = PL.prefixSize(active);
     const L = PL.warnLimits(lib.compressWarn, lib.skillMode);
     const btn = $('#skillBtn');
-    btn.textContent = active.length === 0 ? tr('library.skillBtnNone') : active.length === 1 ? `skill: ${active[0].name}` : tr('library.skillBtnMany', { n: active.length });
+    btn.textContent = active.length === 0 ? tr('library.skillBtnNone') : active.length === 1 ? tr('library.skillBtnOne', { name: active[0].name }) : tr('library.skillBtnMany', { n: active.length });
     btn.classList.toggle('on', active.length > 0);
     btn.classList.toggle('warn', len >= L.total);
     btn.title = active.length

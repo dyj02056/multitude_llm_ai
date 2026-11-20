@@ -308,7 +308,7 @@ function questionBox(rec) {
   const question = document.createElement('div');
   question.className = 'history-question';
   question.textContent = rec.question || NO_TEXT;
-  if (rec.files?.length) question.append(document.createElement('br'), span('history-files', `[+] ${filesLine(rec.files)}`));
+  if (rec.files?.length) question.append(document.createElement('br'), span('history-files', filesLine(rec.files)));
   return question;
 }
 

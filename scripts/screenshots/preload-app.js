@@ -214,7 +214,7 @@ function push() {
 window.host = {
   lang: LANG,
   // 영어로 찍을 때는 화면의 기본 글(사전)을 쓴다
-  ui: LANG === 'en' ? { devtools: true } : { hints: { pick: '모델을 고르세요', chat: '' }, pickNote: '선택한 모델만 패널로 엽니다. 각 서비스에는 Google 계정으로 로그인합니다.', loginButton: { label: 'G 로그인', title: '' }, devtools: true },
+  ui: LANG === 'en' ? { devtools: true } : { hints: { pick: '모델을 고르세요', chat: '' }, pickNote: '고른 AI만 패널로 열립니다. 맨 아래 입력창에 쓴 질문은 고른 AI 모두에게 한 번에 가고, 답변은 비교 화면에서 나란히 볼 수 있습니다. 각 서비스에는 Google 계정으로 로그인합니다.', loginButton: { label: 'G 로그인', title: '' }, devtools: true },
   openModels: () => ((mode = 'chat'), push()),
   pickModels: () => ((mode = 'pick'), push()),
   logout() {},
