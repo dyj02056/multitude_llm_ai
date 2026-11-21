@@ -32,6 +32,7 @@
   'main.devtest.confirmTitle': "Confirm test run",
   'main.devtest.confirmMessage': "This will run the project's tests on this PC",
   'main.devtest.confirmSteps': "1) Run with the current files → 2) Temporarily write the {n} checked files and run → 3) Restore the original files",
+  'main.devtest.confirmNow': "Runs once with the project files as they are now (nothing is written or restored).",
   'main.devtest.confirmNote': "Code changed by AI (including test code) will actually run. Time limit: {min} min per script.",
   'main.devtest.binary': "{path}: binary files can't be tested",
   'main.devtest.tooLarge': "{path}: the file is too large to test",

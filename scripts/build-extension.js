@@ -65,6 +65,7 @@ const RENDERER_FILES = [
   'project-restore.js',
   'project-editor.js',
   'roadmap-ui.js', // 로드맵 (v0.38.0)
+  'roadmap-card.js', // 사이드바의 로드맵 카드 (v0.40.0)
   'library.js',
   'library-presets.js',
   'settings-transfer-ui.js',

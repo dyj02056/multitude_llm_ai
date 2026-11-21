@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.39.0-8db3e2)
+![version](https://img.shields.io/badge/version-0.40.0-8db3e2)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -65,7 +65,7 @@ flowchart LR
 | | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기(자동 가능), 계획 먼저 · 파일별로 받기(바로 시작 가능), 보낼 양 토큰 어림 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
 | | 파일 모아보기 | 답변의 파일 코드를 새 파일 · 수정 · 삭제로 모아 복사 (프로젝트 없이도) | [파일 모아보기](docs/project-mode.md#파일-모아보기) |
 | | 테스트 실행 · git 콘솔 · 커밋 | 적용 전/후 `npm test` · lint · typecheck · build 비교(v0.28.0), 적용한 파일만 커밋(v0.28.0, push 없음), 그 폴더의 git 명령만 실행 (Windows 앱) | [테스트 실행](docs/project-mode.md#테스트-실행-windows-앱) · [커밋](docs/project-mode.md#적용-후-커밋-windows-앱-v0280) · [git 콘솔](docs/project-mode.md#git-콘솔-windows-앱) |
-| | 로드맵 | 계획서를 단계별 작업으로 쪼개고 진행 링 · 막대 · 선행 관계 지도 · 번다운으로 보기, `docs/procedure.md` · `README.md` 자동 정리(v0.38.0) | [로드맵](docs/roadmap.md) |
+| | 로드맵 | 계획서를 단계별 작업으로 쪼개고 진행 링 · 막대 · 선행 관계 지도 · 번다운으로 보기, `docs/procedure.md` · `README.md` 자동 정리(v0.38.0), 사이드바 카드에서 창을 열지 않고 진행 · 적용하면 검증 중 · 테스트 통과면 완료 확인(v0.40.0) | [로드맵](docs/roadmap.md) |
 | **확장 · 기타** | 사이드탭 | PDF · 영상 자막 맥락 · 번역 비교 · 한 줄 종합 · 사이트별 프리셋(v0.37.0), 크롬 사이드 패널에 AI 2개, 보고 있는 페이지 본문을 자동으로 함께 보냄, 요약 · 번역 · 핵심만 · 쉽게 설명 단추와 이 페이지에서 전에 물어본 것(v0.29.0) | [사이드탭](docs/chrome-extension.md#사이드탭-크롬-확장) |
 | | 웹페이지로 질문 | 오른쪽 클릭 › 선택한 글 · 이 페이지 본문을 앱에 넣기 | [웹페이지로 질문](docs/chrome-extension.md#보고-있는-웹페이지로-질문-크롬-확장) |
 | | 로컬 LLM | Ollama · LM Studio 등 이 PC의 OpenAI 호환 서버를 패널로 (밖으로 안 나감), 패널 없이 종합 · 토론 판정 · 스킬 압축, 컨텍스트 한도(v0.29.0), 패널 최대 3개 · 글 파일 첨부 · 기록 의미 검색(v0.36.0) | [로컬 LLM](docs/guide.md#로컬-llm-패널) |
@@ -175,6 +175,7 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.40.0** | **로드맵 카드** — 로드맵 창을 열고 닫지 않아도 프로젝트 사이드바 맨 위 카드에서 지금 작업 · 완료 조건 · 필요한 버튼만 보고 진행 · 수정안을 적용하면 작업이 저절로 **검증 중**, 미리보기 테스트가 통과했으면 **완료로 바꿀까요?**, 완료하면 다음 작업이 카드에 · 보내기 · 적용은 그대로 직접 |
 | **v0.39.0** | **화면 정리** — 틀(어두운 단색 · 1px 선 · 높이)은 그대로 두고 `❯` · `~/chat` · `[x]` · `##` 같은 기호 장식과 `lib · proj · diff` 같은 영문 약어 버튼을 걷어 냄 · 화면 글자는 본문 글꼴 · 좁은 창(960px)에서도 넘치지 않게 |
 | **v0.38.2** | **크롬 확장 로그인 · 보내기 (웹 스토어 반려 대응)** — "로그인 탭"에서 로그인하면 패널이 **저절로 다시 연결**(↻ 안 눌러도 됨) · 로그아웃이나 Duck.ai 첫 이용 동의 화면 때문에 못 보내면 "입력창을 찾지 못했습니다" 대신 **원인과 할 일**을 알림(동의는 확장이 대신 누르지 않음) · 스토어 설명 · 심사 안내 다시 씀 |
 | **v0.38.1** | **로드맵 고침** — Windows 앱에서 대시보드 그림이 깨지던 문제(CSP), 분해 전에 바꾼 설정 무시, README 붙이기의 `## intro` 제목, 실패 시 새 파일 남음 고침 · 긴 한글 제목 넘침, 같은 마일스톤 화살표, 링 색과 %가 다르던 문제 등 그림 가독성 · 영어 안내 · 코드 구조 문서 갱신 |

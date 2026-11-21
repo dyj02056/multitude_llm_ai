@@ -33,6 +33,7 @@
   'main.devtest.confirmTitle': "테스트 실행 확인",
   'main.devtest.confirmMessage': "이 PC에서 프로젝트의 테스트를 실행합니다",
   'main.devtest.confirmSteps': "1) 지금 파일 그대로 실행 → 2) 체크한 수정안 {n}개 파일을 잠깐 써 두고 실행 → 3) 원래 파일로 되돌림",
+  'main.devtest.confirmNow': "지금 프로젝트 파일 그대로 한 번 실행합니다 (파일을 쓰거나 되돌리지 않음).",
   'main.devtest.confirmNote': "AI가 고친 코드(테스트 코드 포함)가 실제로 실행됩니다. 시간 제한 스크립트마다 {min}분.",
   'main.devtest.binary': "{path}: 바이너리 파일라 테스트할 수 없습니다",
   'main.devtest.tooLarge': "{path}: 파일이 너무 큽니다라 테스트할 수 없습니다",

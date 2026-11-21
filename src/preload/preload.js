@@ -142,6 +142,7 @@ contextBridge.exposeInMainWorld('host', {
   devtest: {
     info: () => ipcRenderer.invoke('devtest:info'),
     trial: (changes, scripts) => ipcRenderer.invoke('devtest:trial', changes, scripts), // scripts: 검사 이름 (test · lint · typecheck · build, v0.28.0)
+    run: (scripts) => ipcRenderer.invoke('devtest:run', scripts), // 지금 파일 그대로 한 번 (v0.40.0, 로드맵 카드)
     stop: () => ipcRenderer.invoke('devtest:stop'),
   },
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),

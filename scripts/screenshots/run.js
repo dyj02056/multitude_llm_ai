@@ -94,6 +94,10 @@ const SCENES = [
   // v0.38.0 (로드맵)
   { name: '71-roadmap-tasks', page: 'app' },
   { name: '72-roadmap-dash', page: 'app' },
+  // v0.40.0 (로드맵 카드)
+  { name: '73-roadmap-card', page: 'app' },
+  { name: '74-roadmap-auto', page: 'app' },
+  { name: '75-roadmap-next', page: 'app' },
   // v0.37.0 (사이드탭)
   { name: '68-side-pdf', page: 'side', width: 420 },
   { name: '69-side-compare', page: 'side', width: 420 },

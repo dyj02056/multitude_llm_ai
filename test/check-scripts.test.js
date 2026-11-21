@@ -114,3 +114,43 @@ test('테스트 실행: test + lint를 적용 전 · 후로 나란히, 끝나면
   assert.equal(fs.readFileSync(path.join(root, 'sum.js'), 'utf8'), 'module.exports = (a, b) => a - b;\n');
   project.close();
 });
+
+test('지금 파일 그대로 한 번 실행 (v0.40.0, 로드맵 카드): 확인 창 → 실행, 파일은 쓰지 않고 결과는 after 칸', { timeout: 180000 }, async (t) => {
+  if (!R.findNpmCli({ exists: (p) => fs.existsSync(p) })) return t.skip('npm을 찾지 못함');
+  const RM = require('../src/shared/roadmap');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mla-run-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'proj');
+  fs.mkdirSync(path.join(root, 'test'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: 'node --test' } }));
+  fs.writeFileSync(path.join(root, 'sum.js'), 'module.exports = (a, b) => a - b;\n');
+  fs.writeFileSync(path.join(root, 'test', 'sum.test.js'), "const test = require('node:test'); const assert = require('node:assert'); const sum = require('../sum');\ntest('sum', () => assert.equal(sum(2, 3), 5));\n");
+  let answer = 0;
+  const asked = [];
+  const electron = { dialog: { showMessageBox: async (_w, o) => (asked.push(o.detail), { response: answer }) }, app: { getPath: () => tmp } };
+  const project = requireWithFakeElectron('../src/main/project', electron);
+  const { setupDevTest } = requireWithFakeElectron('../src/main/devtest', electron);
+  const handlers = {};
+  setupDevTest({ ipcMain: { handle: (n, fn) => (handlers[n] = fn) }, getWin: () => null, project, userDataDir: tmp });
+  await project.open(root);
+  // 실패하는 지금 파일 → fail, 파일은 그대로
+  const r1 = await handlers['devtest:run']({}, ['test']);
+  assert.equal(r1.ok, true, r1.error);
+  assert.equal(r1.now, true);
+  assert.equal(r1.results[0].before, null);
+  assert.equal(r1.results[0].after.ok, false);
+  assert.equal(RM.trialInfo(r1).verdict, 'fail');
+  assert.match(asked[0], /한 번 실행합니다|Runs once/);
+  assert.equal(fs.readFileSync(path.join(root, 'sum.js'), 'utf8'), 'module.exports = (a, b) => a - b;\n');
+  // 고친 뒤(적용한 상태) → pass
+  fs.writeFileSync(path.join(root, 'sum.js'), 'module.exports = (a, b) => a + b;\n');
+  const r2 = await handlers['devtest:run']({}, undefined);
+  assert.equal(RM.trialInfo(r2).verdict, 'pass', r2.results?.[0]?.after?.output);
+  // 없는 검사 이름 · 취소
+  assert.equal((await handlers['devtest:run']({}, ['deploy'])).ok, false);
+  answer = 1;
+  const r3 = await handlers['devtest:run']({}, ['test']);
+  assert.equal(r3.cancelled, true);
+  assert.equal(RM.trialInfo(r3).verdict, 'none');
+  project.close();
+});

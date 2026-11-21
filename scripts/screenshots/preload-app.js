@@ -29,7 +29,8 @@ const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
 // v0.31.0: 09 · 10 · 16 · 21 · 22 · 23(예전 디자인이던 프로젝트 장면)과 47(파일 나무 키보드)도 같은 가짜 프로젝트로 찍는다
-const ROADMAP = ['71-roadmap-tasks', '72-roadmap-dash'].includes(scene); // v0.38.1
+const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
+const ROADMAP = CARD || ['71-roadmap-tasks', '72-roadmap-dash'].includes(scene); // v0.38.1
 const PROJ = ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
 const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
 let onboarded = !ONBOARD;
@@ -308,7 +309,7 @@ function fakeProject() {
     files['config.js'] = "export const config = { base: '/api/users/' };\n";
   }
   const info = { name: 'demo-app', id: 'C:\\work\\demo-app' };
-  if (ROADMAP) files['.mla/roadmap.json'] = JSON.stringify(S.roadmapSample(LANG));
+  if (ROADMAP) files['.mla/roadmap.json'] = JSON.stringify(CARD ? S.roadmapCardSample(LANG) : S.roadmapSample(LANG));
   const readDir = async (dir) => {
     const pre = dir ? `${dir}/` : '';
     const out = new Map();
@@ -594,7 +595,28 @@ window.addEventListener('DOMContentLoaded', async () => {
     Object.assign(document.activeElement.style, { outline: '2px solid var(--accent)', outlineOffset: '-2px' });
     await sleep(200);
   }
-  if (ROADMAP) {
+  if (CARD) {
+    // 로드맵 카드 (v0.40.0): 창을 열지 않고 사이드바 카드로 진행한다. 74는 구현 요청 → 변경 보기 → 테스트 → 적용까지 실제 화면 코드로 눌러 간다
+    await sleep(700);
+    if (scene === '74-roadmap-auto' || scene === '75-roadmap-next') {
+      document.querySelector('#rmcActs button[data-act="implement"]')?.click();
+      await sleep(400);
+      btnIn(document.querySelector('.change-bar:not([hidden])'), LANG === 'en' ? 'View changes' : '변경 보기')?.click();
+      await sleep(500);
+      click('#patchTest');
+      await sleep(900);
+      click('#patchApply');
+      await sleep(1500);
+      // 커밋 제안이 뜬 미리보기 창은 닫고 패널 화면으로
+      if (!$('#patchModal').hidden) click('#patchCancel');
+      await sleep(500);
+    }
+    if (scene === '75-roadmap-next') {
+      // 완료로 바꾸기 → 다음 작업(잠금이 풀린 t5)이 카드에 올라온다
+      document.querySelector('#rmcActs button[data-act="done"]')?.click();
+      await sleep(900);
+    }
+  } else if (ROADMAP) {
     // 로드맵 (v0.38.0): 진행 데이터가 있는 프로젝트에서 창을 열면 작업 탭, 대시보드 장면은 탭을 바꾼다
     click('#roadmapBtn');
     await sleep(700);

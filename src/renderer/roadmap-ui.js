@@ -25,6 +25,16 @@
   let editing = ''; // 편집 중인 작업 id
   let busy = false; // AI에게 보내는 중 (두 번 눌러 두 번 보내지 않게)
   let draftSettings = null; // 로드맵을 만들기 전에 문서 탭에서 바꾼 설정 — 분해해 만든 로드맵에 넘긴다 (v0.38.1)
+  const listeners = new Set(); // 로드맵이 바뀌면 알릴 곳 (사이드바의 로드맵 카드, v0.40.0)
+  const notify = () => {
+    for (const fn of listeners) {
+      try {
+        fn(rm);
+      } catch (err) {
+        console.warn('[roadmap] listener:', err.message);
+      }
+    }
+  };
 
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -57,8 +67,10 @@
 
   async function loadRoadmap() {
     if (!hasProject()) {
+      const had = rm || loadedFor;
       rm = null;
       loadedFor = '';
+      if (had) notify();
       return;
     }
     const key = P.project.info.id || P.project.info.name;
@@ -73,10 +85,12 @@
         if (RM.tasksOf(next).length) rm = next;
       } catch {}
     }
+    notify();
   }
 
   /** 진행 데이터 저장 (바로 이어 저장하는 일이 많아 조금 모아서) */
   function persist() {
+    notify();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(flush, 400);
   }
@@ -360,15 +374,22 @@
   }
 
   async function changeStatus(id, to, sel) {
-    const r = RM.setStatus(rm, id, to, { lang: MLA.i18n.getLang() });
+    const r = await setTaskStatus(id, to);
     if (!r.ok) {
       status(r.error, 'warn');
       sel.value = RM.findTask(rm, id).status;
-      return;
     }
-    if (!r.changed) return;
-    let note = '';
-    if (to === 'blocked') note = prompt(t('ui.roadmap.blockedPrompt')) || '';
+  }
+
+  /**
+   * 작업 상태 바꾸기 (작업 탭 · 사이드바 카드가 같이 씀) → setStatus 결과. 완료면 커밋 · 문서, 아니면 문서(설정대로)
+   * note를 안 주면 막힘일 때 이유를 묻는다
+   */
+  async function setTaskStatus(id, to, { note: given } = {}) {
+    const r = RM.setStatus(rm, id, to, { lang: MLA.i18n.getLang() });
+    if (!r.ok || !r.changed) return r;
+    let note = given || '';
+    if (to === 'blocked' && given === undefined) note = prompt(t('ui.roadmap.blockedPrompt')) || '';
     const r2 = note ? RM.setStatus(r.roadmap, id, to, { note, lang: MLA.i18n.getLang() }) : r;
     const prevMs = RM.progress(rm).milestones;
     rm = r2.roadmap;
@@ -378,6 +399,7 @@
     else await maybeDocs('task');
     // 완료에서 되돌렸는데 이미 시작 · 끝낸 후속 작업이 있으면 알린다 (상태는 그대로 둔다). 문서 쓰기 알림에 덮이지 않게 마지막에
     if (r.dependents?.length) status(t('ui.roadmap.reopened', { id, ids: r.dependents.join(', ') }), 'warn');
+    return r2;
   }
 
   /** 작업 요청 글을 입력창에 채운다 (보내지는 않는다). 상태는 "진행 중"으로 */
@@ -386,10 +408,9 @@
     if (!tk || !RM.isUnlocked(rm, tk)) return;
     $('#prompt').value = RM.buildTaskPrompt(rm, id, { lang: MLA.i18n.getLang() });
     const r = RM.setStatus(rm, id, 'doing', { lang: MLA.i18n.getLang() });
-    if (r.ok && r.changed) {
-      rm = r.roadmap;
-      persist();
-    }
+    // 이 작업을 기억한다 — 적용 · 테스트 결과는 이 작업에만 반영한다 (v0.40.0)
+    rm = RM.setActive(r.ok ? r.roadmap : rm, id);
+    persist();
     // 작업의 예상 파일 중 프로젝트에 있는 것은 고른 파일에 넣어 요청에 함께 간다
     let n = 0;
     for (const f of tk.files) {
@@ -465,6 +486,8 @@
     $('#roadmapMermaid').checked = s.mermaid;
     $('#roadmapAutoCommit').checked = s.autoCommit;
     $('#roadmapAutoCommit').disabled = !host.git?.commit;
+    $('#roadmapAutoDone').checked = !!s.autoDoneOnPass;
+    $('#roadmapAutoDone').disabled = !host.devtest; // 테스트는 Windows 앱에서만 돈다
     for (const id of ['#roadmapDocsMake', '#roadmapIntroAsk', '#roadmapIntroGet']) $(id).disabled = !rm;
     $('#roadmapDocsUndo').disabled = !lastWrite;
     $('#roadmapDocsPreview').replaceChildren();
@@ -653,6 +676,38 @@
   $('#roadmapDocsLang').addEventListener('change', (e) => setting('docsLang', e.target.value));
   $('#roadmapMermaid').addEventListener('change', (e) => setting('mermaid', e.target.checked));
   $('#roadmapAutoCommit').addEventListener('change', (e) => setting('autoCommit', e.target.checked));
+  $('#roadmapAutoDone').addEventListener('change', (e) => setting('autoDoneOnPass', e.target.checked));
 
-  Object.assign(MLA, { roadmapUI: { get: () => rm, busy: () => busy } });
+  /** 사이드바 카드의 [전체 보기]: 창을 열고 작업 탭에서 그 작업으로 */
+  async function openAt(id) {
+    if (!open) await openDialog();
+    if (!open) return;
+    editing = '';
+    setTab('tasks');
+    if (id) $(`#roadmapTasks [data-task="${CSS.escape(id)}"]`)?.scrollIntoView?.({ block: 'center' });
+  }
+
+  /** 다른 곳(카드)에서 로드맵을 바꿨을 때: 저장 · 알림 · (창이 열려 있으면) 다시 그리기 */
+  function replace(next) {
+    if (!next || next === rm) return;
+    rm = next;
+    persist();
+    render();
+  }
+
+  // 사이드바 카드 등 다른 파일이 쓰는 입구 (v0.40.0)
+  Object.assign(MLA, {
+    roadmapUI: {
+      get: () => rm,
+      busy: () => busy,
+      load: loadRoadmap,
+      onChange: (fn) => (listeners.add(fn), () => listeners.delete(fn)),
+      implement: implementTask,
+      setStatus: setTaskStatus,
+      replace,
+      openAt,
+      open: openDialog,
+      status,
+    },
+  });
 })();

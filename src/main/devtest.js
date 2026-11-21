@@ -280,6 +280,40 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir, findRunner = (nam
     }
   });
 
+  // 지금 파일 그대로 한 번 실행 (v0.40.0, 로드맵 카드의 [테스트 실행]): 파일을 쓰지 않는다. 결과는 after 칸에 넣는다 (적용한 뒤의 상태이므로)
+  ipcMain.handle('devtest:run', async (_e, rawScripts) => {
+    if (busy) return { ok: false, error: t('main.devtest.busy') };
+    busy = true;
+    try {
+      const info = await scriptInfo();
+      if (!info.ok) return info;
+      const wantTest = rawScripts === undefined || (Array.isArray(rawScripts) && rawScripts.includes('test'));
+      if (wantTest && !info.test.ok && (rawScripts === undefined || rawScripts.includes('test'))) return info.test;
+      const names = rawScripts === undefined ? ['test'] : R.checkScriptNames(rawScripts, info.checks.map((c) => c.name));
+      if (!names) return { ok: false, error: t('devtest.badScripts') };
+      const checks = names.map((n) => info.checks.find((c) => c.name === n));
+      const scripts = checks.flatMap((c) => (c.runner ? [`${c.name}: ${c.script}`] : [c.pre && `pre${c.name}: ${c.pre}`, `${c.name}: ${c.script}`, c.post && `post${c.name}: ${c.post}`])).filter(Boolean);
+      const { response } = await dialog.showMessageBox(getWin(), {
+        type: 'warning',
+        buttons: [t('devtest.run'), t('main.cancel')],
+        defaultId: 0,
+        cancelId: 1,
+        title: t('main.devtest.confirmTitle'),
+        message: t('main.devtest.confirmMessage'),
+        detail: `${scripts.join('\n')}\n\n${t('main.devtest.confirmNow')}\n${t('main.devtest.confirmNote', { min: R.TEST_TIMEOUT_MS / 60000 })}\n\n${t('main.folderLine', { path: root() })}`,
+      });
+      if (response !== 0) return { ok: false, error: t('main.cancelled'), cancelled: true };
+      const results = checks.map((c) => ({ name: c.name, script: c.script, before: null, after: null, ...(c.runner ? { runner: true } : {}) }));
+      for (const r of results) {
+        r.after = await runOnce(info, 'after', r.name);
+        if (r.after.stopped) break;
+      }
+      return { ok: true, now: true, scripts: names, results };
+    } finally {
+      busy = false;
+    }
+  });
+
   ipcMain.handle('devtest:stop', () => {
     if (!running) return false;
     running.stopped = true;

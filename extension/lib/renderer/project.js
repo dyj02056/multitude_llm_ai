@@ -300,6 +300,7 @@
   function render() {
     const showSide = project.open && !!project.info;
     document.body.classList.toggle('project-open', showSide);
+    window.onRoadmapProject?.(); // 사이드바의 로드맵 카드 (v0.40.0): 프로젝트가 바뀌면 그 프로젝트의 로드맵을 읽는다
     // 'dialog'(패널 화면 위에 띄운 창)에서도 뒤 배치가 흔들리지 않게 사이드바를 그대로 둔다
     const side = showSide && state?.mode === 'chat' && (state.chatView === 'panels' || state.chatView === 'dialog');
     if (side !== sidebarSent) {

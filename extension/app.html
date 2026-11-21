@@ -93,6 +93,22 @@
       <span data-i18n="ui.h.psConnect.text"></span>
       <button id="psReconnect" class="primary" data-i18n="ui.h.psReconnect"></button>
     </div>
+    <!-- 로드맵 카드 (v0.40.0): 지금 할 작업 · 진행률 · 그때 필요한 버튼만. roadmap-card.js -->
+    <section id="rmCard" class="rm-card" hidden data-i18n-aria="ui.roadmap.card.aria">
+      <div class="rmc-head">
+        <span id="rmcRing" class="rmc-ring" aria-hidden="true"></span>
+        <div class="rmc-titles"><span id="rmcMeta" class="muted-label"></span><b id="rmcTitle"></b></div>
+        <button id="rmcCreate" class="rmc-create" hidden data-i18n="ui.roadmap.card.create" data-i18n-title="ui.roadmap.card.allTitle"></button>
+        <button id="rmcFold" class="rmc-fold" aria-expanded="true" aria-controls="rmcBody" data-i18n-title="ui.roadmap.card.fold" data-i18n-aria="ui.roadmap.card.fold">▾</button>
+      </div>
+      <div id="rmcBody" class="rmc-body">
+        <span id="rmcState" class="rmc-state"></span>
+        <ul id="rmcAccept" class="rmc-accept"></ul>
+        <p id="rmcNote" class="rmc-note" role="status" aria-live="polite"></p>
+        <div id="rmcActs" class="rmc-acts"></div>
+        <button id="rmcAll" class="rmc-all" data-i18n="ui.roadmap.card.all" data-i18n-title="ui.roadmap.card.allTitle"></button>
+      </div>
+    </section>
     <details id="psRules" class="ps-rules">
       <summary data-i18n="ui.h.psRules.summary"></summary>
       <div id="psRulesBody"></div>
@@ -508,6 +524,7 @@
             <select id="roadmapDocsLang"><option value="auto" data-i18n="ui.roadmap.docs.lang.auto"></option><option value="ko">한국어</option><option value="en">English</option></select></label>
           <label class="check-label"><input type="checkbox" id="roadmapMermaid" /> <span data-i18n="ui.roadmap.docs.mermaid"></span></label>
           <label class="check-label"><input type="checkbox" id="roadmapAutoCommit" /> <span data-i18n="ui.roadmap.docs.autoCommit"></span></label>
+          <label class="check-label" data-i18n-title="ui.roadmap.docs.autoDoneTitle"><input type="checkbox" id="roadmapAutoDone" /> <span data-i18n="ui.roadmap.docs.autoDone"></span></label>
         </div>
       </div>
       <div class="modal-foot">
@@ -879,7 +896,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle" data-i18n="ui.h.sendBtn"></button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
   <script src="lib/shared/i18n-ko.js"></script>
   <script src="lib/shared/i18n-ko-ui.js"></script>
   <script src="lib/shared/i18n-ko-project.js"></script>
@@ -970,6 +987,7 @@
   <script src="lib/renderer/project-restore.js"></script>
   <script src="lib/renderer/project-editor.js"></script>
   <script src="lib/renderer/roadmap-ui.js"></script>
+  <script src="lib/renderer/roadmap-card.js"></script>
   <script src="lib/renderer/library.js"></script>
   <script src="lib/renderer/library-presets.js"></script>
   <script src="lib/renderer/settings-transfer-ui.js"></script>

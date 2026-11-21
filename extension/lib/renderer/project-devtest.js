@@ -137,6 +137,9 @@
         };
         renderFixLoop.redraw = draw; // 횟수를 바꾸면 단추를 다시 그린다
         draw();
+        // 로드맵 카드 (v0.40.0): 결과를 알린다. 고쳐 받기를 다 썼는지도 함께 (다 썼는데 실패면 카드가 막힘을 권한다)
+        const exhausted = !!ai?.id && (P.fixRounds.get(ai.id) || 0) >= fixMax();
+        window.onRoadmapTrial?.(r, { exhausted });
       } catch (err) {
         renderTestResult(out, { ok: false, error: err.message });
       } finally {

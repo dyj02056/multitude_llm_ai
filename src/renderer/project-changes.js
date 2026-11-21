@@ -645,6 +645,12 @@ const PX = MLA.patch;
       }
       await rescan();
       await refreshOtherBars(new Set(owners.map((s) => s.ai.id)));
+      // 로드맵 카드 (v0.40.0): [구현 요청]으로 시작한 작업이 진행 중이면 검증 중으로 옮긴다 (미리보기 창 · 변경 바 바로 적용 모두)
+      try {
+        await window.onRoadmapApplied?.(entry);
+      } catch (err) {
+        console.warn('[roadmap] applied:', err.message);
+      }
     }
     if (failed.length) alert(t('project.apply.failedList', { list: failed.join('\n') }));
     return { entry, text: t('project.apply.done', { n: done.length }) + (failed.length ? t('project.apply.someFailed', { n: failed.length }) : '') };

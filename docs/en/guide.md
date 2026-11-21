@@ -252,6 +252,10 @@ With a project open, **로드맵** (Roadmap) on the toolbar sends your plan (pas
 
 ![Roadmap dashboard](../screenshots/en/72-roadmap-dash.png)
 
+**Sidebar card (v0.40.0)** — a roadmap card at the top of the project sidebar lets you work through the plan without opening the roadmap window. It shows a progress ring, the current task, its done conditions and only the buttons that step needs. When you **apply** a change, the task moves to verifying by itself; if the preview's test run passed, the card asks "Tests passed: N. Mark it done?". Once done, the next unlocked task shows up on the card. What you click: **Implement → Send → Apply → (Mark done)**. Turn on "Mark done right away when tests pass" in the docs tab to skip the last click (Windows app). The extension has no test runs, so there the card offers Done and Blocked after you apply.
+
+![Roadmap card after applying](../screenshots/en/74-roadmap-auto.png)
+
 ## 10. Chrome extension extras
 
 - **Side panel** (`Alt+Shift+S`, or right-click › `사이드탭에서 이 페이지로 묻기`): up to 2 AIs in Chrome's side panel. The page you are reading is sent with your first question. Turn on **자동 읽기** (auto-read) once to read the current tab automatically; this asks for an optional site-access permission that you can revoke anytime in `chrome://extensions`.

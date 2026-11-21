@@ -20,7 +20,7 @@
   const MAX_PLAN_CHARS = 60000;
   const MAX_TEXT = 4000;
   const FILE_VERSION = 1;
-  const DEFAULT_SETTINGS = { docs: true, docsWhen: 'task', readmeMode: 'separate', docsLang: 'auto', mermaid: true, autoCommit: false };
+  const DEFAULT_SETTINGS = { docs: true, docsWhen: 'task', readmeMode: 'separate', docsLang: 'auto', mermaid: true, autoCommit: false, autoDoneOnPass: false };
   const DOCS_WHEN = ['task', 'milestone', 'manual'];
   const README_MODES = ['separate', 'merge', 'replace'];
 
@@ -155,6 +155,7 @@
       docsLang: ['auto', 'ko', 'en'].includes(s.docsLang) ? s.docsLang : 'auto',
       mermaid: s.mermaid !== false,
       autoCommit: s.autoCommit === true,
+      autoDoneOnPass: s.autoDoneOnPass === true,
     };
     const docs = r.docs && typeof r.docs === 'object' ? { intro: str(r.docs.intro, 600), features: cleanList(r.docs.features, 12).map((f) => f.slice(0, 200)) } : { intro: '', features: [] };
     const log = (Array.isArray(r.log) ? r.log : [])
@@ -172,6 +173,7 @@
       settings,
       docs,
       log,
+      active: typeof r.active === 'string' && all.has(r.active) ? r.active : '',
     };
   }
 
@@ -338,6 +340,85 @@
             .map((t) => t.id)
         : [];
     return { ok: true, roadmap: next, changed: true, dependents };
+  }
+
+  // ---------- 카드 · 자동 진행 (v0.40.0) ----------
+  // 프로젝트 사이드바의 로드맵 카드가 쓰는 계산. rm.active는 [구현 요청]으로 시작한 작업 — 적용 · 테스트 결과는 이 작업에만 반영한다.
+
+  /** [구현 요청]으로 시작한 작업을 기억한다 (없는 id면 지운다) */
+  function setActive(rm, id) {
+    const ok = !!findTask(rm, id);
+    return { ...rm, active: ok ? id : '' };
+  }
+
+  /**
+   * 카드에 띄울 작업: 기억한 작업(진행 · 검증 · 막힘) → 진행 · 검증 중인 작업 → 고른 대기 작업(pick, 열려 있을 때) → 맨 위의 열린 대기 작업. 없으면 null
+   */
+  function currentTask(rm, { pick = '' } = {}) {
+    const all = tasksOf(rm);
+    const act = rm?.active && all.find((t) => t.id === rm.active);
+    if (act && ['doing', 'verify', 'blocked'].includes(act.status)) return act;
+    const working = all.find((t) => t.status === 'doing') || all.find((t) => t.status === 'verify');
+    if (working) return working;
+    const open = all.filter((t) => t.status === 'todo' && isUnlocked(rm, t));
+    return open.find((t) => t.id === pick) || open[0] || null;
+  }
+
+  /** [다음 ›]: 열린 대기 작업 가운데 지금 것 다음 것 (끝이면 처음으로). 하나뿐이면 그대로 */
+  function nextPick(rm, fromId) {
+    const open = tasksOf(rm).filter((t) => t.status === 'todo' && isUnlocked(rm, t));
+    if (!open.length) return '';
+    const i = open.findIndex((t) => t.id === fromId);
+    return open[(i + 1) % open.length].id;
+  }
+
+  /**
+   * 검사 실행 결과(devtest.trial · devtest.run) → { verdict: 'pass' | 'fail' | 'none', pass, fail }
+   * 고른 검사가 모두 "적용 후"(지금 파일)에서 통과해야 pass. 취소 · 중지 · 실행 못 함은 none (판단하지 않는다)
+   */
+  function trialInfo(r) {
+    if (!r || !r.ok) return { verdict: 'none', pass: 0, fail: 0 };
+    const results = Array.isArray(r.results) && r.results.length ? r.results : r.after ? [{ after: r.after }] : [];
+    const afters = results.map((x) => x.after).filter(Boolean);
+    let pass = 0;
+    let fail = 0;
+    for (const a of afters) {
+      if (a.summary) {
+        pass += Number(a.summary.pass) || 0;
+        fail += Number(a.summary.fail) || 0;
+      }
+    }
+    if (!afters.length || afters.length < results.length || afters.some((a) => a.stopped)) return { verdict: 'none', pass, fail };
+    return { verdict: afters.every((a) => a.ok) ? 'pass' : 'fail', pass, fail };
+  }
+
+  /** 수정안을 적용한 뒤: 기억한 작업이 진행 중이면 검증 중으로 → { ok, roadmap, changed, id } */
+  function afterApply(rm, { now, lang } = {}) {
+    const tk = rm?.active ? findTask(rm, rm.active) : null;
+    if (!tk || tk.status !== 'doing') return { ok: true, roadmap: rm, changed: false, id: '' };
+    const r = setStatus(rm, tk.id, 'verify', { now, lang });
+    return r.ok ? { ...r, id: tk.id } : { ok: true, roadmap: rm, changed: false, id: '' };
+  }
+
+  /**
+   * 카드 모양 → { task, phase, actions, trial }
+   * phase: none(작업 없음) · allDone · ready(시작 전) · doing · verify(테스트 결과 없음) · verifyPass · verifyFail · blocked
+   * actions: 보여 줄 버튼 이름 (implement · skip · block · done · test · notYet · resume). 화면은 이 순서대로 그린다.
+   * trial: 이 작업의 마지막 검사 결과 { verdict, pass, fail } (없으면 null), canTest: 이 앱에서 테스트를 돌릴 수 있는지 (Windows 앱)
+   */
+  function cardState(rm, { pick = '', trial = null, canTest = false } = {}) {
+    const all = tasksOf(rm);
+    if (!all.length) return { task: null, phase: 'none', actions: [], trial: null };
+    const task = currentTask(rm, { pick });
+    if (!task) return { task: null, phase: all.every((t) => t.status === 'done') ? 'allDone' : 'waiting', actions: [], trial: null };
+    const open = all.filter((t) => t.status === 'todo' && isUnlocked(rm, t)).length;
+    const tr = trial && trial.task === task.id ? trial : null;
+    if (task.status === 'todo') return { task, phase: 'ready', actions: ['implement', ...(open > 1 ? ['skip'] : [])], trial: null };
+    if (task.status === 'doing') return { task, phase: 'doing', actions: ['done', 'block'], trial: tr };
+    if (task.status === 'blocked') return { task, phase: 'blocked', actions: ['resume'], trial: null };
+    if (tr?.verdict === 'pass') return { task, phase: 'verifyPass', actions: ['done', 'notYet'], trial: tr };
+    if (tr?.verdict === 'fail') return { task, phase: 'verifyFail', actions: [...(canTest ? ['test'] : []), 'block', 'done'], trial: tr };
+    return { task, phase: 'verify', actions: [...(canTest ? ['test'] : []), 'done', 'block'], trial: null };
   }
 
   // ---------- 편집 ----------
@@ -516,5 +597,11 @@
     addMilestone,
     buildTaskPrompt,
     burndown,
+    setActive,
+    currentTask,
+    nextPick,
+    trialInfo,
+    afterApply,
+    cardState,
   };
 });

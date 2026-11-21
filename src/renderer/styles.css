@@ -657,6 +657,39 @@ body.drag-files #attachHint { color: var(--accent-text); }
 body.project-open[data-mode="chat"][data-view="panels"] .project-side,
 body.project-open[data-mode="chat"][data-view="dialog"] .project-side { display: flex; }
 .ps-head { display: flex; align-items: center; gap: 4px; }
+/* 로드맵 카드 (v0.40.0): 사이드바 맨 위의 "지금 할 작업" */
+.rm-card { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: var(--accent-soft); font-size: 12px; }
+.rm-card[hidden] { display: none; }
+.rmc-head { display: flex; align-items: center; gap: 8px; }
+.rmc-ring { flex: none; width: 38px; height: 38px; }
+.rmc-ring:empty { display: none; }
+.rmc-ring-bg { stroke: var(--border); }
+.rmc-ring-on { stroke: #4fa36c; }
+.rmc-ring-text { fill: var(--bright); font: 600 10px system-ui, sans-serif; }
+.rmc-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rmc-titles b { color: var(--bright); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.rmc-fold { flex: none; padding: 0 6px; font-size: 11.5px; }
+.rmc-create { flex: none; padding: 1px 8px; font-size: 11.5px; }
+.rmc-create[hidden], .rmc-fold[hidden] { display: none; }
+.rm-card.empty { padding: 5px 8px; border-color: var(--border); background: transparent; }
+.rm-card.empty .rmc-titles b { color: var(--muted); font-weight: 400; }
+.rmc-body { display: flex; flex-direction: column; gap: 5px; }
+.rmc-body[hidden] { display: none; }
+.rmc-state { align-self: flex-start; padding: 0 7px; border-radius: var(--r-sm); border: 1px solid var(--c, var(--border)); color: var(--c, var(--muted)); background: color-mix(in srgb, var(--c, transparent) 14%, transparent); }
+.rmc-state:empty { display: none; }
+.rmc-accept { margin: 0; padding: 0 0 0 16px; color: var(--muted); max-height: 64px; overflow: auto; }
+.rmc-accept:empty { display: none; }
+.rmc-accept li { margin: 1px 0; list-style: '☐ '; }
+.rmc-accept li.ok { list-style: '☑ '; }
+/* 낮은 창에서는 완료 조건을 숨겨 파일 나무 자리를 남긴다 (조건은 로드맵 창에 그대로) */
+@media (max-height: 820px) { .rmc-accept { display: none; } }
+.rmc-note { margin: 0; color: var(--text); white-space: normal; }
+.rmc-note:empty { display: none; }
+.rmc-acts { display: flex; flex-wrap: wrap; gap: 4px; }
+.rmc-acts button { padding: 2px 8px; font-size: 11.5px; }
+.rmc-all { align-self: flex-start; padding: 0; border: none; background: none; color: var(--accent-text); font-size: 11.5px; cursor: pointer; }
+.rmc-all:hover { text-decoration: underline; background: none; }
+.rmc-all[hidden] { display: none; }
 .ps-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
 .ps-title b { color: var(--bright); }
 .ps-head button { padding: 0 7px; font-size: 11.5px; }

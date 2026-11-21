@@ -291,4 +291,20 @@ function roadmapSample(lang = 'ko') {
   };
 }
 
-module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage, PROJECT_FILES, PROJECT_ANSWERS, roadmapSample };
+/** 로드맵 카드 장면 (v0.40.0): 인증까지 끝났고, 다음 작업이 가짜 프로젝트의 getUser 고치기 (패널 답의 수정안 · 가짜 테스트와 맞물림) */
+function roadmapCardSample(lang = 'ko') {
+  const rm = roadmapSample(lang);
+  const T = (ko, e) => (lang === 'en' ? e : ko);
+  const [, m2] = rm.milestones;
+  rm.milestones[0].tasks[2] = { ...rm.milestones[0].tasks[2], status: 'done', doneAt: new Date(Date.now() - 2 * 86400000).toISOString() };
+  m2.tasks[0] = {
+    ...m2.tasks[0],
+    title: T('getUser 실패 응답 처리', 'Handle getUser failures'),
+    status: 'todo',
+    files: ['src/user.js', 'test/user.test.js'],
+    accept: T('없는 사용자면 오류를 던진다\n캐시는 성공한 응답만 저장한다\nnpm test 통과', 'Throws for an unknown user\nCaches only successful responses\nnpm test passes'),
+  };
+  return rm;
+}
+
+module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage, PROJECT_FILES, PROJECT_ANSWERS, roadmapSample, roadmapCardSample };
