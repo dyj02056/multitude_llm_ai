@@ -164,7 +164,8 @@ test('본체 · 확장 host: 새 대화 · 처음 주소 · 로컬 대화 지우
   // newchat · home · 로컬 LLM · 닫기(main: showChat · showLogin · logout · closeLocalPanel, host: closePanel · closeLocalPanel)
   assert.ok((main.match(/rounds\.resetPanel\(/g) || []).length >= 7);
   assert.ok((host.match(/rounds\.resetPanel\(/g) || []).length >= 5);
-  assert.match(main, /out\.project = \{ name: opts\.project\.name\.trim\(\)\.slice\(0, 120\) \}/);
+  assert.match(main, /cleanSendOpts\(opts, allServices\(\)/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'prefs.js'), 'utf8'), /out\.project = \{ name: name\.slice\(0, 120\) \}/);
   assert.match(host, /rounds\.sendAll\(text, targets, files, cleanSendOpts\(opts\)\)/);
   assert.match(host, /typeof autoRecommend === 'boolean'/);
   const settings = fs.readFileSync(path.join(ROOT, 'src', 'main', 'ipc', 'settings.js'), 'utf8');

@@ -96,6 +96,23 @@
     };
   }
 
+  /** 설정 화면에서 바꾼 값(next, 안 바꾼 칸은 undefined)을 지금 설정(cur)에 합친다 → 다듬은 설정 | null (주소가 이 PC가 아니면) */
+  function mergeLocalPrefs(cur, nextIn) {
+    const next = nextIn && typeof nextIn === 'object' ? nextIn : {};
+    const keep = (k) => (next[k] === undefined ? cur[k] : next[k]);
+    const baseUrl = next.baseUrl === undefined ? cur.baseUrl : normalizeBaseUrl(next.baseUrl);
+    if (!baseUrl) return null;
+    return normalizeLocalPrefs({
+      enabled: typeof next.enabled === 'boolean' ? next.enabled : cur.enabled,
+      baseUrl,
+      model: keep('model'),
+      contextTokens: keep('contextTokens'),
+      panels: keep('panels'), // 로컬 패널 수 1 ~ 3
+      extraModels: Array.isArray(next.extraModels) ? next.extraModels.slice(0, 2) : cur.extraModels, // 둘째 · 셋째 패널의 모델
+      embedModel: keep('embedModel'), // 의미 검색용 임베딩 모델
+    });
+  }
+
   const MAX_ATTACH_CHARS = 200000; // 글 파일 하나에서 가져오는 최대 글자 수 (컨텍스트 한도를 몰라도)
   const ATTACH_SHARE = 0.8; // 컨텍스트 한도의 이만큼까지만 질문 + 첨부에 쓴다 (나머지는 답 · 이어지는 대화 몫)
 
@@ -352,7 +369,7 @@
   }
 
   return {
-    embedTextFiles, LOCAL_ID, LOCAL_IDS, MAX_PANELS, isLocalId, panelIndex, normalizePanels, modelOf, normalizeLocalPrefs, localServices,
+    embedTextFiles, LOCAL_ID, LOCAL_IDS, MAX_PANELS, isLocalId, panelIndex, normalizePanels, modelOf, normalizeLocalPrefs, mergeLocalPrefs, localServices,
     DEFAULT_BASE, LOCAL_HOSTS, CONTEXT_CHOICES, DEFAULT_CONTEXT,
     localService, normalizeBaseUrl, cleanModel, normalizeContext, listModels, toContent, parseSSE, createLocalChat, askOnce, imageDataUrl,
   };

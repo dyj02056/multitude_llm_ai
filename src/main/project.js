@@ -239,4 +239,4 @@ async function saveState(id, data) {
   return true;
 }
 
-module.exports = { READ_MAX_BYTES, TMP_MARK, pick, open, close, info, readDir, readFile, writeFile, deleteFile, globalExclude, loadState, saveState };
+module.exports = { READ_MAX_BYTES, pick, open, close, info, readDir, readFile, writeFile, deleteFile, globalExclude, loadState, saveState };

@@ -50,11 +50,12 @@ test('걸음: 네 개, 두 언어의 제목 · 본문이 있고, 번호는 범�
 
 test('설정 저장: 본체 · 확장이 onboarded를 읽고(처음 설치 규칙) state에 싣고 true/false만 받는다', () => {
   const main = read('src/main/main.js');
-  assert.match(main, /prefs\.onboarded = wasOnboarded\(saved\);/);
+  assert.match(main, /normalizePrefs\(prefs, saved\);/);
+  assert.match(read('src/shared/prefs.js'), /prefs\.onboarded = onboarding\.wasOnboarded\(saved\);/);
   assert.match(main, /onboarded: prefs\.onboarded,/);
   assert.match(read('src/main/ipc/settings.js'), /if \(typeof onboarded === 'boolean'\) prefs\.onboarded = onboarded;/);
   const host = read('extension/host.js');
-  assert.match(host, /prefs\.onboarded = MLA\.onboarding\.wasOnboarded\(savedPrefs\);/);
+  assert.match(host, /MLA\.prefs\.normalizePrefs\(\{ \.\.\.prefs, \.\.\.\(savedPrefs \|\| \{\}\) \}, savedPrefs\)/);
   assert.match(host, /onboarded: prefs\.onboarded,/);
   assert.match(host, /if \(typeof onboarded === 'boolean'\) prefs\.onboarded = onboarded;/);
   // 설정 옮기기 파일에는 넣지 않는다 (새 PC에서는 새로 보는 편이 맞다)

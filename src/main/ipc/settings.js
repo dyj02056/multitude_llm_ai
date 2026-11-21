@@ -72,19 +72,9 @@ function register(ctx) {
   // 로컬 LLM 설정: 켜기 · 끄기, 주소(localhost만), 모델. 끄면 열린 로컬 패널을 닫고 고른 목록에서도 뺀다.
   ipcMain.handle('local:setPrefs', (_e, next = {}) => {
     const prefs = ctx.prefs();
-    const cur = prefs.local;
-    const baseUrl = next.baseUrl === undefined ? cur.baseUrl : L.normalizeBaseUrl(next.baseUrl);
-    if (!baseUrl) return { ok: false, error: t('main.settings.localOnly') };
-    const curExtra = Array.isArray(cur.extraModels) ? cur.extraModels : ['', ''];
-    prefs.local = L.normalizeLocalPrefs({
-      enabled: typeof next.enabled === 'boolean' ? next.enabled : cur.enabled,
-      baseUrl,
-      model: next.model === undefined ? cur.model : next.model,
-      contextTokens: next.contextTokens === undefined ? cur.contextTokens : next.contextTokens, // v0.29.0
-      panels: next.panels === undefined ? cur.panels : next.panels, // 로컬 패널 수 1 ~ 3 (v0.36.0)
-      extraModels: Array.isArray(next.extraModels) ? next.extraModels.slice(0, 2) : curExtra, // 둘째 · 셋째 패널의 모델
-      embedModel: next.embedModel === undefined ? cur.embedModel : next.embedModel, // 의미 검색용 임베딩 모델 (v0.36.0)
-    });
+    const merged = L.mergeLocalPrefs(prefs.local, next);
+    if (!merged) return { ok: false, error: t('main.settings.localOnly') };
+    prefs.local = merged;
     // 패널 수를 줄이면 넘는 로컬 패널을 닫고 고른 목록 · 종합 담당에서 뺀다
     for (const id of L.LOCAL_IDS.slice(prefs.local.panels)) {
       if (!prefs.selected.includes(id) && !ctx.localChat()?.has(id)) continue;

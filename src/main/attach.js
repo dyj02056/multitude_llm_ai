@@ -155,4 +155,4 @@ async function attachFiles(wc, svc, files) {
   return res;
 }
 
-module.exports = { attachFiles, cleanupTemp, clearTransfer };
+module.exports = { attachFiles, cleanupTemp };

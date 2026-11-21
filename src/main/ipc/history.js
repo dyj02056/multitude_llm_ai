@@ -101,4 +101,4 @@ function okTagInput(tags) {
   return Array.isArray(tags) && tags.length <= 50 && tags.every((x) => typeof x === 'string' && x.length <= 200);
 }
 
-module.exports = { register, SAVE_KINDS, okTagInput };
+module.exports = { register };

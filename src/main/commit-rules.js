@@ -95,4 +95,4 @@ function isAllowedCommitStep(args) {
   return ['add', 'commit', 'diff', 'ls-files', 'rev-parse'].includes(sub);
 }
 
-module.exports = { checkBranchName, suggestBranchName, branchExistsArgs, branchSwitchArgs, MAX_PATHS, MAX_MESSAGE, checkCommitRequest, checkPaths, addArgs, commitArgs, stagedArgs, trackedArgs, splitNul, otherStaged, pickCommitPaths, isAllowedCommitStep, PREFIX };
+module.exports = { checkBranchName, suggestBranchName, branchExistsArgs, branchSwitchArgs, checkCommitRequest, checkPaths, addArgs, commitArgs, stagedArgs, trackedArgs, splitNul, otherStaged, pickCommitPaths, isAllowedCommitStep, PREFIX };

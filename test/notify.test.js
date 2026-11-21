@@ -171,7 +171,8 @@ test('연결: main · host · 설정 저장 · 화면 · 확장 manifest', () =>
   const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
   const main = read('src/main/main.js');
   assert.match(main, /notify: \(event\) => notifier\.notify\(event\)/);
-  assert.match(main, /prefs\.notify = notifyCore\.normalizePrefs\(prefs\.notify\)/);
+  assert.match(main, /normalizePrefs\(prefs, saved\)/);
+  assert.match(read('src/shared/prefs.js'), /prefs\.notify = notify\.normalizePrefs\(prefs\.notify\)/);
   const host = read('extension/host.js');
   assert.match(host, /notify: \(event\) => notifier\.notify\(event\)/);
   assert.match(host, /chrome\.notifications\.onClicked/);

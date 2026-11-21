@@ -19,12 +19,12 @@
   // 그 파일들이 X에 실어 둔 함수를 꺼내 쓰고, 이 파일의 것은 맨 아래에서 X에 실어 준다.
   const X = (MLA.extHost = MLA.extHost || {});
   const { UPD, allowFraming, callFrame, checkUpdate, closePanel, loadRemoteCache, navigate, openPanel, refreshRemote, resetRemote, svcOf } = X;
-  const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, serviceForHost, uploadOf, fileBytesOf, limitTextOf } =
+  const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, serviceForHost, uploadOf, fileBytesOf, limitTextOf } =
     MLA.services;
   const { watchAnswer } = MLA.watch;
   const { createRounds } = MLA.rounds;
   const { createDiag } = MLA.diag;
-  const { createHistory, createAreaStore, normalizeMax, MAX_CHOICES, okRecordId } = MLA.historyCore;
+  const { createHistory, createAreaStore, MAX_CHOICES, okRecordId } = MLA.historyCore;
   const HS = MLA.historySearch;
   const remoteCore = MLA.remoteCore;
   const { shortcutList, shortcutFor } = MLA.shortcuts;
@@ -110,7 +110,6 @@
   // 웹 서비스 목록(SERVICES)과 따로 두고, 켜 두었을 때만 붙인다. 이 PC 주소(localhost · 127.0.0.1) 권한은 켤 때 그때 묻는다.
   const LL = MLA.localLLM;
   const LOCAL_ORIGINS = ['http://localhost/*', 'http://127.0.0.1/*'];
-  const normalizeLocalPrefs = LL.normalizeLocalPrefs; // 패널 수 · 패널마다 모델까지 (v0.36.0)
   /** 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 판정 · 압축 — Windows 앱 main.js askLocal과 같음): 패널 대화와 따로인 임시 대화 */
   const askLocal = (text) =>
     prefs.local?.enabled ? LL.askOnce({ fetchFn: (url, opts) => fetch(url, opts), getConfig: () => prefs.local, text }) : Promise.resolve({ ok: false, error: MLA.i18n.t('ext.host.localOff') });
@@ -454,14 +453,8 @@
   /** 이어 묻기 · 토론에서 화면이 넘긴 패널 id 모양 검사 (v0.26.0) */
   const okChainId = (v) => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(v);
 
-  /** 보내기 옵션 (v0.27.0): project는 이름만 남긴다 (Windows 앱 main.js sendOpts와 같은 검사). 나머지는 예전처럼 그대로 */
-  function cleanSendOpts(opts) {
-    const o = opts && typeof opts === 'object' && !Array.isArray(opts) ? { ...opts } : {};
-    const name = o.project && typeof o.project === 'object' && typeof o.project.name === 'string' ? o.project.name.trim().slice(0, 120) : '';
-    if (name) o.project = { name };
-    else delete o.project;
-    return o;
-  }
+  /** 보내기 옵션: 아는 항목만 골라 길이를 자른다 (Windows 앱과 같은 검사: shared/prefs.js). 패널별 값은 로컬 LLM 패널까지 받는다 */
+  const cleanSendOpts = (opts) => MLA.prefs.cleanSendOpts(opts, allServices().map((s) => s.id));
 
   /** 첨부 파일 한도 검사 (화면에서도 막지만 한 번 더 본다) */
   function checkFiles(files) {
@@ -610,7 +603,7 @@
     sendFollowUp: async (id, text, files = [], opts = {}) => {
       if (typeof text !== 'string' || !text.trim()) return { id, ok: false, error: MLA.i18n.t('ext.host.nothingToSend') };
       if (!checkFiles(files)) return { id, ok: false, error: MLA.i18n.t('ext.host.filesOver') };
-      return rounds.sendFollowUp(id, text, files, opts || {});
+      return rounds.sendFollowUp(id, text, files, cleanSendOpts(opts));
     },
     // AI끼리 이어 묻기 (v0.26.0, Windows 앱 main/ipc/chain.js와 같은 검사): 넘기기 · 다시 보내기 · 다른 AI로 보내기 · 토론
     handoff: async (from, to, intent) => {
@@ -697,23 +690,14 @@
     // 로컬 LLM 설정 (v0.16.0): 켤 때 이 PC 주소(localhost · 127.0.0.1) 접근 권한을 묻는다 (선택 권한 — 설치 · 업데이트 때는 묻지 않음)
     local: {
       setPrefs: async (next = {}) => {
-        const cur = prefs.local;
-        const baseUrl = next.baseUrl === undefined ? cur.baseUrl : LL.normalizeBaseUrl(next.baseUrl);
-        if (!baseUrl) return { ok: false, error: MLA.i18n.t('ext.host.localOnly') };
-        const enabled = typeof next.enabled === 'boolean' ? next.enabled : cur.enabled;
-        if (enabled && !cur.enabled) {
+        const merged = LL.mergeLocalPrefs(prefs.local, next);
+        if (!merged) return { ok: false, error: MLA.i18n.t('ext.host.localOnly') };
+        const { enabled } = merged;
+        if (enabled && !prefs.local.enabled) {
           const granted = await chrome.permissions.request({ origins: LOCAL_ORIGINS }).catch(() => false);
           if (!granted) return { ok: false, error: MLA.i18n.t('ext.host.localDenied') };
         }
-        prefs.local = LL.normalizeLocalPrefs({
-          enabled,
-          baseUrl,
-          model: next.model === undefined ? cur.model : next.model,
-          contextTokens: next.contextTokens === undefined ? cur.contextTokens : next.contextTokens, // v0.29.0
-          panels: next.panels === undefined ? cur.panels : next.panels, // 로컬 패널 수 1 ~ 3 (v0.36.0)
-          extraModels: Array.isArray(next.extraModels) ? next.extraModels.slice(0, 2) : cur.extraModels, // 둘째 · 셋째 패널의 모델
-          embedModel: next.embedModel === undefined ? cur.embedModel : next.embedModel, // 의미 검색용 임베딩 모델 (v0.36.0)
-        });
+        prefs.local = merged;
         if (!enabled) {
           prefs.selected = prefs.selected.filter((x) => !isLocal(x));
           if (isLocal(prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
@@ -889,25 +873,10 @@
   async function init() {
     fixButtonTitles();
     const savedPrefs = await load('prefs', null);
-    prefs = { ...prefs, ...(savedPrefs || {}) };
-    prefs.onboarded = MLA.onboarding.wasOnboarded(savedPrefs); // 첫 사용 안내 (v0.31.0): 새로 설치한 사람만 한 번
-    prefs.layout = MLA.layout.normalizeLayout(prefs.layout);
-    // 예전 설정(없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
-    prefs.local = normalizeLocalPrefs(prefs.local);
-    const hadLocal = Array.isArray(prefs.selected) ? prefs.selected.filter(LL.isLocalId) : [];
-    prefs.selected = normalizeSelected(prefs.selected);
-    for (const id of hadLocal) if (prefs.local.enabled && LL.panelIndex(id) < prefs.local.panels && prefs.selected.length < MAX_SELECTED) prefs.selected.push(id);
-    if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
-    prefs.historyMax = normalizeMax(prefs.historyMax);
-    prefs.notify = MLA.notify.normalizePrefs(prefs.notify);
-    prefs.sendPreview = prefs.sendPreview === true;
-    prefs.retryOnce = prefs.retryOnce !== false;
-    prefs.autoRecommend = prefs.autoRecommend === true;
-    if (!MLA.recommend.ORDERS.includes(prefs.recommendOrder)) prefs.recommendOrder = 'completion';
-    prefs.lang = MLA.i18n.normalizeLangPref(prefs.lang);
+    // 예전 설정(없어진 서비스, 너무 많은 선택 등)을 지금 서비스 목록에 맞춘다 (Windows 앱과 같은 규칙: shared/prefs.js)
+    prefs = MLA.prefs.normalizePrefs({ ...prefs, ...(savedPrefs || {}) }, savedPrefs);
     applyLang(prefs.lang); // 적어 둔 값과 달랐으면 첫 state의 uiLang을 보고 화면이 다시 그린다
     history.load(await historyStore.load());
-    prefs.historyArchive = prefs.historyArchive === true;
     setArchiveOn(prefs.historyArchive);
     history.setMax(prefs.historyMax);
     sideHistory.load(await load('history:side', []));

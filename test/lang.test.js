@@ -71,7 +71,8 @@ test('본체 main.js: 설정을 읽자마자(창을 만들기 전에) 언어를 
   const main = read('src/main/main.js');
   assert.match(main, /lang: 'auto'/);
   assert.match(main, /i18n\.setLang\(i18n\.detectLang\(prefs\.lang, app\.getLocale\(\)\)\)/);
-  assert.match(main, /prefs\.lang = i18n\.normalizeLangPref\(prefs\.lang\);\s+applyLang\(\);/);
+  assert.match(main, /normalizePrefs\(prefs, saved\);[\s\S]{0,200}applyLang\(\);/);
+  assert.match(read('src/shared/prefs.js'), /prefs\.lang = i18n\.normalizeLangPref\(prefs\.lang\);/);
   assert.ok(main.indexOf('loadPrefs();', main.indexOf('app.whenReady()')) < main.indexOf('createWindow();', main.indexOf('app.whenReady()')));
   assert.match(main, /lang: prefs\.lang,[^\n]*\n\s+uiLang: i18n\.getLang\(\),/);
   // 언어를 바꿔도 화면 · 패널을 다시 읽지 않는다 (패널 상태 · 프로젝트 작업이 사라지므로)
@@ -100,7 +101,7 @@ test('화면: 시작할 때 host.lang으로 setLang한 뒤 apply, state.uiLang�
 test('크롬 확장: host · 사이드탭 · background가 저장된 언어 설정으로 setLang하고, host.setSettings가 값을 검사한다', () => {
   const host = read('extension/host.js');
   assert.match(host, /if \(MLA\.i18n\.LANG_PREFS\.includes\(lang\)\) \{\s+prefs\.lang = lang;\s+applyLang\(lang\);/);
-  assert.match(host, /prefs\.lang = MLA\.i18n\.normalizeLangPref\(prefs\.lang\);\s+applyLang\(prefs\.lang\);/);
+  assert.match(host, /prefs = MLA\.prefs\.normalizePrefs\([^\n]*\n\s+applyLang\(prefs\.lang\);/);
   assert.match(host, /chrome\.i18n\?\.getUILanguage\?\.\(\) \|\| navigator\.language/);
   assert.match(host, /lang: startLang,/);
   assert.match(host, /uiLang: MLA\.i18n\.getLang\(\),/);

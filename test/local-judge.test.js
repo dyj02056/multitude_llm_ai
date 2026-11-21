@@ -165,17 +165,18 @@ test('토론 판정: 판정만 고를 수 있는 id(패널 없는 로컬 LLM)를
 test('연결: 본체 · 확장의 localJudge · local:ask(글자 수 검사) · preload · 설정 화면 · 압축 대상', () => {
   const main = read('src/main/main.js');
   assert.match(main, /localJudge: \{ id: L\.LOCAL_ID/);
-  assert.match(main, /normalizeLocalPrefs = L\.normalizeLocalPrefs/);
+  assert.match(read('src/shared/prefs.js'), /prefs\.local = L\.normalizeLocalPrefs\(prefs\.local\)/);
   assert.match(read('src/shared/local-llm.js'), /contextTokens: normalizeContext\(/);
   const settings = read('src/main/ipc/settings.js');
   assert.match(settings, /ipcMain\.handle\('local:ask'/);
   assert.match(settings, /text\.length > ASK_MAX/);
-  assert.match(settings, /contextTokens: next\.contextTokens === undefined/);
+  assert.match(settings, /L\.mergeLocalPrefs\(prefs\.local, next\)/);
+  assert.match(read('src/shared/local-llm.js'), /contextTokens: keep\('contextTokens'\)/);
   assert.match(read('src/preload/preload.js'), /ask: \(text\) => ipcRenderer\.invoke\('local:ask', text\)/);
   const host = read('extension/host.js');
   assert.match(host, /localJudge: \{ id: LL\.LOCAL_ID/);
   assert.match(host, /ask: async \(text\) => \(typeof text === 'string' && text\.trim\(\) && text\.length <= 200000/);
-  assert.match(host, /normalizeLocalPrefs = LL\.normalizeLocalPrefs/);
+  assert.match(host, /LL\.mergeLocalPrefs\(prefs\.local, next\)/);
   const html = read('src/renderer/index.html');
   assert.ok(html.includes('id="localCtx"') && html.includes('id="synthResult"'));
   assert.match(read('src/renderer/library.js'), /compressLocal\(s, target\)/);

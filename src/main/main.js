@@ -24,8 +24,8 @@
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, ipcMain, shell, Menu, clipboard, dialog, net, Notification } = require('electron');
-const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, normalizeSelected, uploadOf, fileBytesOf, limitTextOf } = require('../shared/services');
-const { LAYOUTS, normalizeLayout, placeCells, barRows, normalizeZoom, zoomStep, zoomKey, scaleRect } = require('../shared/layout');
+const { SERVICES, MAX_SELECTED, DEFAULT_SELECTED, ATTACH_LIMITS, uploadOf, fileBytesOf, limitTextOf } = require('../shared/services');
+const { LAYOUTS, placeCells, barRows, normalizeZoom, zoomStep, zoomKey, scaleRect } = require('../shared/layout');
 const { createViews } = require('./views'); // 세션 · 뷰 · 셀렉터 자가진단 (v0.31.0)
 const { sendPrompt, cleanupTemp } = require('./injector');
 const { snapshot, watchAnswer } = require('./watcher');
@@ -35,12 +35,11 @@ const L = require('../shared/local-llm');
 const watchCore = require('../shared/watch');
 const { pageLimitCheck } = require('../shared/page');
 const history = require('./history');
-const recommendCore = require('../shared/recommend');
 const { createEmbedService } = require('../shared/embed-index');
-const { normalizeMax, MAX_CHOICES } = require('../shared/history-core');
+const { MAX_CHOICES } = require('../shared/history-core');
 const remote = require('./remote');
 const { shortcutList, shortcutFor } = require('../shared/shortcuts');
-const { wasOnboarded } = require('../shared/onboarding');
+const { normalizePrefs, cleanSendOpts } = require('../shared/prefs'); // 설정 다듬기 · 보내기 옵션 검사 (확장과 같이 씀)
 const project = require('./project');
 const guard = require('./ipc-guard'); // 화면이 넘긴 값 다시 검사 (첨부 파일 · 읽기 옵션 · 로컬 LLM 주소)
 const { setupGitConsole } = require('./gitconsole');
@@ -141,25 +140,10 @@ function applyLang() {
 function loadPrefs() {
   const saved = secure.store().readJson(prefsFile(), null);
   if (saved && typeof saved === 'object') prefs = { ...prefs, ...saved };
-  prefs.onboarded = wasOnboarded(saved); // 첫 사용 안내 (v0.31.0): 새로 설치한 사람만 한 번, 예전부터 쓰던 사람에게는 띄우지 않는다
-  // 예전 설정(Groq 등 없어진 서비스, 4개 넘는 선택)을 지금 서비스 목록에 맞춘다.
-  prefs.local = normalizeLocalPrefs(prefs.local);
-  const hadLocal = Array.isArray(prefs.selected) ? prefs.selected.filter(L.isLocalId) : [];
-  prefs.selected = normalizeSelected(prefs.selected);
-  // 로컬 LLM은 웹 서비스 목록(SERVICES) 밖이라 normalizeSelected가 뺀다 — 켜 둔 동안은 다시 넣는다 (패널 수 안의 것만, v0.36.0)
-  for (const id of hadLocal) if (prefs.local.enabled && L.panelIndex(id) < prefs.local.panels && prefs.selected.length < MAX_SELECTED) prefs.selected.push(id);
-  prefs.layout = normalizeLayout(prefs.layout);
-  if (!allServices().some((s) => s.id === prefs.synthTarget)) prefs.synthTarget = prefs.selected[0];
-  prefs.historyMax = normalizeMax(prefs.historyMax);
-  prefs.historyArchive = prefs.historyArchive === true;
-  prefs.notify = notifyCore.normalizePrefs(prefs.notify);
-  prefs.sendPreview = prefs.sendPreview === true;
-  prefs.retryOnce = prefs.retryOnce !== false;
-  prefs.autoRecommend = prefs.autoRecommend === true;
-  if (!recommendCore.ORDERS.includes(prefs.recommendOrder)) prefs.recommendOrder = 'completion';
+  // 예전 설정(Groq 등 없어진 서비스, 너무 많은 선택 등)을 지금 서비스 목록에 맞춘다 (확장과 같은 규칙: shared/prefs.js)
+  normalizePrefs(prefs, saved);
   prefs.commitOffer = prefs.commitOffer !== false;
   prefs.uiZoom = normalizeZoom(prefs.uiZoom);
-  prefs.lang = i18n.normalizeLangPref(prefs.lang);
   applyLang(); // 창 · 대화상자 · 알림을 만들기 전에
 }
 
@@ -183,7 +167,6 @@ function applyUiZoom() {
 // ---------- 로컬 LLM (v0.16.0, 선택 기능) ----------
 // 웹 서비스 목록(SERVICES)과 따로 둔다: 켜 두었을 때만 모델 목록 · 패널 · 종합 대상에 "로컬 LLM"이 붙는다.
 // 패널은 웹페이지가 아니라 앱이 대화를 들고 이 PC의 OpenAI 호환 서버(localhost만)에 묻는다 (shared/local-llm.js).
-const normalizeLocalPrefs = L.normalizeLocalPrefs; // 패널 수 · 패널마다 모델까지 (v0.36.0)
 /** 패널 없이 로컬 LLM에 한 번 묻기 (v0.29.0, 판정 · 압축): 패널 대화와 따로인 임시 대화 — 켜 두었을 때만 */
 function askLocal(text) {
   if (!prefs.local?.enabled) return Promise.resolve({ ok: false, error: t('main.localOff') });
@@ -652,28 +635,8 @@ ipcMain.handle('synth:run', (_e, judgeId, kind) =>
   rounds.runSynth(typeof judgeId === 'string' ? judgeId : null, 'manual', ['code', 'analysis'].includes(kind) ? kind : 'text'),
 );
 
-/** 화면이 넘긴 보내기 옵션 검사: { question, textById, prefixById, fallbackText, plainIds, userFileCount } */
-// 화면이 같이 보낸 "보내기 옵션"에서 아는 항목만 골라 길이를 잘라 둡니다 (엉뚱하거나 너무 큰 값을 막음).
-function sendOpts(opts) {
-  if (!opts || typeof opts !== 'object') return {};
-  const out = {};
-  if (typeof opts.question === 'string') out.question = opts.question.slice(0, 20000);
-  if (typeof opts.fallbackText === 'string') out.fallbackText = opts.fallbackText.slice(0, 200000);
-  if (opts.textById && typeof opts.textById === 'object') {
-    out.textById = {};
-    for (const s of SERVICES) if (typeof opts.textById[s.id] === 'string') out.textById[s.id] = opts.textById[s.id];
-  }
-  if (opts.prefixById && typeof opts.prefixById === 'object') {
-    out.prefixById = {};
-    for (const s of SERVICES) if (typeof opts.prefixById[s.id] === 'string') out.prefixById[s.id] = opts.prefixById[s.id].slice(0, 25000);
-  }
-  if (Array.isArray(opts.plainIds)) out.plainIds = SERVICES.map((s) => s.id).filter((id) => opts.plainIds.includes(id));
-  if (Number.isInteger(opts.userFileCount) && opts.userFileCount >= 0) out.userFileCount = opts.userFileCount;
-  if (opts.noHistory === true) out.noHistory = true;
-  // 프로젝트 맥락을 붙여 보냄 (v0.27.0): 이름만 기록에 남긴다
-  if (opts.project && typeof opts.project === 'object' && typeof opts.project.name === 'string' && opts.project.name.trim()) out.project = { name: opts.project.name.trim().slice(0, 120) };
-  return out;
-}
+// 화면이 같이 보낸 "보내기 옵션"에서 아는 항목만 골라 길이를 잘라 둡니다. 패널별 값은 로컬 LLM 패널까지 받는다 (shared/prefs.js).
+const sendOpts = (opts) => cleanSendOpts(opts, allServices().map((s) => s.id));
 
 // 패널 하나에만 이어서 보내기 (프로젝트 모드: 요청한 파일 보내기, 전체 파일 다시 요청)
 ipcMain.handle('prompt:followup', async (_e, { id, text, files, opts }) => {

@@ -85,4 +85,4 @@ function register(ctx) {
   ipcMain.handle('project:saveState', projectCall((data) => (project.info() ? project.saveState(project.info().id, data) : false)));
 }
 
-module.exports = { register, projectCall };
+module.exports = { register };

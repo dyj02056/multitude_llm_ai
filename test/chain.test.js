@@ -356,7 +356,9 @@ test('확장 host · preload: 이어 묻기 API가 같은 이름으로 있고, �
     assert.ok(pre.includes(`  ${name}`), `preload ${name}`);
   }
   assert.match(host, /typeof retryOnce === 'boolean'/);
-  assert.match(host, /prefs\.retryOnce = prefs\.retryOnce !== false/);
+  // 불러올 때 다듬기는 Windows 앱과 같이 쓰는 shared/prefs.js에 있다 (v0.40.1)
+  assert.match(host, /MLA\.prefs\.normalizePrefs\(/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'prefs.js'), 'utf8'), /prefs\.retryOnce = prefs\.retryOnce !== false/);
   const settings = fs.readFileSync(path.join(ROOT, 'src', 'main', 'ipc', 'settings.js'), 'utf8');
   assert.match(settings, /typeof retryOnce === 'boolean'/);
   // 확장 앱 탭은 debate.js를 rounds.js보다 먼저, chain.js · retry.js는 화면 공통 모듈 줄에서 읽는다

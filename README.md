@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.40.0-8db3e2)
+![version](https://img.shields.io/badge/version-0.40.1-8db3e2)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -175,6 +175,7 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.40.1** | **코드 정리** — Windows 앱과 크롬 확장이 같은 설정 · 보내기 옵션 규칙을 씀(`shared/prefs.js`) · Windows 앱에서 로컬 LLM 패널에도 스킬 지침 · 프로젝트 본문이 붙음 · 확장의 보내기 옵션도 길이 · 항목 검사 |
 | **v0.40.0** | **로드맵 카드** — 로드맵 창을 열고 닫지 않아도 프로젝트 사이드바 맨 위 카드에서 지금 작업 · 완료 조건 · 필요한 버튼만 보고 진행 · 수정안을 적용하면 작업이 저절로 **검증 중**, 미리보기 테스트가 통과했으면 **완료로 바꿀까요?**, 완료하면 다음 작업이 카드에 · 보내기 · 적용은 그대로 직접 |
 | **v0.39.0** | **화면 정리** — 틀(어두운 단색 · 1px 선 · 높이)은 그대로 두고 `❯` · `~/chat` · `[x]` · `##` 같은 기호 장식과 `lib · proj · diff` 같은 영문 약어 버튼을 걷어 냄 · 화면 글자는 본문 글꼴 · 좁은 창(960px)에서도 넘치지 않게 |
 | **v0.38.2** | **크롬 확장 로그인 · 보내기 (웹 스토어 반려 대응)** — "로그인 탭"에서 로그인하면 패널이 **저절로 다시 연결**(↻ 안 눌러도 됨) · 로그아웃이나 Duck.ai 첫 이용 동의 화면 때문에 못 보내면 "입력창을 찾지 못했습니다" 대신 **원인과 할 일**을 알림(동의는 확장이 대신 누르지 않음) · 스토어 설명 · 심사 안내 다시 씀 |

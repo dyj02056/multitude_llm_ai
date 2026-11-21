@@ -194,4 +194,4 @@ function createLineMasker(patterns = []) {
   };
 }
 
-module.exports = { SUBCOMMANDS, splitArgs, checkCommand, FORCED_PREFIX, FORCED_ENV, maskOutput, createLineMasker };
+module.exports = { splitArgs, checkCommand, FORCED_PREFIX, FORCED_ENV, maskOutput, createLineMasker };
