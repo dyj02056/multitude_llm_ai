@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.42.0-8db3e2)
+![version](https://img.shields.io/badge/version-0.43.0-8db3e2)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -65,7 +65,7 @@ flowchart LR
 | | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기(자동 가능), 계획 먼저 · 파일별로 받기(바로 시작 가능), 보낼 양 토큰 어림 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
 | | 파일 모아보기 | 답변의 파일 코드를 새 파일 · 수정 · 삭제로 모아 복사 (프로젝트 없이도) | [파일 모아보기](docs/project-mode.md#파일-모아보기) |
 | | 테스트 실행 · git 콘솔 · 커밋 | 적용 전/후 `npm test` · lint · typecheck · build 비교(v0.28.0), 적용한 파일만 커밋(v0.28.0, push 없음), 그 폴더의 git 명령만 실행 (Windows 앱) | [테스트 실행](docs/project-mode.md#테스트-실행-windows-앱) · [커밋](docs/project-mode.md#적용-후-커밋-windows-앱-v0280) · [git 콘솔](docs/project-mode.md#git-콘솔-windows-앱) |
-| | **실행 · 확인** | 사이드바에서 **이 프로젝트에 필요한 도구**(node · npm · python · JDK · gcc · cmake · dotnet · cargo · go · docker 등 50여 개)가 이 PC에 있는지 · 버전이 맞는지 색으로(초록 준비됨 · 노랑 확인 필요 · 빨강 없음), `node_modules` · `.venv` · `.env` · 쓰는 중인 포트 · Docker 엔진까지, 설치 명령 복사 · 공식 안내 (설치는 하지 않음, v0.41.0) · AI 질문에 이 PC 환경 한 줄 · 로드맵 작업마다 필요한 도구, 없으면 카드 경고 · 테스트 전에 미리 알림 (v0.42.0) | [실행 · 확인](docs/project-mode.md#실행--확인-v0410) |
+| | **실행 · 확인** | 사이드바에서 **이 프로젝트에 필요한 도구**(node · npm · python · JDK · gcc · cmake · dotnet · cargo · go · docker 등 50여 개)가 이 PC에 있는지 · 버전이 맞는지 색으로(초록 준비됨 · 노랑 확인 필요 · 빨강 없음), `node_modules` · `.venv` · `.env` · 쓰는 중인 포트 · Docker 엔진까지, 설치 명령 복사 · 공식 안내 (설치는 하지 않음, v0.41.0) · AI 질문에 이 PC 환경 한 줄 · 로드맵 작업마다 필요한 도구, 없으면 카드 경고 · 테스트 전에 미리 알림 (v0.42.0) · **▶ 앱 실행** — `npm run dev` 등을 사이드바에서 띄우고 찾은 주소(`http://localhost:5173`)를 크게, 로그 · ■ 중지 (v0.43.0) | [실행 · 확인](docs/project-mode.md#실행--확인-v0410) |
 | | 로드맵 | 계획서를 단계별 작업으로 쪼개고 진행 링 · 막대 · 선행 관계 지도 · 번다운으로 보기, `docs/procedure.md` · `README.md` 자동 정리(v0.38.0), 사이드바 카드에서 창을 열지 않고 진행 · 적용하면 검증 중 · 테스트 통과면 완료 확인(v0.40.0) | [로드맵](docs/roadmap.md) |
 | **확장 · 기타** | 사이드탭 | PDF · 영상 자막 맥락 · 번역 비교 · 한 줄 종합 · 사이트별 프리셋(v0.37.0), 크롬 사이드 패널에 AI 2개, 보고 있는 페이지 본문을 자동으로 함께 보냄, 요약 · 번역 · 핵심만 · 쉽게 설명 단추와 이 페이지에서 전에 물어본 것(v0.29.0) | [사이드탭](docs/chrome-extension.md#사이드탭-크롬-확장) |
 | | 웹페이지로 질문 | 오른쪽 클릭 › 선택한 글 · 이 페이지 본문을 앱에 넣기 | [웹페이지로 질문](docs/chrome-extension.md#보고-있는-웹페이지로-질문-크롬-확장) |
@@ -176,6 +176,7 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.43.0** | **▶ 앱 실행** — 실행 · 확인 칸에서 `package.json`의 dev · start · serve · preview를 골라 **▶ 앱 실행** → 확인 창 → 셸 없이 실행, 출력에서 이 PC 주소를 찾아 초록 단추로(누르면 기본 브라우저) · 로그 창(복사 · 중지) · ■ 중지 · 프로젝트를 닫거나 앱을 끄면 함께 끔 · node · npm이 없으면 실행 단추를 막고 이유 |
 | **v0.42.0** | **환경 정보 연결** — 프로젝트 질문에 `[이 PC의 개발 환경] Node.js 22.11 · Python 3.12 · JDK: -` 한 줄을 붙여 AI가 없는 도구를 전제로 답하지 않게(끌 수 있음, 경로는 안 넣음) · 로드맵 작업마다 **필요한 도구**(AI가 분해할 때 적고 직접 고침) — 그 도구도 점검하고, 없으면 카드에 빨간 경고 + 실행 · 확인 열기 · 필요한 도구가 없으면 테스트를 돌리기 전에 원인을 바로 알림 · 사이드바가 꽉 차도 파일 나무는 120px 유지 |
 | **v0.41.0** | **개발 환경 점검** — 프로젝트를 열면 사이드바 **실행 · 확인** 칸이 필요한 도구가 이 PC에 있는지 · 버전이 맞는지 바로 색으로 보여 줌(PATH의 실행 파일에 `--version`만, 프로젝트 안 실행 파일은 실행 안 함) · **자세히** 창에 도구 · 버전 · 필요한 버전 · 이유 · 설치 명령 복사 · 공식 안내 · 의존성 미설치 · `.env` · 포트 · Docker 엔진 같은 준비 상태 · 틀린 목록은 직접 고침 |
 | **v0.40.1** | **코드 정리** — Windows 앱과 크롬 확장이 같은 설정 · 보내기 옵션 규칙을 씀(`shared/prefs.js`) · Windows 앱에서 로컬 LLM 패널에도 스킬 지침 · 프로젝트 본문이 붙음 · 확장의 보내기 옵션도 길이 · 항목 검사 |

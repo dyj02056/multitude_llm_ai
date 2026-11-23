@@ -18,7 +18,7 @@ const projectCall = (fn) => async (_e, ...args) => {
 };
 
 /**
- * ctx: { ipcMain, project, guard, prefs(), savePrefs, pushState, win(), devTest(), gitConsole(), setSidebarOpen(open) }
+ * ctx: { ipcMain, project, guard, prefs(), savePrefs, pushState, win(), devTest(), devRun(), gitConsole(), setSidebarOpen(open) }
  */
 function register(ctx) {
   const { ipcMain, project, guard } = ctx;
@@ -54,7 +54,9 @@ function register(ctx) {
     const picked = await project.pick(ctx.win());
     if (!picked) return null; // 폴더 고르기를 취소하면 지금 기억해 둔 프로젝트를 지우지 않는다
     ctx.gitConsole()?.stop();
-    return rememberProject(picked);
+    const r = await rememberProject(picked);
+    ctx.devRun?.()?.onProjectChange(); // 다른 프로젝트로 바꾸면 띄운 개발 서버를 끈다 (v0.43.0)
+    return r;
   }));
   // Windows 앱은 접근 허용을 다시 받을 필요가 없어 restore·reconnect가 같다.
   const restoreProject = async () => {
@@ -73,6 +75,7 @@ function register(ctx) {
     ctx.gitConsole()?.stop(); // 실행 중인 git 명령은 그 폴더와 함께 멈춘다
     project.close();
     await rememberProject(null);
+    ctx.devRun?.()?.onProjectChange(); // 프로젝트를 닫으면 띄운 개발 서버도 끈다 (v0.43.0)
     return true;
   }));
   ipcMain.handle('project:readDir', projectCall((rel) => project.readDir(String(rel))));

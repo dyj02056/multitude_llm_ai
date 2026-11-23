@@ -223,6 +223,10 @@ v0.34.0: 테스트 실행에 Python `pytest` · Rust `cargo test` · Go `go test
 
 ![실행 · 확인 칸](screenshots/76-env-hub.png)
 
+v0.43.0: 칸 아래 **▶ 앱 실행 (dev)** 을 누르면 확인 창 뒤 `npm run dev`(또는 start · serve · preview)를 띄우고, 찾은 주소 `http://localhost:5173`을 초록 단추로 보여 줍니다. **로그** · **■ 중지**. [자세히](project-mode.md#앱-실행--개발-서버-v0430-windows-앱)
+
+![앱 실행 중](screenshots/79-run-app.png)
+
 v0.42.0: 프로젝트 질문에 이 PC의 도구 · 버전 한 줄을 붙여 AI가 없는 도구를 전제로 답하지 않게 하고(자세히 창에서 끔), 로드맵 작업마다 **필요한 도구**를 적어 그 도구가 없으면 카드에 경고합니다. 필요한 도구가 없으면 테스트 실행 전에 원인을 바로 알려 줍니다. [자세히](project-mode.md#ai에게-환경-알리기--작업에-필요한-도구-v0420)
 
 #### 로드맵 (v0.38.0)

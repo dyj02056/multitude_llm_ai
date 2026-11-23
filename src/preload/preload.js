@@ -9,7 +9,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // 본체가 화면으로 보내는 알림 중, 화면이 들을 수 있는 종류만 허락합니다.
-const CHANNELS = new Set(['state', 'panel:status', 'synth:status', 'shortcut', 'git:output', 'git:done']);
+const CHANNELS = new Set(['state', 'panel:status', 'synth:status', 'shortcut', 'git:output', 'git:done', 'devrun:state']);
 
 // 화면에서 window.host 로 쓸 수 있는 기능 목록. send는 "부탁만", invoke는 "부탁하고 결과 받기"입니다.
 // 지금 화면 언어 (v0.30.0): 화면 스크립트가 첫 글자를 그리기 전에 알아야 해서 시작할 때 한 번만 동기로 묻는다
@@ -149,6 +149,14 @@ contextBridge.exposeInMainWorld('host', {
   env: {
     check: (req) => ipcRenderer.invoke('env:check', req),
     openInstall: (id) => ipcRenderer.invoke('env:openInstall', id), // 목록에 있는 공식 설치 안내 주소만
+  },
+  // 앱 실행 (v0.43.0, Windows 앱 전용): 스크립트 이름만 넘기고, 확인 · 실행 · 중지는 메인(devrun.js)이 한다. 상태는 'devrun:state'로 온다
+  devrun: {
+    info: () => ipcRenderer.invoke('devrun:info'),
+    start: (name) => ipcRenderer.invoke('devrun:start', name), // dev · start · serve · preview
+    stop: () => ipcRenderer.invoke('devrun:stop'),
+    log: () => ipcRenderer.invoke('devrun:log'),
+    open: (url) => ipcRenderer.invoke('devrun:open', url), // 이 PC 주소만 기본 브라우저로
   },
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),
   on: (channel, fn) => {

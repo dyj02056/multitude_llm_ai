@@ -67,6 +67,7 @@ const RENDERER_FILES = [
   'roadmap-ui.js', // 로드맵 (v0.38.0)
   'roadmap-card.js', // 사이드바의 로드맵 카드 (v0.40.0)
   'dev-hub.js', // 실행 · 확인 칸 (v0.41.0~)
+  'dev-run.js', // 앱 실행 (v0.43.0, Windows 앱에서만 보임)
   'library.js',
   'library-presets.js',
   'settings-transfer-ui.js',

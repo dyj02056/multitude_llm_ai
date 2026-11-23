@@ -445,6 +445,7 @@
   // 프로젝트를 열고 닫거나 바꾸면 그 프로젝트를 점검한다 (같은 프로젝트면 다시 그리기만)
   window.onDevProject = () => {
     const key = projectId();
+    window.onDevRunProject?.(key); // 앱 실행 (v0.43.0, dev-run.js)
     if (key === env.key) return render();
     env.key = key;
     Object.assign(env, { entries: [], texts: {}, needs: [], reqs: {}, ready: [], readyAll: [], pkgs: [], ports: [], found: null, rows: [], error: '', at: 0 });

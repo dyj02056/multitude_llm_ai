@@ -364,6 +364,7 @@ module.exports = {
   TEST_TIMEOUT_MS,
   MAX_OUTPUT,
   CHECK_SCRIPTS,
+  readPkgScripts, // 앱 실행(devrun.js, v0.43.0)도 쓴다
   RUNNER_CHECKS,
   RUNNERS,
   RUNNER_SENSITIVE,

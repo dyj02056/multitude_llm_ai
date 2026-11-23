@@ -46,6 +46,7 @@ const { setupGitConsole } = require('./gitconsole');
 const { setupDevTest } = require('./devtest');
 const { setupGitCommit } = require('./gitcommit');
 const { setupEnvCheck } = require('./envcheck');
+const { setupDevRun } = require('./devrun');
 const { createUpdater } = require('./updater');
 const secure = require('./secure-store'); // 기록 · 설정 · 라이브러리 · 프로젝트 상태 암호화 (v0.22.1)
 const notifyCore = require('../shared/notify');
@@ -95,6 +96,7 @@ let chatView = 'panels'; // 채팅 화면 안에서: 'panels' (웹 패널) | 'di
 let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널을 오른쪽으로 민다
 let gitConsole = null; // git 콘솔 (gitconsole.js)
 let devTest = null; // 미리보기 창의 테스트 실행 (devtest.js)
+let devRun = null; // 앱 실행 — 개발 서버 (devrun.js, v0.43.0)
 let focusId = null; // 크게 보는 패널 (⤢). 나머지 패널은 크기를 그대로 둔 채 화면 밖으로 옮긴다
 const barIds = new Map(); // 패널 id -> 아래 바 줄 수 (1~2, v0.28.0) — 웹페이지 아래쪽을 바 높이 × 줄 수만큼 비운다
 let loginView = null;
@@ -746,6 +748,7 @@ require('./ipc/project').register({
   pushState,
   win: () => win,
   devTest: () => devTest,
+  devRun: () => devRun,
   gitConsole: () => gitConsole,
   setSidebarOpen: (open) => (sidebarOpen = open),
 });
@@ -861,6 +864,8 @@ if (!app.requestSingleInstanceLock()) {
     setupGitCommit({ ipcMain, getRoot: () => project.info()?.id || null, isBusy: () => !!devTest?.isBusy() });
     // 개발 환경 점검 (v0.41.0): 도구가 있는지 · 버전 (--version만, 셸 없이, 프로젝트 안 실행 파일은 쓰지 않음)
     setupEnvCheck({ ipcMain, getRoot: () => project.info()?.id || null, shell });
+    // 앱 실행 (v0.43.0): package.json의 dev · start · serve · preview만, 확인 창, 셸 없이, 주소는 localhost만
+    devRun = setupDevRun({ ipcMain, getWin: () => win, project, shell });
     updater = createUpdater({ app, isAuto: () => prefs.autoUpdate !== false, onChange: () => schedulePushState(), log });
     updater.start();
   });
@@ -873,6 +878,7 @@ if (!app.requestSingleInstanceLock()) {
     cleanupTemp();
     gitConsole?.stop();
     devTest?.stop();
+    devRun?.stop(); // 띄운 개발 서버도 함께 끈다 (v0.43.0)
     updater?.stop();
   });
 }

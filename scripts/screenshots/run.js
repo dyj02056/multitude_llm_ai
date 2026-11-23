@@ -103,6 +103,9 @@ const SCENES = [
   { name: '77-env-check', page: 'app' },
   // v0.42.0 (로드맵 작업에 필요한 도구 · AI에게 환경 알리기)
   { name: '78-env-task', page: 'app' },
+  // v0.43.0 (앱 실행)
+  { name: '79-run-app', page: 'app' },
+  { name: '80-run-log', page: 'app' },
   // v0.37.0 (사이드탭)
   { name: '68-side-pdf', page: 'side', width: 420 },
   { name: '69-side-compare', page: 'side', width: 420 },

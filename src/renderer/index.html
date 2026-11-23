@@ -119,6 +119,15 @@
       <ul id="dhEnvChips" class="dh-chips" data-i18n-aria="dev.env.chipsAria"></ul>
       <div id="dhEnvReady" class="dh-ready"></div>
       <p id="dhEnvNote" class="dh-note" role="status" aria-live="polite" hidden></p>
+      <!-- 앱 실행 (v0.43.0, Windows 앱): package.json의 dev · start · serve · preview. dev-run.js -->
+      <div id="dhRun" class="dh-run" hidden>
+        <div class="dh-run-row">
+          <button id="dhRunBtn" class="dh-run-btn primary" data-label-by-script></button>
+          <select id="dhRunScript" data-i18n-aria="dev.run.scriptAria" data-i18n-title="dev.run.scriptAria"></select>
+          <button id="dhRunLog" class="dh-mini" data-i18n="dev.run.log" data-i18n-title="dev.run.logTitle" hidden></button>
+        </div>
+        <div id="dhRunState" class="dh-run-state" role="status" aria-live="polite"></div>
+      </div>
     </section>
     <details id="psRules" class="ps-rules">
       <summary data-i18n="ui.h.psRules.summary"></summary>
@@ -503,6 +512,20 @@
         <button id="envRecheck" class="primary" data-i18n="dev.env.recheckBtn"></button>
         <button id="envTerminal" data-i18n="dev.env.terminal" data-i18n-title="dev.env.terminalTitle"></button>
         <button id="envClose" data-i18n="dev.close"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 앱 실행 로그 (v0.43.0): 개발 서버 출력. dev-run.js -->
+  <div id="runLogModal" class="modal" hidden>
+    <div class="modal-box run-log-box" role="dialog" aria-modal="true" aria-labelledby="runLogTitle">
+      <div class="modal-head"><b id="runLogTitle" data-i18n="dev.run.logTitleBar"></b><span id="runLogSub" class="muted-label"></span></div>
+      <div class="modal-body"><pre id="runLogText" class="run-log" tabindex="0" data-i18n-aria="dev.run.logTitle"></pre></div>
+      <div class="modal-foot">
+        <span id="runLogStatus" class="muted-label" role="status" aria-live="polite"></span>
+        <button id="runLogCopy" data-i18n="dev.run.copy"></button>
+        <button id="runLogStop" class="danger" data-i18n="dev.run.stopBtn"></button>
+        <button id="runLogClose" data-i18n="dev.close"></button>
       </div>
     </div>
   </div>
@@ -931,7 +954,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle" data-i18n="ui.h.sendBtn"></button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → dev-hub.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → dev-hub.js → dev-run.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
   <script src="../shared/i18n-ko.js"></script>
   <script src="../shared/i18n-ko-ui.js"></script>
   <script src="../shared/i18n-ko-project.js"></script>
@@ -1010,6 +1033,7 @@
   <script src="roadmap-ui.js"></script>
   <script src="roadmap-card.js"></script>
   <script src="dev-hub.js"></script>
+  <script src="dev-run.js"></script>
   <script src="library.js"></script>
   <script src="library-presets.js"></script>
   <script src="settings-transfer-ui.js"></script>

@@ -32,8 +32,9 @@ const PREVIEW = scene === '26-send-preview';
 const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next', '78-env-task'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
 const ROADMAP = CARD || ['71-roadmap-tasks', '72-roadmap-dash'].includes(scene); // v0.38.1
 const ENV = ['76-env-hub', '77-env-check'].includes(scene);
-const ENV_TASK = scene === '78-env-task'; // v0.42.0: 로드맵 작업에 필요한 도구(java)가 이 PC에 없음 → 카드 경고 // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
-const PROJ = ENV || ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
+const ENV_TASK = scene === '78-env-task';
+const RUN = ['79-run-app', '80-run-log'].includes(scene); // v0.43.0: 앱 실행 — 개발 서버를 띄우고 주소 · 로그 // v0.42.0: 로드맵 작업에 필요한 도구(java)가 이 PC에 없음 → 카드 경고 // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
+const PROJ = RUN || ENV || ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
 const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
 let onboarded = !ONBOARD;
 const SIDEBAR_W = 300;
@@ -42,7 +43,7 @@ const barRows = new Map();
 // 보내기 전 미리보기 장면은 문서를 받지 않는 Duck.ai를 넣어 "빼고 보냄" 경고가 보이게 한다
 const selected = scene === '64-local-panels' ? ['gemini', 'local', 'local-2', 'local-3'] : scene === '65-local-attach' ? ['gemini', 'chatgpt', 'local', 'local-2'] : LOCAL ? ['gemini', 'chatgpt', 'claude', LL.LOCAL_ID] : PREVIEW ? ['gemini', 'chatgpt', 'claude', 'duckai'] : ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
 
-const listeners = { state: [], 'panel:status': [], 'synth:status': [], shortcut: [] };
+const listeners = { state: [], 'panel:status': [], 'synth:status': [], shortcut: [], 'devrun:state': [] };
 const emit = (ch, p) => listeners[ch].forEach((fn) => fn(p));
 let mode = scene === '01-model-picker' ? 'pick' : 'chat';
 let chatView = 'panels';
@@ -270,7 +271,7 @@ window.host = {
   setPanelBar: (id, rows) => (rows ? barRows.set(id, rows) : barRows.delete(id), push()),
   update: { check: async () => {}, download: async () => {}, install: async () => false, openReleases() {} },
   project: PROJ ? fakeProject() : Object.fromEntries(['pick', 'restore', 'reconnect', 'close', 'readDir', 'readFile', 'writeFile', 'deleteFile', 'globalExclude', 'loadState', 'saveState'].map((n) => [n, async () => null])),
-  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit(), env: fakeEnv() } : {}),
+  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit(), env: fakeEnv(), devrun: fakeDevrun() } : {}),
   library: {
     load: async () =>
       normalizeLibrary({
@@ -386,6 +387,19 @@ function fakeEnv() {
       return { ok: true, at: now, tools: Object.fromEntries(req.tools.map((id) => [id, tools[id] || { state: 'missing' }])), ports: Object.fromEntries((req.ports || []).map((p) => [p, ENV && p === 5173])), docker: null, javaHome: req.tools.includes('jdk') ? { set: false } : null };
     },
     openInstall: async () => true,
+  };
+}
+
+// 앱 실행 (v0.43.0): package.json의 dev · start를 보여 주고, 실행하면 Vite처럼 주소를 알린다
+const RUN_LOG = '> demo-app@1.0.0 dev\n> vite\n\n  VITE v6.0.3  ready in 412 ms\n\n  ➜  Local:   http://localhost:5173/\n  ➜  Network: use --host to expose\n  ➜  press h + enter to show help\n\n12:04:31 [vite] page reload src/user.js\n12:04:33 [vite] hmr update /src/App.jsx\n';
+function fakeDevrun() {
+  let st = { running: false };
+  return {
+    info: async () => ({ ok: true, scripts: [{ name: 'dev', script: 'vite' }, { name: 'start', script: 'vite preview' }], state: st }),
+    start: async (name) => ((st = { running: true, name, script: 'vite', url: null, lines: 2, startedAt: now }), { ok: true, state: st }),
+    stop: async () => true,
+    log: async () => ({ ok: true, text: RUN_LOG, state: { ...st, running: true, name: 'dev', script: 'vite' } }),
+    open: async () => true,
   };
 }
 
@@ -622,6 +636,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 숨긴 창에서는 :focus-visible이 안 그려져 같은 모양(.ps-row:focus-visible)을 직접 붙인다
     Object.assign(document.activeElement.style, { outline: '2px solid var(--accent)', outlineOffset: '-2px' });
     await sleep(200);
+  }
+  if (RUN) {
+    // ▶ 앱 실행 → 본체가 주소를 알림 → (80) 로그 창
+    await sleep(800);
+    click('#dhRunBtn');
+    await sleep(300);
+    emit('devrun:state', { running: true, name: 'dev', script: 'vite', url: 'http://localhost:5173/', lines: 9, startedAt: now });
+    await sleep(300);
+    if (scene === '80-run-log') {
+      click('#dhRunLog');
+      await sleep(600);
+    }
   }
   if (ENV) {
     await sleep(900);

@@ -475,7 +475,7 @@
   }
 
   /** 검사 이름(test · lint · pytest …) → 그 검사에 꼭 필요한 도구 id */
-  const CHECK_TOOLS = { test: ['node', 'npm'], lint: ['node', 'npm'], typecheck: ['node', 'npm'], build: ['node', 'npm'], pytest: ['python'], 'cargo-test': ['cargo'], 'go-test': ['go'] };
+  const CHECK_TOOLS = { test: ['node', 'npm'], lint: ['node', 'npm'], typecheck: ['node', 'npm'], build: ['node', 'npm'], dev: ['node', 'npm'], start: ['node', 'npm'], serve: ['node', 'npm'], preview: ['node', 'npm'], pytest: ['python'], 'cargo-test': ['cargo'], 'go-test': ['go'] };
 
   /** 점검 결과(found)에서 검사에 필요한 도구 중 "없음"인 것 → 첫 번째 { check, id } | null (점검 전 · 확장은 null) */
   function missingForChecks(found, checks) {
