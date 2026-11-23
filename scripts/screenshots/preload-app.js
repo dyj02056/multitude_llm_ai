@@ -31,7 +31,8 @@ const PREVIEW = scene === '26-send-preview';
 // v0.31.0: 09 · 10 · 16 · 21 · 22 · 23(예전 디자인이던 프로젝트 장면)과 47(파일 나무 키보드)도 같은 가짜 프로젝트로 찍는다
 const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
 const ROADMAP = CARD || ['71-roadmap-tasks', '72-roadmap-dash'].includes(scene); // v0.38.1
-const PROJ = ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
+const ENV = ['76-env-hub', '77-env-check'].includes(scene); // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
+const PROJ = ENV || ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
 const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
 let onboarded = !ONBOARD;
 const SIDEBAR_W = 300;
@@ -268,7 +269,7 @@ window.host = {
   setPanelBar: (id, rows) => (rows ? barRows.set(id, rows) : barRows.delete(id), push()),
   update: { check: async () => {}, download: async () => {}, install: async () => false, openReleases() {} },
   project: PROJ ? fakeProject() : Object.fromEntries(['pick', 'restore', 'reconnect', 'close', 'readDir', 'readFile', 'writeFile', 'deleteFile', 'globalExclude', 'loadState', 'saveState'].map((n) => [n, async () => null])),
-  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit() } : {}),
+  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit(), env: fakeEnv() } : {}),
   library: {
     load: async () =>
       normalizeLibrary({
@@ -309,6 +310,13 @@ function fakeProject() {
     files['config.js'] = "export const config = { base: '/api/users/' };\n";
   }
   const info = { name: 'demo-app', id: 'C:\\work\\demo-app' };
+  if (ENV) {
+    // 개발 환경 점검 장면: Node(vite) + Python + Maven 프로젝트, 의존성 미설치 · .env 없음
+    files['package.json'] = JSON.stringify({ name: 'demo-app', version: '1.0.0', engines: { node: '>=20' }, scripts: { dev: 'vite', test: 'node --test' }, devDependencies: { vite: '^6.0.0' } }, null, 2) + '\n';
+    files['pyproject.toml'] = '[project]\nname = "demo-api"\nrequires-python = ">=3.11"\n';
+    files['pom.xml'] = '<project><properties><maven.compiler.release>21</maven.compiler.release></properties></project>\n';
+    files['.env.example'] = 'API_URL=\n';
+  }
   if (ROADMAP) files['.mla/roadmap.json'] = JSON.stringify(CARD ? S.roadmapCardSample(LANG) : S.roadmapSample(LANG));
   const readDir = async (dir) => {
     const pre = dir ? `${dir}/` : '';
@@ -358,6 +366,19 @@ function fakeDevtest() {
       return { ok: true, scripts, results, script: 'node --test', before: results[0].before, after: results[0].after };
     },
     stop: async () => true,
+  };
+}
+
+// 개발 환경 점검 (v0.41.0): 이 PC에 있는 도구 · 버전 (장면마다 같은 값). ENV 장면은 Python 버전이 낮고 JDK · Maven이 없고 5173 포트를 쓰는 중
+function fakeEnv() {
+  const ok = (version, path) => ({ state: 'ok', version, path });
+  const tools = { git: ok('2.47.1', 'C:/Program Files/Git/cmd/git.exe'), node: ok('22.11.0', 'C:/Program Files/nodejs/node.exe'), npm: ok('10.9.0', ''), npx: ok('10.9.0', ''), python: ok(ENV ? '3.10.11' : '3.12.7', 'C:/Python310/python.exe'), pip: ok('24.2', ''), jdk: { state: 'missing' }, mvn: { state: 'missing' } };
+  return {
+    check: async (req) => {
+      await new Promise((r) => setTimeout(r, 120));
+      return { ok: true, at: now, tools: Object.fromEntries(req.tools.map((id) => [id, tools[id] || { state: 'missing' }])), ports: Object.fromEntries((req.ports || []).map((p) => [p, ENV && p === 5173])), docker: null, javaHome: req.tools.includes('jdk') ? { set: false } : null };
+    },
+    openInstall: async () => true,
   };
 }
 
@@ -594,6 +615,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 숨긴 창에서는 :focus-visible이 안 그려져 같은 모양(.ps-row:focus-visible)을 직접 붙인다
     Object.assign(document.activeElement.style, { outline: '2px solid var(--accent)', outlineOffset: '-2px' });
     await sleep(200);
+  }
+  if (ENV) {
+    await sleep(900);
+    if (scene === '77-env-check') {
+      click('#dhEnvMore');
+      await sleep(500);
+    }
   }
   if (CARD) {
     // 로드맵 카드 (v0.40.0): 창을 열지 않고 사이드바 카드로 진행한다. 74는 구현 요청 → 변경 보기 → 테스트 → 적용까지 실제 화면 코드로 눌러 간다

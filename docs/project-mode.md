@@ -85,6 +85,7 @@ legal/
 | 테스트 실행 (미리보기 창) | 있음 (v0.12.0, lint · typecheck · build는 v0.28.0) | 없음 (같은 이유) |
 | 적용 후 커밋 | 있음 (v0.28.0) | 없음 (같은 이유) |
 | 섞어서 적용 · 작업 이어 하기 · 바 두 줄 | 있음 (v0.28.0) | 있음 (v0.28.0) |
+| 개발 환경 점검 (실행 · 확인 칸) | 있음 — 설치 여부 · 버전 · 포트 · Docker 엔진 (v0.41.0) | 필요한 도구 **목록만** (프로그램을 실행할 수 없어 설치 여부는 모름) |
 
 ### 테스트 실행 (Windows 앱)
 
@@ -187,6 +188,54 @@ legal/
 - **확인 창**: `reset --hard`, `push --force`·`+브랜치`·`:브랜치`, `branch -D`, `checkout -- 경로`·`-f`, `restore`, `stash drop/clear`, `rm`, `tag -d`, `remote remove/set-url`
 - 한 번에 하나, 시간 제한(fetch·pull·push 2분, 나머지 1분), 출력 2MB까지. 출력과 입력 줄의 `https://아이디:토큰@` 주소와 알려진 키 모양은 가립니다.
 - 콘솔을 열면 이 저장소의 **git 훅**(commit 등에서 실행되는 프로그램)이 있는지 알려 줍니다. AI 수정안은 `.git` 안쪽을 쓸 수 없으므로(v0.6.3) AI가 훅을 심을 수는 없습니다.
+
+## 실행 · 확인 (v0.41.0~)
+
+프로젝트를 열면 사이드바의 로드맵 카드 바로 아래에 **실행 · 확인** 칸이 생깁니다. "이 프로젝트를 이 PC에서 실제로 돌릴 수 있는지"를 한눈에 보여 주는 곳입니다. 테두리와 왼쪽 굵은 줄의 색이 상태를 알려 줍니다.
+
+| 색 | 뜻 |
+|---|---|
+| 초록 `✓ 준비됨 · 필요한 도구 N개 있음` | 필요한 도구가 모두 있고 버전도 맞음 |
+| 노랑 `⚠ 확인 필요 N` | 버전이 요구와 다르거나, 설치는 됐는데 PATH에 없거나, 준비할 것(의존성 미설치 · `.env` 없음 · 포트 사용 중 · Docker 엔진 꺼짐)이 있음 |
+| 빨강 `✗ 없는 도구 N` | 꼭 필요한 도구가 이 PC에 없음 |
+| 파랑 | 점검 중 · 크롬 확장(목록만) |
+
+### 개발 환경 점검 (v0.41.0)
+
+![실행 · 확인 칸: 없는 도구 · 버전이 낮은 도구 · 준비할 것](screenshots/76-env-hub.png)
+
+1. **필요한 도구 고르기** — 프로젝트 맨 위 폴더의 파일 이름을 봅니다 (파일 내용은 버전 요구를 읽는 몇 개만).
+
+   | 표시 파일 | 확인하는 도구 |
+   |---|---|
+   | `package.json` (+ `pnpm-lock.yaml` · `yarn.lock` · `bun.lock`) | Node.js · npm · npx (+ pnpm · Yarn · Bun) |
+   | `pyproject.toml` · `requirements.txt` · `setup.py` · `Pipfile` · `environment.yml` · `manage.py` | Python · pip (+ Poetry · uv · Pipenv · conda, ruff · mypy 설정이 있으면 선택) |
+   | `pom.xml` · `build.gradle(.kts)` | JDK(javac) · Maven · Gradle (`mvnw` · `gradlew`가 있으면 Maven · Gradle은 선택) |
+   | `CMakeLists.txt` · `Makefile` · `meson.build` · `*.c` `*.cpp` | CMake · make · Meson · Ninja + **C/C++ 컴파일러 셋 중 하나**(gcc/g++ · clang · MSVC) |
+   | `*.csproj` · `*.sln` · `global.json` | .NET SDK |
+   | `Cargo.toml` · `go.mod` · `Gemfile` · `composer.json` · `pubspec.yaml` | cargo · rustc · Go · Ruby · Bundler · PHP · Composer · Dart · Flutter |
+   | `Dockerfile` · `compose.yaml` · `.devcontainer/` · `*.tf` · `k8s/` · `Chart.yaml` | Docker(+ 엔진이 켜져 있는지) · Terraform · kubectl · Helm |
+   | `compose.yaml`의 `postgres` · `mysql` 이미지, `*.sqlite` | psql · mysql · sqlite3 (선택) |
+   | `android/` · `AndroidManifest.xml` | Android SDK adb (선택) |
+   | `.pre-commit-config.yaml` · `.github/` · `vercel.json` · `netlify.toml` · `firebase.json` · `.clang-format` · `playwright.config.*` | pre-commit · GitHub CLI · Vercel · Netlify · Firebase CLI · clang-format · Playwright 브라우저 (대부분 선택) |
+   | 항상 | git |
+
+   **선택** 도구는 없어도 빨강이 되지 않고 회색으로만 표시됩니다.
+2. **필요한 버전 읽기** — `package.json`의 `engines` · `.nvmrc` · `.node-version`, `pyproject.toml`의 `requires-python` · `.python-version`, `pom.xml`의 `maven.compiler.release` · Gradle의 `JavaLanguageVersion.of(N)`, `go.mod`의 `go 1.xx`, `Cargo.toml`의 `rust-version`, `global.json`, `cmake_minimum_required`, `composer.json`의 `php`, `.ruby-version`, `pubspec.yaml`의 `sdk`. `>=20 <23` · `^18 || ^20` · `~=3.10` · `==3.12.*` 같은 꼴을 읽고, 읽을 수 없는 꼴은 판단하지 않습니다.
+3. **이 PC에서 찾기** (Windows 앱) — PATH의 **절대 경로 폴더**에서만 실행 파일을 찾고, 도구마다 정해 둔 버전 묻기(`--version`, Java는 `-version` 등)만 셸 없이 5초 제한으로 실행합니다. **프로젝트 폴더 안의 실행 파일은 찾지도 실행하지도 않습니다.**
+   - `npm` · `npx`는 실행하지 않고 npm 설치 폴더의 `package.json`에서 버전을 읽습니다. npm으로 깐 `.cmd` 도구(pnpm · Yarn · Vercel 등)도 실행하지 않고 옆의 `package.json`을 읽고, 없으면 "버전 확인 생략"으로 둡니다.
+   - Microsoft Store의 가짜 `python`은 건너뛰고 `py -3`을 씁니다.
+   - MSYS2 · `Program Files` · `JAVA_HOME` · Android SDK 같은 흔한 설치 자리에 있지만 PATH에 없으면 노랑 `PATH에 없음`과 그 폴더를 알려 줍니다.
+   - MSVC는 Visual Studio 설치 도구(`vswhere`)로 C++ 빌드 도구를 찾습니다 (개발자 명령 프롬프트에서만 PATH에 잡힌다고 알림).
+4. **준비 상태** — `package.json`에 의존성이 있는데 `node_modules`가 없음(→ `npm install` · `npm ci` · `pnpm install` …), 파이썬 가상 환경 없음(→ `py -m venv .venv`), `.env.example`은 있는데 `.env`가 없음(→ `copy .env.example .env`, 내용은 열지 않음), 개발 서버 기본 포트(Vite 5173 · Next 3000 · Angular 4200 · Django 8000 · Spring 8080 …)를 다른 프로그램이 쓰는 중, Docker는 있는데 엔진이 꺼짐, `JAVA_HOME`이 비었거나 javac가 없음.
+5. **자세히** — 표로 상태 · 도구 · 이 PC의 버전 · 필요한 버전(어디서 읽었는지) · 왜 필요한지(표시 파일) · 해결(**설치 명령 복사** — `winget install --id … -e` 등, **설치 안내 ↗** — 공식 페이지)을 봅니다. **터미널 열기**로 그 폴더에서 터미널을 열어 복사한 명령을 붙여 넣고, **다시 점검**합니다.
+6. **필요한 도구 고치기** — 자동으로 고른 목록이 틀렸으면 자세히 창 아래 체크 상자로 빼거나 더합니다. 이 PC에 프로젝트별로 기억합니다.
+
+![개발 환경 점검 창: 도구 · 버전 · 필요한 버전 · 설치 안내 · 준비 상태](screenshots/77-env-check.png)
+
+- **앱은 아무것도 설치하지 않습니다.** 설치는 사용자가 명령을 복사해 직접 실행합니다.
+- 프로젝트를 열 때 한 번 자동으로 점검하고, 사이드바 ⟳ · 자세히 창 **다시 점검**으로 다시 합니다.
+- 크롬 확장은 프로그램을 실행할 수 없어 같은 칸에 **필요한 도구 목록만** 보여 줍니다(파란색).
 
 ## 파일 모아보기
 

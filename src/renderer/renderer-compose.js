@@ -445,6 +445,7 @@ host.on('state', (next) => {
   window.onDebateState?.(); // 토론 설정 창도 같은 규칙 (debate-ui.js, v0.26.0)
   window.onWorkflowState?.(); // 작업 흐름 설정 창도 같은 규칙 (workflow-ui.js, v0.33.0)
   window.onRoadmapState?.(); // 로드맵 창도 같은 규칙 (roadmap-ui.js, v0.38.0)
+  window.onDevState?.(); // 개발 환경 점검 창도 같은 규칙 (dev-hub.js, v0.41.0)
   window.onOnboardState?.(); // 첫 사용 안내: 처음이면 띄우고, 화면을 떠났으면 닫는다 (onboarding.js, v0.31.0)
   if (state.chatView === 'help') renderUpdate();
   if (state.mode === 'chat') {

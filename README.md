@@ -3,7 +3,7 @@
 **한국어** · [English](README.en.md) · [개인정보 처리방침 / Privacy](PRIVACY.md)
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.40.1-8db3e2)
+![version](https://img.shields.io/badge/version-0.41.0-8db3e2)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-불필요-3fb950)
@@ -22,7 +22,7 @@
 | **동시에 띄우기** | 최대 6개 패널, 배치 4가지(grid · row · main · 2col), 패널 하나 크게 보기 |
 | **묻기** | 한 입력창으로 동시 질문, 파일 첨부, 템플릿(변수) · 스킬(SKILL.md) 붙이기 |
 | **답 다루기** | 답변 비교(차이 강조 · 이견 분석 표), 한 AI에게 종합 맡기기, AI끼리 넘기기 · 토론, 기록 · 검색, MD · HTML 내보내기 |
-| **코드 작업** | 프로젝트 폴더 맥락 보내기 → AI별 수정안 비교 → 미리보기 · 테스트 실행 · 적용 · 되돌리기, 잘린 답변 막기 |
+| **코드 작업** | 프로젝트 폴더 맥락 보내기 → AI별 수정안 비교 → 미리보기 · 테스트 실행 · 적용 · 되돌리기, 잘린 답변 막기, **이 PC의 개발 환경 점검**(v0.41.0) |
 | **브라우저에서** | 크롬 확장: 같은 앱을 탭 하나로, 오른쪽 클릭으로 웹페이지 질문, **사이드탭**(보고 있는 페이지 옆에 AI 2개) |
 | **실행 형태** | Windows 앱(Electron, Google 계정 하나로 로그인, 자동 업데이트) · 크롬 확장(크롬에 로그인된 계정 그대로) |
 | **디자인** | 어두운 회색 단색 · 1px 선 · 각진 모서리, 화면 글자는 본문 글꼴 · 코드만 고정폭 (v0.19.0~, v0.39.0 정리) |
@@ -65,6 +65,7 @@ flowchart LR
 | | 잘린 답변 막기 | 끊긴 · 생략된 코드는 적용 막기, 긴 파일은 찾기/바꾸기, 이어서 받기(자동 가능), 계획 먼저 · 파일별로 받기(바로 시작 가능), 보낼 양 토큰 어림 | [잘린 답변 막기](docs/project-mode.md#잘린-답변-막기) |
 | | 파일 모아보기 | 답변의 파일 코드를 새 파일 · 수정 · 삭제로 모아 복사 (프로젝트 없이도) | [파일 모아보기](docs/project-mode.md#파일-모아보기) |
 | | 테스트 실행 · git 콘솔 · 커밋 | 적용 전/후 `npm test` · lint · typecheck · build 비교(v0.28.0), 적용한 파일만 커밋(v0.28.0, push 없음), 그 폴더의 git 명령만 실행 (Windows 앱) | [테스트 실행](docs/project-mode.md#테스트-실행-windows-앱) · [커밋](docs/project-mode.md#적용-후-커밋-windows-앱-v0280) · [git 콘솔](docs/project-mode.md#git-콘솔-windows-앱) |
+| | **실행 · 확인** | 사이드바에서 **이 프로젝트에 필요한 도구**(node · npm · python · JDK · gcc · cmake · dotnet · cargo · go · docker 등 50여 개)가 이 PC에 있는지 · 버전이 맞는지 색으로(초록 준비됨 · 노랑 확인 필요 · 빨강 없음), `node_modules` · `.venv` · `.env` · 쓰는 중인 포트 · Docker 엔진까지, 설치 명령 복사 · 공식 안내 (설치는 하지 않음, v0.41.0) | [실행 · 확인](docs/project-mode.md#실행--확인-v0410) |
 | | 로드맵 | 계획서를 단계별 작업으로 쪼개고 진행 링 · 막대 · 선행 관계 지도 · 번다운으로 보기, `docs/procedure.md` · `README.md` 자동 정리(v0.38.0), 사이드바 카드에서 창을 열지 않고 진행 · 적용하면 검증 중 · 테스트 통과면 완료 확인(v0.40.0) | [로드맵](docs/roadmap.md) |
 | **확장 · 기타** | 사이드탭 | PDF · 영상 자막 맥락 · 번역 비교 · 한 줄 종합 · 사이트별 프리셋(v0.37.0), 크롬 사이드 패널에 AI 2개, 보고 있는 페이지 본문을 자동으로 함께 보냄, 요약 · 번역 · 핵심만 · 쉽게 설명 단추와 이 페이지에서 전에 물어본 것(v0.29.0) | [사이드탭](docs/chrome-extension.md#사이드탭-크롬-확장) |
 | | 웹페이지로 질문 | 오른쪽 클릭 › 선택한 글 · 이 페이지 본문을 앱에 넣기 | [웹페이지로 질문](docs/chrome-extension.md#보고-있는-웹페이지로-질문-크롬-확장) |
@@ -175,6 +176,7 @@ multitude_llm_ai/
 
 | 버전 | 내용 |
 |---|---|
+| **v0.41.0** | **개발 환경 점검** — 프로젝트를 열면 사이드바 **실행 · 확인** 칸이 필요한 도구가 이 PC에 있는지 · 버전이 맞는지 바로 색으로 보여 줌(PATH의 실행 파일에 `--version`만, 프로젝트 안 실행 파일은 실행 안 함) · **자세히** 창에 도구 · 버전 · 필요한 버전 · 이유 · 설치 명령 복사 · 공식 안내 · 의존성 미설치 · `.env` · 포트 · Docker 엔진 같은 준비 상태 · 틀린 목록은 직접 고침 |
 | **v0.40.1** | **코드 정리** — Windows 앱과 크롬 확장이 같은 설정 · 보내기 옵션 규칙을 씀(`shared/prefs.js`) · Windows 앱에서 로컬 LLM 패널에도 스킬 지침 · 프로젝트 본문이 붙음 · 확장의 보내기 옵션도 길이 · 항목 검사 |
 | **v0.40.0** | **로드맵 카드** — 로드맵 창을 열고 닫지 않아도 프로젝트 사이드바 맨 위 카드에서 지금 작업 · 완료 조건 · 필요한 버튼만 보고 진행 · 수정안을 적용하면 작업이 저절로 **검증 중**, 미리보기 테스트가 통과했으면 **완료로 바꿀까요?**, 완료하면 다음 작업이 카드에 · 보내기 · 적용은 그대로 직접 |
 | **v0.39.0** | **화면 정리** — 틀(어두운 단색 · 1px 선 · 높이)은 그대로 두고 `❯` · `~/chat` · `[x]` · `##` 같은 기호 장식과 `lib · proj · diff` 같은 영문 약어 버튼을 걷어 냄 · 화면 글자는 본문 글꼴 · 좁은 창(960px)에서도 넘치지 않게 |

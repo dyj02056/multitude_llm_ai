@@ -98,6 +98,9 @@ const SCENES = [
   { name: '73-roadmap-card', page: 'app' },
   { name: '74-roadmap-auto', page: 'app' },
   { name: '75-roadmap-next', page: 'app' },
+  // v0.41.0 (실행 · 확인: 개발 환경 점검)
+  { name: '76-env-hub', page: 'app' },
+  { name: '77-env-check', page: 'app' },
   // v0.37.0 (사이드탭)
   { name: '68-side-pdf', page: 'side', width: 420 },
   { name: '69-side-compare', page: 'side', width: 420 },

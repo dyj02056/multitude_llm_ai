@@ -244,6 +244,16 @@ Cut-off protection: if an answer was cut off or abbreviated (`... existing code 
 
 ![Patch preview](../screenshots/en/11-patch-preview.png)
 
+### Run & check — dev environment (v0.41.0)
+
+When you open a project, the **Run & check** box under the roadmap card shows whether the tools this project needs are on this PC and at the right version: green = ready, yellow = needs a look (wrong version, installed but not on PATH, something to prepare), red = missing. The app reads the file names in the project root (`package.json` → Node.js · npm · npx, `pyproject.toml` → Python · pip, `pom.xml` → JDK · Maven, `CMakeLists.txt` → CMake + one C/C++ compiler, `Dockerfile` → Docker, and about 50 tools in all) and required versions (`engines`, `.nvmrc`, `requires-python`, `maven.compiler.release`, `go 1.xx`, …).
+
+The Windows app looks only in absolute PATH folders, never runs anything inside the project folder, and runs only a fixed version query (`--version`) per tool without a shell. **Details** shows a table with each tool's version, the required version and why it is needed, plus **Copy install command** (`winget install --id … -e`) and **Install guide ↗**, and readiness items: missing `node_modules` (→ `npm install`), no `.venv`, `.env.example` without `.env`, a dev-server port already in use, Docker engine stopped, `JAVA_HOME` empty. **The app never installs anything.** Fix the detected list with the check boxes under **Edit required tools** (remembered per project). The Chrome extension cannot run programs, so it only lists the tools.
+
+![Run & check box](../screenshots/en/76-env-hub.png)
+
+![Dev environment check](../screenshots/en/77-env-check.png)
+
 ### Roadmap (v0.38.0)
 
 With a project open, **로드맵** (Roadmap) on the toolbar sends your plan (pasted, `PLAN.md`, or a `.md` / `.txt` file) to an AI and turns the answer into **milestones → tasks**; each task is tracked as to do · in progress · verifying · done · blocked, and a task stays locked until the tasks it depends on are done. **구현 요청** (Implement) only fills the prompt box with that task's request and picks its expected files — nothing is sent; sending, applying and testing follow the project-mode steps above, checked by you. The **dashboard** tab shows a progress ring, per-milestone bars, a dependency map and a burndown (with an estimated finish date). The **docs** tab writes `docs/procedure.md` and `README.md` into the project (an existing README of yours is kept and the app writes `README.generated.md` by default; only the `mla:` marker blocks are refreshed). Progress is stored in `.mla/roadmap.json`, which is never sent to an AI. Details (Korean): [docs/roadmap.md](../roadmap.md).

@@ -10,7 +10,7 @@
 (function (root, factory) {
   const isNode = typeof module === 'object' && module.exports;
   // 사전: 공통(i18n-ko.js · i18n-en.js) + 영역별(i18n-<언어>-<영역>.js, v0.30.0). 화면은 <script>로 먼저 읽어 합쳐 둔다.
-  const AREAS = ['ui', 'project', 'library', 'ext', 'main', 'prompt']; // prompt = AI에게 보내는 글 (v0.31.0)
+  const AREAS = ['ui', 'project', 'library', 'ext', 'main', 'prompt', 'dev']; // prompt = AI에게 보내는 글 (v0.31.0) · dev = 실행 · 확인 (v0.41.0)
   const load = (lang) => Object.assign({}, require(`./i18n-${lang}`), ...AREAS.map((a) => require(`./i18n-${lang}-${a}`)));
   const strings = isNode ? { ko: load('ko'), en: load('en') } : (root.MLA && root.MLA.i18nStrings) || {};
   const api = factory(strings);

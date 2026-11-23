@@ -45,6 +45,7 @@ const guard = require('./ipc-guard'); // 화면이 넘긴 값 다시 검사 (첨
 const { setupGitConsole } = require('./gitconsole');
 const { setupDevTest } = require('./devtest');
 const { setupGitCommit } = require('./gitcommit');
+const { setupEnvCheck } = require('./envcheck');
 const { createUpdater } = require('./updater');
 const secure = require('./secure-store'); // 기록 · 설정 · 라이브러리 · 프로젝트 상태 암호화 (v0.22.1)
 const notifyCore = require('../shared/notify');
@@ -858,6 +859,8 @@ if (!app.requestSingleInstanceLock()) {
     devTest = setupDevTest({ ipcMain, getWin: () => win, project, userDataDir: app.getPath('userData') });
     // 적용 후 커밋 (v0.28.0): 적용한 파일만 add · commit (push 없음), 테스트 실행 중에는 받지 않는다
     setupGitCommit({ ipcMain, getRoot: () => project.info()?.id || null, isBusy: () => !!devTest?.isBusy() });
+    // 개발 환경 점검 (v0.41.0): 도구가 있는지 · 버전 (--version만, 셸 없이, 프로젝트 안 실행 파일은 쓰지 않음)
+    setupEnvCheck({ ipcMain, getRoot: () => project.info()?.id || null, shell });
     updater = createUpdater({ app, isAuto: () => prefs.autoUpdate !== false, onChange: () => schedulePushState(), log });
     updater.start();
   });

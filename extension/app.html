@@ -109,6 +109,19 @@
         <button id="rmcAll" class="rmc-all" data-i18n="ui.roadmap.card.all" data-i18n-title="ui.roadmap.card.allTitle"></button>
       </div>
     </section>
+    <!-- 실행 · 확인 (v0.41.0~): 개발 환경 점검(이 PC에 필요한 도구가 있는지). dev-hub.js -->
+    <section id="devHub" class="dev-hub" hidden data-i18n-aria="dev.hub.aria">
+      <div class="dh-head">
+        <b class="dh-title" data-i18n="dev.hub.title"></b>
+        <span class="dh-label muted-label" data-i18n="dev.env.label"></span>
+        <span id="dhEnvPill" class="dh-pill" role="status" aria-live="polite"></span>
+        <button id="dhEnvCheck" class="dh-mini" data-i18n-title="dev.env.recheck" data-i18n-aria="dev.env.recheck">⟳</button>
+        <button id="dhEnvMore" class="dh-mini accent" data-i18n="dev.env.more" data-i18n-title="dev.env.moreTitle"></button>
+      </div>
+      <ul id="dhEnvChips" class="dh-chips" data-i18n-aria="dev.env.chipsAria"></ul>
+      <div id="dhEnvReady" class="dh-ready"></div>
+      <p id="dhEnvNote" class="dh-note" role="status" aria-live="polite" hidden></p>
+    </section>
     <details id="psRules" class="ps-rules">
       <summary data-i18n="ui.h.psRules.summary"></summary>
       <div id="psRulesBody"></div>
@@ -468,6 +481,29 @@
         <span id="debateStatus" class="muted-label" role="status" aria-live="polite"></span>
         <button id="debateCancel" data-i18n="debate.cancel"></button>
         <button id="debateStart" class="primary" data-i18n="debate.start"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 개발 환경 점검 (v0.41.0): 필요한 도구 · 버전 · 설치 안내 표. dev-hub.js -->
+  <div id="envModal" class="modal" hidden>
+    <div class="modal-box env-box" role="dialog" aria-modal="true" aria-labelledby="envTitle">
+      <div class="modal-head"><b id="envTitle" data-i18n="dev.env.title"></b><span id="envSub" class="muted-label"></span></div>
+      <div class="modal-body">
+        <p id="envSummary" class="env-summary" role="status" aria-live="polite"></p>
+        <table class="env-table">
+          <thead><tr><th scope="col" data-i18n="dev.env.col.state"></th><th scope="col" data-i18n="dev.env.col.tool"></th><th scope="col" data-i18n="dev.env.col.version"></th><th scope="col" data-i18n="dev.env.col.need"></th><th scope="col" data-i18n="dev.env.col.why"></th><th scope="col" data-i18n="dev.env.col.fix"></th></tr></thead>
+          <tbody id="envRows"></tbody>
+        </table>
+        <div id="envReady" class="env-ready"></div>
+        <details id="envEdit" class="env-edit"><summary data-i18n="dev.env.edit"></summary><p class="muted small" data-i18n="dev.env.editNote"></p><div id="envEditBody" class="env-edit-body"></div></details>
+        <p id="envNote" class="muted small"></p>
+      </div>
+      <div class="modal-foot">
+        <span id="envStatus" class="muted-label" role="status" aria-live="polite"></span>
+        <button id="envRecheck" class="primary" data-i18n="dev.env.recheckBtn"></button>
+        <button id="envTerminal" data-i18n="dev.env.terminal" data-i18n-title="dev.env.terminalTitle"></button>
+        <button id="envClose" data-i18n="dev.close"></button>
       </div>
     </div>
   </div>
@@ -896,7 +932,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle" data-i18n="ui.h.sendBtn"></button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → dev-hub.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
   <script src="lib/shared/i18n-ko.js"></script>
   <script src="lib/shared/i18n-ko-ui.js"></script>
   <script src="lib/shared/i18n-ko-project.js"></script>
@@ -904,6 +940,7 @@
   <script src="lib/shared/i18n-ko-ext.js"></script>
   <script src="lib/shared/i18n-ko-main.js"></script>
   <script src="lib/shared/i18n-ko-prompt.js"></script>
+  <script src="lib/shared/i18n-ko-dev.js"></script>
   <script src="lib/shared/i18n-en.js"></script>
   <script src="lib/shared/i18n-en-ui.js"></script>
   <script src="lib/shared/i18n-en-project.js"></script>
@@ -911,6 +948,7 @@
   <script src="lib/shared/i18n-en-ext.js"></script>
   <script src="lib/shared/i18n-en-main.js"></script>
   <script src="lib/shared/i18n-en-prompt.js"></script>
+  <script src="lib/shared/i18n-en-dev.js"></script>
   <script src="lib/shared/i18n.js"></script>
   <script src="lib/shared/vendor/ignore.js"></script>
   <script src="lib/shared/vendor/diff.js"></script>
@@ -933,6 +971,7 @@
   <script src="lib/shared/roadmap.js"></script>
   <script src="lib/shared/roadmap-charts.js"></script>
   <script src="lib/shared/roadmap-docs.js"></script>
+  <script src="lib/shared/env-rules.js"></script>
   <script src="lib/shared/factcheck.js"></script>
   <script src="lib/shared/retry.js"></script>
   <script src="lib/shared/diag.js"></script>
@@ -989,6 +1028,7 @@
   <script src="lib/renderer/project-editor.js"></script>
   <script src="lib/renderer/roadmap-ui.js"></script>
   <script src="lib/renderer/roadmap-card.js"></script>
+  <script src="lib/renderer/dev-hub.js"></script>
   <script src="lib/renderer/library.js"></script>
   <script src="lib/renderer/library-presets.js"></script>
   <script src="lib/renderer/settings-transfer-ui.js"></script>

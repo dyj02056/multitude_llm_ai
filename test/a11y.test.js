@@ -51,7 +51,7 @@ test('화면 뼈대: 모든 버튼 · 입력칸 · 고르기 칸에 이름이 �
 test('창(dialog): role="dialog" · aria-modal · 제목으로 이름표, 그리고 포커스를 가두고 돌려주는 코드가 붙어 있다', () => {
   const html = read('src/renderer/index.html');
   const r = A.scan(html);
-  assert.deepEqual(r.dialogs.map((d) => d.id).sort(), ['debateModal', 'diagModal', 'interjectModal', 'onboardModal', 'patchModal', 'previewModal', 'roadmapModal', 'selModal', 'transferModal', 'workflowModal']);
+  assert.deepEqual(r.dialogs.map((d) => d.id).sort(), ['debateModal', 'diagModal', 'envModal', 'interjectModal', 'onboardModal', 'patchModal', 'previewModal', 'roadmapModal', 'selModal', 'transferModal', 'workflowModal']);
   for (const d of r.dialogs) assert.ok(d.ok, d.id);
   assert.equal((html.match(/class="modal"/g) || []).length, r.dialogs.length); // 훑어보기가 놓친 창이 없다
   const js = read('src/renderer/a11y.js');

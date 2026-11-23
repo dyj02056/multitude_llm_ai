@@ -145,6 +145,11 @@ contextBridge.exposeInMainWorld('host', {
     run: (scripts) => ipcRenderer.invoke('devtest:run', scripts), // 지금 파일 그대로 한 번 (v0.40.0, 로드맵 카드)
     stop: () => ipcRenderer.invoke('devtest:stop'),
   },
+  // 개발 환경 점검 (v0.41.0, Windows 앱 전용): 도구 id · 포트만 넘기고, 찾기 · 버전 묻기는 메인(envcheck.js)이 한다. 설치는 하지 않는다
+  env: {
+    check: (req) => ipcRenderer.invoke('env:check', req),
+    openInstall: (id) => ipcRenderer.invoke('env:openInstall', id), // 목록에 있는 공식 설치 안내 주소만
+  },
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),
   on: (channel, fn) => {
     if (CHANNELS.has(channel)) ipcRenderer.on(channel, (_e, payload) => fn(payload));

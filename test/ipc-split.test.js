@@ -9,7 +9,7 @@ const path = require('path');
 
 const MAIN = path.join(__dirname, '..', 'src', 'main');
 const read = (f) => fs.readFileSync(path.join(MAIN, f), 'utf8');
-const MAIN_FILES = ['main.js', 'ipc/history.js', 'ipc/project.js', 'ipc/settings.js', 'ipc/chain.js', 'gitconsole.js', 'devtest.js', 'gitcommit.js'];
+const MAIN_FILES = ['main.js', 'ipc/history.js', 'ipc/project.js', 'ipc/settings.js', 'ipc/chain.js', 'gitconsole.js', 'devtest.js', 'gitcommit.js', 'envcheck.js'];
 
 function handled() {
   const count = new Map();
