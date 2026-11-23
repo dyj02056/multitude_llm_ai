@@ -29,13 +29,15 @@ const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
 // v0.31.0: 09 · 10 · 16 · 21 · 22 · 23(예전 디자인이던 프로젝트 장면)과 47(파일 나무 키보드)도 같은 가짜 프로젝트로 찍는다
-const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next', '78-env-task', '83-capture-send', '84-compare'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
+const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next', '78-env-task', '83-capture-send', '84-compare', '85-run-check'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
 const ROADMAP = CARD || ['71-roadmap-tasks', '72-roadmap-dash'].includes(scene); // v0.38.1
 const ENV = ['76-env-hub', '77-env-check'].includes(scene);
 const ENV_TASK = scene === '78-env-task';
 const RUN = ['79-run-app', '80-run-log'].includes(scene);
-const CAP = ['83-capture-send', '84-compare'].includes(scene); // v0.45.0: 화면 캡처를 AI에게 보내기 전 · 적용 전/후 비교 // v0.43.0: 앱 실행 — 개발 서버를 띄우고 주소 · 로그 // v0.42.0: 로드맵 작업에 필요한 도구(java)가 이 PC에 없음 → 카드 경고 // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
-const PROJ = CAP || RUN || ENV || ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
+const CAP = ['83-capture-send', '84-compare'].includes(scene);
+const LOOK = scene === '85-run-check'; // v0.46.0: 로드맵 카드 — 실행해서 보기 · 화면 확인함
+const ONCE = scene === '86-run-once'; // v0.46.0: 한 번 실행 (Python CLI 프로젝트) // v0.45.0: 화면 캡처를 AI에게 보내기 전 · 적용 전/후 비교 // v0.43.0: 앱 실행 — 개발 서버를 띄우고 주소 · 로그 // v0.42.0: 로드맵 작업에 필요한 도구(java)가 이 PC에 없음 → 카드 경고 // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
+const PROJ = ONCE || CAP || RUN || ENV || ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
 const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
 let onboarded = !ONBOARD;
 const SIDEBAR_W = 300;
@@ -313,6 +315,12 @@ function fakeProject() {
     files['config.js'] = "export const config = { base: '/api/users/' };\n";
   }
   const info = { name: 'demo-app', id: 'C:\\work\\demo-app' };
+  if (ONCE) {
+    // 한 번 실행 장면: Python CLI 프로젝트 (서버 스크립트 없음)
+    delete files['package.json'];
+    files['main.py'] = 'import sys\n';
+    files['requirements.txt'] = 'click\n';
+  }
   if (ENV) {
     // 개발 환경 점검 장면: Node(vite) + Python + Maven 프로젝트, 의존성 미설치 · .env 없음
     files['package.json'] = JSON.stringify({ name: 'demo-app', version: '1.0.0', engines: { node: '>=20' }, scripts: { dev: 'vite', test: 'node --test' }, devDependencies: { vite: '^6.0.0' } }, null, 2) + '\n';
@@ -325,6 +333,12 @@ function fakeProject() {
     // 작업마다 필요한 도구 (v0.42.0). 78 장면은 다음 작업이 Java(JDK)를 쓴다
     for (const m of rm.milestones) for (const tk of m.tasks) tk.tools = tk.tools || ['node'];
     if (ENV_TASK) for (const m of rm.milestones) for (const tk of m.tasks) if (tk.status !== 'done') tk.tools = ['node', 'java'];
+    if (LOOK) {
+      // 지금 작업(t4)을 적용해 검증 중 · "완료 전에 실행해서 화면 확인" 켬
+      rm.settings = { ...(rm.settings || {}), runCheck: true };
+      for (const m of rm.milestones) for (const tk of m.tasks) if (tk.id === 't4') tk.status = 'verify';
+      rm.active = 't4';
+    }
     files['.mla/roadmap.json'] = JSON.stringify(rm);
   }
   const readDir = async (dir) => {
@@ -396,7 +410,10 @@ const RUN_LOG = '> demo-app@1.0.0 dev\n> vite\n\n  VITE v6.0.3  ready in 412 ms\
 function fakeDevrun() {
   let st = { running: false };
   return {
-    info: async () => ({ ok: true, scripts: [{ name: 'dev', script: 'vite' }, { name: 'start', script: 'vite preview' }], state: st }),
+    info: async () => (ONCE ? { ok: true, scripts: [], state: st } : { ok: true, scripts: [{ name: 'dev', script: 'vite' }, { name: 'start', script: 'vite preview' }], state: st }),
+    onceInfo: async () => ({ ok: true, targets: ONCE ? [{ id: 'py:main.py', kind: 'py', file: 'main.py', label: 'python main.py' }, { id: 'py:cli.py', kind: 'py', file: 'cli.py', label: 'python cli.py' }] : [{ id: 'npm:start', kind: 'npm', name: 'start', label: 'npm run start --' }] }),
+    once: async () => ({ ok: true, code: 0, ms: 840, command: 'python.exe main.py greet --name "김 하늘" --times 2', output: '안녕하세요, 김 하늘님! (1/2)\n안녕하세요, 김 하늘님! (2/2)\n완료: 인사 2번\n' }),
+    onceStop: async () => true,
     start: async (name) => ((st = { running: true, name, script: 'vite', url: null, lines: 2, startedAt: now }), { ok: true, state: st }),
     stop: async () => true,
     log: async () => ({ ok: true, text: RUN_LOG, state: { ...st, running: true, name: 'dev', script: 'vite' } }),
@@ -669,6 +686,24 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 숨긴 창에서는 :focus-visible이 안 그려져 같은 모양(.ps-row:focus-visible)을 직접 붙인다
     Object.assign(document.activeElement.style, { outline: '2px solid var(--accent)', outlineOffset: '-2px' });
     await sleep(200);
+  }
+  if (LOOK) {
+    // 로드맵 카드 (v0.46.0): ▶ 실행해서 보기 → 서버 · 미리보기가 열린 상태 → [✓ 화면 확인함]
+    await sleep(800);
+    click('#dhRunBtn');
+    await sleep(300);
+    emit('devrun:state', { running: true, name: 'dev', script: 'vite', url: 'http://localhost:5173/', lines: 9, startedAt: now });
+    await sleep(200);
+    emit('preview:state', { open: true, home: 'http://localhost:5173/', url: 'http://localhost:5173/', loading: false, loadError: null, blank: false, errors: [], failed: [], captures: 0 });
+    await sleep(500);
+  }
+  if (ONCE) {
+    await sleep(900);
+    click('#dhOnce');
+    await sleep(400);
+    $('#onceArgs').value = 'greet --name "김 하늘" --times 2';
+    click('#onceRun');
+    await sleep(500);
   }
   if (CAP) {
     // 화면 캡처 (v0.45.0): 83은 최근 캡처 한 장을 AI에게 보내기 전, 84는 적용 전 · 후 비교

@@ -276,6 +276,12 @@ The Windows app looks only in absolute PATH folders, never runs anything inside 
 
 ![Before and after](../screenshots/en/84-compare.png)
 
+**Run and look on the roadmap card, run once (v0.46.0, Windows app)** — a task card in *verifying* gets **▶ Run and look** (starts the dev server, or brings the preview forward if it is running) and, once the preview is open, **✓ Looked at it** (asks again if the preview shows errors). Turn on **Look at the running app before done** in the roadmap docs tab (off by default) and Done appears only after you have looked. For programs that are not servers, **Once…** (or **▶ Run once… (with arguments)** when there is no dev-server script) runs an npm script with `--` arguments, `package.json` `bin`/`main`, a root `cli.js`/`index.js`/`main.js` or `main.py`/`app.py`/`cli.py`/`__main__.py`/`manage.py` once — no shell (`;` `|` `>` are plain arguments), a confirm dialog with the exact command, 1 minute limit, output and exit code.
+
+![Run and look on the card](../screenshots/en/85-run-check.png)
+
+![Run once](../screenshots/en/86-run-once.png)
+
 ### Roadmap (v0.38.0)
 
 With a project open, **로드맵** (Roadmap) on the toolbar sends your plan (pasted, `PLAN.md`, or a `.md` / `.txt` file) to an AI and turns the answer into **milestones → tasks**; each task is tracked as to do · in progress · verifying · done · blocked, and a task stays locked until the tasks it depends on are done. **구현 요청** (Implement) only fills the prompt box with that task's request and picks its expected files — nothing is sent; sending, applying and testing follow the project-mode steps above, checked by you. The **dashboard** tab shows a progress ring, per-milestone bars, a dependency map and a burndown (with an estimated finish date). The **docs** tab writes `docs/procedure.md` and `README.md` into the project (an existing README of yours is kept and the app writes `README.generated.md` by default; only the `mla:` marker blocks are refreshed). Progress is stored in `.mla/roadmap.json`, which is never sent to an AI. Details (Korean): [docs/roadmap.md](../roadmap.md).

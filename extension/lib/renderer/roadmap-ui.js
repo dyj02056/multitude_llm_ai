@@ -490,6 +490,8 @@
     $('#roadmapAutoCommit').disabled = !host.git?.commit;
     $('#roadmapAutoDone').checked = !!s.autoDoneOnPass;
     $('#roadmapAutoDone').disabled = !host.devtest; // 테스트는 Windows 앱에서만 돈다
+    $('#roadmapRunCheck').checked = !!s.runCheck;
+    $('#roadmapRunCheck').disabled = !host.devrun; // 앱 실행은 Windows 앱에서만 (v0.46.0)
     for (const id of ['#roadmapDocsMake', '#roadmapIntroAsk', '#roadmapIntroGet']) $(id).disabled = !rm;
     $('#roadmapDocsUndo').disabled = !lastWrite;
     $('#roadmapDocsPreview').replaceChildren();
@@ -679,6 +681,7 @@
   $('#roadmapMermaid').addEventListener('change', (e) => setting('mermaid', e.target.checked));
   $('#roadmapAutoCommit').addEventListener('change', (e) => setting('autoCommit', e.target.checked));
   $('#roadmapAutoDone').addEventListener('change', (e) => setting('autoDoneOnPass', e.target.checked));
+  $('#roadmapRunCheck').addEventListener('change', (e) => setting('runCheck', e.target.checked));
 
   /** 사이드바 카드의 [전체 보기]: 창을 열고 작업 탭에서 그 작업으로 */
   async function openAt(id) {

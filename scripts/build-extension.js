@@ -69,6 +69,7 @@ const RENDERER_FILES = [
   'dev-hub.js', // 실행 · 확인 칸 (v0.41.0~)
   'dev-run.js', // 앱 실행 (v0.43.0, Windows 앱에서만 보임)
   'dev-capture.js', // 화면 캡처 · AI 확인 · 전/후 비교 (v0.45.0, Windows 앱에서만 보임)
+  'dev-once.js', // 한 번 실행 (v0.46.0, Windows 앱에서만 보임)
   'library.js',
   'library-presets.js',
   'settings-transfer-ui.js',

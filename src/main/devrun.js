@@ -23,6 +23,75 @@ const { t } = require('../shared/i18n');
 
 const RUN_SCRIPTS = ['dev', 'start', 'serve', 'preview'];
 const MAX_LOG = 256 * 1024;
+// 한 번 실행 (v0.46.0): CLI 프로그램 · 스크립트를 인자와 함께 한 번 돌려 출력을 본다. 1분 제한
+const ONCE_TIMEOUT_MS = 60 * 1000;
+const PY_ENTRIES = ['main.py', 'app.py', 'cli.py', '__main__.py', 'manage.py'];
+const NODE_ENTRIES = ['cli.js', 'index.js', 'main.js', 'cli.mjs', 'index.mjs'];
+const MAX_ARGS = 20;
+
+/**
+ * 인자 글 → 배열 (따옴표로 묶은 칸 띄우기 허용). 셸을 거치지 않으므로 ; | & > 같은 글자는 그냥 글자다.
+ * → 배열 | null (너무 많거나 길거나 닫히지 않은 따옴표 · NUL)
+ */
+function parseArgs(text) {
+  const s = String(text ?? '');
+  if (s.length > 2000 || s.includes('\0')) return null;
+  const out = [];
+  let cur = '';
+  let quote = '';
+  let has = false;
+  for (const ch of s) {
+    if (quote) {
+      if (ch === quote) quote = '';
+      else cur += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      has = true;
+    } else if (/\s/.test(ch)) {
+      if (cur || has) out.push(cur);
+      cur = '';
+      has = false;
+    } else cur += ch;
+  }
+  if (quote) return null;
+  if (cur || has) out.push(cur);
+  if (out.length > MAX_ARGS || out.some((a) => a.length > 400)) return null;
+  return out;
+}
+
+/** 프로젝트 안 상대 경로인지 (.. · 절대 경로 · 드라이브 · 숨은 .git 거절) */
+const safeRel = (p) => typeof p === 'string' && !!p && !path.isAbsolute(p) && !/^[a-zA-Z]:/.test(p) && !p.split(/[\\/]/).some((x) => x === '..' || x === '.git') && p.length < 260;
+
+/**
+ * 한 번 실행할 수 있는 것: npm 스크립트(dev · start · serve · preview + 인자), package.json bin · main, 맨 위의 Python · Node 진입 파일.
+ * names: 맨 위 파일 이름 · pkgText: package.json 글 → [{ id, kind: 'npm'|'node'|'py', name?, file?, label }]
+ */
+function onceTargets(names, pkgText) {
+  const have = new Set(names || []);
+  const out = [];
+  const seen = new Set();
+  const add = (t) => {
+    if (seen.has(t.id)) return;
+    seen.add(t.id);
+    out.push(t);
+  };
+  const scripts = runScripts(pkgText);
+  if (scripts.ok) for (const s of scripts.scripts) add({ id: `npm:${s.name}`, kind: 'npm', name: s.name, label: `npm run ${s.name} --` });
+  let pkg = null;
+  try {
+    pkg = JSON.parse(String(pkgText || '').replace(/^\uFEFF/, ''));
+  } catch {}
+  const nodeFile = (f) => {
+    const rel = String(f || '').replace(/^\.\//, '');
+    if (safeRel(rel) && /\.(c|m)?js$/i.test(rel)) add({ id: `node:${rel}`, kind: 'node', file: rel, label: `node ${rel}` });
+  };
+  if (pkg && typeof pkg.bin === 'string') nodeFile(pkg.bin);
+  else if (pkg && pkg.bin && typeof pkg.bin === 'object') for (const v of Object.values(pkg.bin)) nodeFile(v);
+  if (pkg && typeof pkg.main === 'string') nodeFile(pkg.main);
+  for (const f of NODE_ENTRIES) if (have.has(f)) nodeFile(f);
+  for (const f of PY_ENTRIES) if (have.has(f)) add({ id: `py:${f}`, kind: 'py', file: f, label: `python ${f}` });
+  return out.slice(0, 12);
+}
 
 /** 글에서 색 코드(ANSI) 지우기 */
 const stripAnsi = (s) => String(s || '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
@@ -91,11 +160,41 @@ function isAllowedRunSpawn(spec, { root, execPath, nodeExe = null, script }) {
   return o.shell === false && o.cwd === root;
 }
 
+/** 한 번 실행 모양: 셸 없이, 프로젝트 폴더에서. target · exe(찾은 실행 파일) · args → { command, args, options } */
+function buildOnceSpawn({ root, target, args, npmCli, nodeExe, execPath, isElectron, python, env = process.env }) {
+  const childEnv = { ...env, FORCE_COLOR: '0', NO_COLOR: '1', BROWSER: 'none', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', npm_config_update_notifier: 'false' };
+  for (const k of ['NODE_OPTIONS', 'NODE_TEST_CONTEXT', 'npm_lifecycle_event', 'npm_lifecycle_script']) delete childEnv[k];
+  const options = { cwd: root, env: childEnv, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] };
+  if (target.kind === 'npm') {
+    if (nodeExe) delete childEnv.ELECTRON_RUN_AS_NODE;
+    else if (isElectron) childEnv.ELECTRON_RUN_AS_NODE = '1';
+    return { command: nodeExe || execPath, args: [npmCli, 'run', target.name, ...(args.length ? ['--', ...args] : [])], options };
+  }
+  if (target.kind === 'node') {
+    delete childEnv.ELECTRON_RUN_AS_NODE;
+    return { command: nodeExe, args: [target.file, ...args], options };
+  }
+  return { command: python.path, args: [...(python.launcher ? ['-3'] : []), target.file, ...args], options };
+}
+
+/** 허용 규칙: 정해 둔 실행 파일(node · python · py · 앱) · 첫 인자가 그 대상 · 셸 없음 · 프로젝트 폴더 */
+function isAllowedOnceSpawn(spec, { root, target, nodeExe, execPath, python }) {
+  if (!spec || spec.options?.shell !== false || spec.options?.cwd !== root) return false;
+  const a = spec.args || [];
+  if (target.kind === 'npm') return (spec.command === nodeExe || spec.command === execPath) && /(^|[\\/])npm-cli\.js$/i.test(a[0] || '') && a[1] === 'run' && RUN_SCRIPTS.includes(a[2]) && a[2] === target.name && (a.length === 3 || a[3] === '--');
+  if (!safeRel(target.file)) return false;
+  if (target.kind === 'node') return !!nodeExe && spec.command === nodeExe && a[0] === target.file;
+  if (target.kind === 'py') return !!python && spec.command === python.path && a[python.launcher ? 1 : 0] === target.file && (!python.launcher || a[0] === '-3');
+  return false;
+}
+
 /**
  * ipcMain: devrun:info · devrun:start(name) · devrun:stop · devrun:log · devrun:open(url)
+ *          · devrun:onceInfo · devrun:once(id, argsText) · devrun:onceStop (v0.46.0)
  * 상태가 바뀌면 화면에 'devrun:state'로 알린다: { running, name, script, url, startedAt, exit: { code, at } | null, lines }
  */
-function setupDevRun({ ipcMain, getWin, project, shell, spawnFn = spawn, confirm = null, exists = (p) => fs.existsSync(p) }) {
+function setupDevRun({ ipcMain, getWin, project, shell, spawnFn = spawn, confirm = null, exists = (p) => fs.existsSync(p), findPython = null }) {
+  let once = null; // 한 번 실행 중 { child, stopped }
   let run = null; // { child, name, script, url, startedAt, log, lines, root }
   let last = null; // 끝난 실행의 상태 (종료 코드 · 마지막 로그)
   let sendTimer = null;
@@ -194,6 +293,80 @@ function setupDevRun({ ipcMain, getWin, project, shell, spawnFn = spawn, confirm
     return { ok: true, state: snapshot() };
   });
 
+  // ---------- 한 번 실행 (v0.46.0) ----------
+  async function onceList() {
+    if (!root()) return { ok: false, error: t('main.noProject') };
+    const ents = await project.readDir('').catch(() => []);
+    const r = await project.readFile('package.json').catch(() => ({ missing: true }));
+    return { ok: true, targets: onceTargets(ents.filter((e) => e.kind === 'file').map((e) => e.name), typeof r.text === 'string' ? r.text : '') };
+  }
+  ipcMain.handle('devrun:onceInfo', () => onceList());
+  ipcMain.handle('devrun:once', async (_e, id, argsText) => {
+    if (once) return { ok: false, error: t('dev.once.busy') };
+    const list = await onceList();
+    if (!list.ok) return list;
+    const target = list.targets.find((x) => x.id === id);
+    if (!target) return { ok: false, error: t('dev.once.noTarget') };
+    const args = parseArgs(argsText);
+    if (!args) return { ok: false, error: t('dev.once.badArgs') };
+    const npmCli = R.findNpmCli({ exists });
+    // npm과 같은 설치의 node.exe → 없으면 PATH의 node (개발 환경 점검과 같은 찾기: 절대 경로 폴더만 · 프로젝트 안 제외)
+    const pathNode = () => {
+      const f = require('./envcheck').findTool('node', { root: root() });
+      return f.state === 'ok' && f.kind === 'exe' ? f.path : null;
+    };
+    const nodeExe = (npmCli && R.findNodeFor(npmCli, { exists })) || (target.kind === 'node' ? pathNode() : null);
+    let python = null;
+    if (target.kind === 'npm' && !npmCli) return { ok: false, error: t('main.devtest.noNpm') };
+    if (target.kind === 'node' && !nodeExe) return { ok: false, error: t('dev.once.noNode') };
+    if (target.kind === 'py') {
+      const f = (findPython || (() => require('./envcheck').findTool('python', { root: root() })))();
+      if (!f || f.state !== 'ok' || f.kind !== 'exe') return { ok: false, error: t('dev.once.noPython') };
+      python = { path: f.path, launcher: !!f.launcher };
+    }
+    const spec = buildOnceSpawn({ root: root(), target, args, npmCli, nodeExe, execPath: process.execPath, isElectron, python });
+    if (!isAllowedOnceSpawn(spec, { root: root(), target, nodeExe, execPath: process.execPath, python })) return { ok: false, error: t('main.devtest.notAllowedRun') };
+    const shown = [path.basename(spec.command), ...spec.args.map((a) => (/\s/.test(a) ? `"${a}"` : a))].join(' ');
+    const ask = confirm || ((opts) => dialog.showMessageBox(getWin(), opts).then((r) => r.response === 0));
+    const ok = await ask({ type: 'warning', buttons: [t('dev.once.run'), t('main.cancel')], defaultId: 0, cancelId: 1, title: t('dev.once.title'), message: t('dev.once.confirmMessage'), detail: `${shown}\n\n${t('dev.once.confirmNote', { sec: ONCE_TIMEOUT_MS / 1000 })}\n\n${t('main.folderLine', { path: root() })}` });
+    if (!ok) return { ok: false, cancelled: true, error: t('main.cancelled') };
+    const started = Date.now();
+    return new Promise((resolve) => {
+      let child;
+      try {
+        child = spawnFn(spec.command, spec.args, spec.options);
+      } catch (err) {
+        return resolve({ ok: false, error: err.message });
+      }
+      const me = (once = { child, stopped: false });
+      let out = '';
+      const decoders = [new StringDecoder('utf8'), new StringDecoder('utf8')];
+      const onData = (dd) => (buf) => {
+        if (out.length < MAX_LOG) out += dd.write(buf);
+      };
+      child.stdout?.on('data', onData(decoders[0]));
+      child.stderr?.on('data', onData(decoders[1]));
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        killTree(child);
+      }, ONCE_TIMEOUT_MS);
+      const finish = (code, error) => {
+        clearTimeout(timer);
+        if (once === me) once = null;
+        resolve({ ok: !error && !timedOut && !me.stopped && code === 0, code, timedOut, stopped: me.stopped, ms: Date.now() - started, command: shown, output: maskOutput(stripAnsi(out.slice(0, MAX_LOG)), PATTERNS), ...(error ? { error } : {}) });
+      };
+      child.on('error', (err) => finish(null, err.message));
+      child.on('close', (code) => finish(code));
+    });
+  });
+  ipcMain.handle('devrun:onceStop', () => {
+    if (!once) return false;
+    once.stopped = true;
+    killTree(once.child);
+    return true;
+  });
+
   ipcMain.handle('devrun:stop', () => stop());
   ipcMain.handle('devrun:log', () => {
     const r = run || last;
@@ -207,7 +380,10 @@ function setupDevRun({ ipcMain, getWin, project, shell, spawnFn = spawn, confirm
   });
 
   return {
-    stop,
+    stop: () => {
+      stop();
+      if (once) killTree(once.child);
+    },
     // 프로젝트를 닫거나 바꾸면 그 프로젝트의 서버도 끈다
     onProjectChange: () => {
       if (run && run.root !== root()) stop();
@@ -218,4 +394,4 @@ function setupDevRun({ ipcMain, getWin, project, shell, spawnFn = spawn, confirm
   };
 }
 
-module.exports = { setupDevRun, findLocalUrl, isLocalUrl, runScripts, buildRunSpawn, isAllowedRunSpawn, stripAnsi, RUN_SCRIPTS };
+module.exports = { setupDevRun, findLocalUrl, isLocalUrl, runScripts, buildRunSpawn, isAllowedRunSpawn, stripAnsi, RUN_SCRIPTS, parseArgs, onceTargets, buildOnceSpawn, isAllowedOnceSpawn, safeRel, ONCE_TIMEOUT_MS };

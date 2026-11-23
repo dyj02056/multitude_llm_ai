@@ -125,6 +125,7 @@
           <button id="dhRunBtn" class="dh-run-btn primary" data-label-by-script></button>
           <select id="dhRunScript" data-i18n-aria="dev.run.scriptAria" data-i18n-title="dev.run.scriptAria"></select>
           <button id="dhRunLog" class="dh-mini" data-i18n="dev.run.log" data-i18n-title="dev.run.logTitle" hidden></button>
+          <button id="dhOnce" class="dh-mini dh-once" hidden data-label-by-script data-i18n-title="dev.once.btnTitle"></button>
         </div>
         <div id="dhRunState" class="dh-run-state" role="status" aria-live="polite"></div>
         <div id="dhPvState" class="dh-pv-state" role="status" aria-live="polite" hidden></div>
@@ -565,6 +566,27 @@
     </div>
   </div>
 
+  <!-- 한 번 실행 (v0.46.0): CLI · 스크립트를 인자와 함께 한 번. dev-once.js -->
+  <div id="onceModal" class="modal" hidden>
+    <div class="modal-box once-box" role="dialog" aria-modal="true" aria-labelledby="onceTitle">
+      <div class="modal-head"><b id="onceTitle" data-i18n="dev.once.title"></b><span class="muted-label" data-i18n="dev.once.sub"></span></div>
+      <div class="modal-body">
+        <div class="once-row">
+          <select id="onceTarget" data-i18n-aria="dev.once.target" data-i18n-title="dev.once.target"></select>
+          <input id="onceArgs" type="text" spellcheck="false" maxlength="2000" data-i18n-aria="dev.once.args" data-i18n-placeholder="dev.once.argsPlaceholder" />
+          <button id="onceRun" class="primary" data-label-by-script></button>
+        </div>
+        <p class="cap-hint" data-i18n="dev.once.note"></p>
+        <pre id="onceOut" class="run-log" tabindex="0" data-i18n-aria="dev.once.out"></pre>
+      </div>
+      <div class="modal-foot">
+        <span id="onceStatus" class="muted-label" role="status" aria-live="polite"></span>
+        <button id="onceCopy" data-i18n="dev.run.copy"></button>
+        <button id="onceClose" data-i18n="dev.close"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- 로드맵 (v0.38.0): 계획서 → 단계 분해 · 작업 진행 · 진행 그림 · 문서 만들기. roadmap-ui.js -->
   <div id="roadmapModal" class="modal" hidden>
     <div class="modal-box roadmap-box" role="dialog" aria-modal="true" aria-labelledby="roadmapTitle">
@@ -618,6 +640,7 @@
           <label class="check-label"><input type="checkbox" id="roadmapMermaid" /> <span data-i18n="ui.roadmap.docs.mermaid"></span></label>
           <label class="check-label"><input type="checkbox" id="roadmapAutoCommit" /> <span data-i18n="ui.roadmap.docs.autoCommit"></span></label>
           <label class="check-label" data-i18n-title="ui.roadmap.docs.autoDoneTitle"><input type="checkbox" id="roadmapAutoDone" /> <span data-i18n="ui.roadmap.docs.autoDone"></span></label>
+          <label class="check-label" data-i18n-title="dev.card.runCheckTitle"><input type="checkbox" id="roadmapRunCheck" /> <span data-i18n="dev.card.runCheck"></span></label>
         </div>
       </div>
       <div class="modal-foot">
@@ -989,7 +1012,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle" data-i18n="ui.h.sendBtn"></button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → dev-hub.js → dev-run.js → dev-capture.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → dev-hub.js → dev-run.js → dev-capture.js → dev-once.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
   <script src="../shared/i18n-ko.js"></script>
   <script src="../shared/i18n-ko-ui.js"></script>
   <script src="../shared/i18n-ko-project.js"></script>
@@ -1071,6 +1094,7 @@
   <script src="dev-hub.js"></script>
   <script src="dev-run.js"></script>
   <script src="dev-capture.js"></script>
+  <script src="dev-once.js"></script>
   <script src="library.js"></script>
   <script src="library-presets.js"></script>
   <script src="settings-transfer-ui.js"></script>

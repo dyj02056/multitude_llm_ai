@@ -21,7 +21,7 @@
   const MAX_PLAN_CHARS = 60000;
   const MAX_TEXT = 4000;
   const FILE_VERSION = 1;
-  const DEFAULT_SETTINGS = { docs: true, docsWhen: 'task', readmeMode: 'separate', docsLang: 'auto', mermaid: true, autoCommit: false, autoDoneOnPass: false };
+  const DEFAULT_SETTINGS = { docs: true, docsWhen: 'task', readmeMode: 'separate', docsLang: 'auto', mermaid: true, autoCommit: false, autoDoneOnPass: false, runCheck: false };
   const DOCS_WHEN = ['task', 'milestone', 'manual'];
   const README_MODES = ['separate', 'merge', 'replace'];
 
@@ -158,6 +158,7 @@
       mermaid: s.mermaid !== false,
       autoCommit: s.autoCommit === true,
       autoDoneOnPass: s.autoDoneOnPass === true,
+      runCheck: s.runCheck === true, // 완료 전에 실행해서 화면 확인 (v0.46.0)
     };
     const docs = r.docs && typeof r.docs === 'object' ? { intro: str(r.docs.intro, 600), features: cleanList(r.docs.features, 12).map((f) => f.slice(0, 200)) } : { intro: '', features: [] };
     const log = (Array.isArray(r.log) ? r.log : [])
@@ -408,7 +409,24 @@
    * actions: 보여 줄 버튼 이름 (implement · skip · block · done · test · notYet · resume). 화면은 이 순서대로 그린다.
    * trial: 이 작업의 마지막 검사 결과 { verdict, pass, fail } (없으면 null), canTest: 이 앱에서 테스트를 돌릴 수 있는지 (Windows 앱)
    */
-  function cardState(rm, { pick = '', trial = null, canTest = false } = {}) {
+  /**
+   * v0.46.0: canRun — 이 PC에서 앱을 띄울 수 있음(Windows 앱 · 실행할 스크립트 있음), pvOpen — 미리보기 창이 열려 있음,
+   *          seen — 이 작업의 화면을 사람이 확인함. 설정 runCheck가 켜져 있으면 화면을 확인하기 전에는 완료 단추를 내지 않는다.
+   */
+  function cardState(rm, { pick = '', trial = null, canTest = false, canRun = false, pvOpen = false, seen = false } = {}) {
+    const st = cardStateBase(rm, { pick, trial, canTest });
+    if (!st.task || !['verify', 'verifyPass', 'verifyFail'].includes(st.phase) || !canRun) return st;
+    const look = [...(pvOpen && !seen ? ['seen'] : []), ...(!seen ? ['run'] : [])];
+    if (rm.settings && rm.settings.runCheck && !seen) {
+      // 화면 확인 전: 실행해서 보기가 먼저, 완료는 숨긴다 (막힘 · 테스트는 그대로)
+      return { ...st, phase: 'verifyRun', base: st.phase, actions: [...look, ...st.actions.filter((a) => a !== 'done' && a !== 'notYet')] };
+    }
+    const acts = [...st.actions];
+    acts.splice(Math.min(acts.length, st.phase === 'verifyPass' ? 1 : acts.indexOf('done') >= 0 ? acts.indexOf('done') + 1 : acts.length), 0, ...look);
+    return { ...st, actions: acts, seen };
+  }
+
+  function cardStateBase(rm, { pick = '', trial = null, canTest = false } = {}) {
     const all = tasksOf(rm);
     if (!all.length) return { task: null, phase: 'none', actions: [], trial: null };
     const task = currentTask(rm, { pick });

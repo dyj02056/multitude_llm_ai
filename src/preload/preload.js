@@ -157,6 +157,10 @@ contextBridge.exposeInMainWorld('host', {
     stop: () => ipcRenderer.invoke('devrun:stop'),
     log: () => ipcRenderer.invoke('devrun:log'),
     open: (url) => ipcRenderer.invoke('devrun:open', url), // 이 PC 주소만 기본 브라우저로
+    // 한 번 실행 (v0.46.0): 대상 id와 인자 글만 넘기고, 확인 창 · 셸 없는 실행 · 1분 제한은 메인이 한다
+    onceInfo: () => ipcRenderer.invoke('devrun:onceInfo'),
+    once: (id, argsText) => ipcRenderer.invoke('devrun:once', id, argsText),
+    onceStop: () => ipcRenderer.invoke('devrun:onceStop'),
   },
   // 미리보기 창 (v0.44.0, Windows 앱 전용): 이 PC 주소만. 점검 결과는 'preview:state'로 온다
   preview: {

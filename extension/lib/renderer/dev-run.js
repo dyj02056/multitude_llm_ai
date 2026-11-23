@@ -71,11 +71,12 @@
     btn.title = st.running ? t('dev.run.stopTitle') : run.scripts.find((s) => s.name === name)?.script || '';
     btn.className = st.running ? 'dh-run-btn danger' : 'dh-run-btn primary';
     btn.disabled = run.starting || (!st.running && (!run.scripts.length || !!block));
+    btn.hidden = !run.scripts.length && !st.running; // 띄울 스크립트가 없으면 숨김 — 한 번 실행(v0.46.0)이 대신
     $('#dhRunLog').hidden = !st.running && !st.exit;
     // 상태 줄
     const line = $('#dhRunState');
     const kids = [];
-    if (!run.scripts.length && !st.running) kids.push(el('span', 'dh-sub', run.error && !/package\.json/i.test(run.error) ? run.error : t('dev.run.none')));
+    if (!run.scripts.length && !st.running) kids.push(el('span', 'dh-sub', run.error && !/package\.json/i.test(run.error) ? run.error : t(MLA.devOnce?.once?.targets?.length ? 'dev.run.noneOnce' : 'dev.run.none')));
     else if (block) kids.push(el('span', 'lvl-error dh-run-msg', block));
     else if (run.starting) kids.push(el('span', 'dh-run-msg', t('dev.run.starting')));
     else if (st.running && st.url) {

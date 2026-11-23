@@ -112,6 +112,9 @@ const SCENES = [
   // v0.45.0 (화면 캡처 → AI에게 보내기 전 확인 · 적용 전/후 비교). 81 · 82 그림을 잘라 쓰므로 그 뒤에 찍는다
   { name: '83-capture-send', page: 'app' },
   { name: '84-compare', page: 'app' },
+  // v0.46.0 (로드맵 카드의 실행해서 보기 · 한 번 실행)
+  { name: '85-run-check', page: 'app' },
+  { name: '86-run-once', page: 'app' },
   // v0.37.0 (사이드탭)
   { name: '68-side-pdf', page: 'side', width: 420 },
   { name: '69-side-compare', page: 'side', width: 420 },

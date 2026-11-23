@@ -22,6 +22,9 @@
   let pick = ''; // [다음 ›]으로 고른 대기 작업
   let trial = null; // 이 작업의 마지막 검사 결과 { task, verdict, pass, fail, exhausted }
   let testing = false; // 카드의 [테스트 실행] 중
+  let seen = ''; // 화면을 사람이 확인한 작업 id (v0.46.0 — [✓ 화면 확인함])
+  const canRun = () => !!host.devrun && !!MLA.devRun && (MLA.devRun.run.scripts.length > 0 || !!MLA.devRun.state()?.running);
+  const pvOpen = () => !!MLA.devRun?.preview?.()?.open;
   let flash = ''; // 잠깐 보여 줄 한 줄 (완료 알림 · 오류) — 다음 동작까지
   let projKey = null;
   let folded = false;
@@ -68,6 +71,8 @@
         return n ? t('ui.roadmap.card.note.pass', { n }) : t('ui.roadmap.card.note.passNoCount');
       case 'verifyFail':
         return tr.fail ? t('ui.roadmap.card.note.fail', { n: tr.fail }) : t('ui.roadmap.card.note.failNoCount');
+      case 'verifyRun':
+        return pvOpen() ? t('dev.card.note.look') : t('dev.card.note.run');
       case 'blocked':
         return cs.task.note ? t('ui.roadmap.card.note.blocked', { note: cs.task.note }) : t('ui.roadmap.card.note.blockedNoNote');
       default:
@@ -76,11 +81,12 @@
   }
 
   function actionButton(name, cs) {
-    const label = name === 'done' && cs.phase === 'verifyPass' ? t('ui.roadmap.card.act.donePass') : t(`ui.roadmap.card.act.${name}`);
-    const b = button(label, t(`ui.roadmap.card.act.${name}Title`), () => act(name, cs.task.id));
+    const own = name === 'run' || name === 'seen'; // v0.46.0 단추의 글은 dev 사전에
+    const label = name === 'done' && cs.phase === 'verifyPass' ? t('ui.roadmap.card.act.donePass') : own ? t(`dev.card.${name}${name === 'run' && MLA.devRun?.state()?.running ? 'Open' : ''}`) : t(`ui.roadmap.card.act.${name}`);
+    const b = button(label, own ? t(`dev.card.${name}Title`) : t(`ui.roadmap.card.act.${name}Title`), () => act(name, cs.task.id));
     b.dataset.act = name;
     // 그 단계에서 먼저 누를 것 하나만 강조
-    const primary = { ready: 'implement', verifyPass: 'done', verify: canTest() ? 'test' : 'done' }[cs.phase];
+    const primary = { ready: 'implement', verifyPass: 'done', verify: canTest() ? 'test' : 'done', verifyRun: pvOpen() ? 'seen' : 'run' }[cs.phase];
     if (name === primary || (cs.phase === 'doing' && cs.trial?.exhausted && name === 'block')) b.classList.add('primary');
     if (name === 'test' && testing) b.disabled = true;
     return b;
@@ -113,7 +119,7 @@
     $('#rmcFold').setAttribute('aria-expanded', String(!folded));
     $('#rmcFold').textContent = folded ? '▸' : '▾';
     $('#rmcBody').hidden = folded;
-    const cs = RM.cardState(rm, { pick, trial, canTest: canTest() });
+    const cs = RM.cardState(rm, { pick, trial, canTest: canTest(), canRun: canRun(), pvOpen: pvOpen(), seen: !!seen && seen === RM.currentTask(rm, { pick })?.id });
     const p = RM.progress(rm);
     $('#rmcRing').innerHTML = ring(p.pct);
     const ms = cs.task ? rm.milestones.find((m) => m.id === cs.task.milestone) : null;
@@ -153,6 +159,7 @@
 
   /** 완료로 바꾸기 → 커밋 해시가 생겼으면 함께 알린다. 다음 작업이 카드에 올라온다 */
   async function markDone(id) {
+    seen = '';
     const r = await UI.setStatus(id, 'done');
     if (!r?.ok) {
       flash = r?.error || '';
@@ -205,6 +212,7 @@
     if (name === 'implement') {
       trial = null;
       pick = '';
+      seen = '';
       UI.implement(id);
     } else if (name === 'skip') pick = RM.nextPick(UI.get(), id);
     else if (name === 'done') return markDone(id);
@@ -217,6 +225,30 @@
       if (r && !r.ok) flash = r.error;
     } else if (name === 'notYet') trial = trial ? { ...trial, verdict: 'dismissed' } : null;
     else if (name === 'test') return runTest(id);
+    else if (name === 'run') return runApp();
+    else if (name === 'seen') return markSeen(id);
+    render();
+  }
+
+  /** ▶ 실행해서 보기 (v0.46.0): 띄운 서버가 있으면 미리보기로, 없으면 ▶ 앱 실행 (주소를 찾으면 미리보기가 저절로 열림) */
+  async function runApp() {
+    const dr = MLA.devRun;
+    if (!dr) return;
+    const st = dr.state() || {};
+    if (st.running && st.url) await dr.openPreview(st.url);
+    else if (!st.running) await dr.toggle();
+    render();
+  }
+
+  /** ✓ 화면 확인함: 미리보기에 오류가 보이면 한 번 더 묻는다. 확인하면 완료 단추가 나온다 (설정 "완료 전에 화면 확인"을 켠 경우) */
+  function markSeen(id) {
+    const pv = MLA.devRun?.preview?.() || {};
+    const v = MLA.previewHealth ? MLA.previewHealth.verdict(pv) : { level: 'ok' };
+    if (v.level === 'error' && !confirm(t('dev.card.seenWithErrors'))) return;
+    seen = id;
+    flash = t('dev.card.seenDone');
+    const rm = UI.get();
+    if (rm?.settings.autoDoneOnPass && trial?.task === id && trial.verdict === 'pass' && RM.findTask(rm, id)?.status === 'verify') return markDone(id);
     render();
   }
 
@@ -248,6 +280,9 @@
   // 프로젝트를 열고 닫거나 바꾸면 그 프로젝트의 로드맵을 읽는다 (같은 프로젝트면 다시 그리기만)
   // 실행 · 확인 칸의 점검이 끝나면 카드의 "필요한 도구" 경고를 다시 그린다 (v0.42.0)
   window.onDevEnvChecked = () => render();
+  // 앱 실행 · 미리보기 상태가 바뀌면 [▶ 실행해서 보기] · [✓ 화면 확인함]을 다시 그린다 (v0.46.0)
+  window.onDevRunChanged = () => render();
+  window.onPreviewState = () => render();
 
   window.onRoadmapProject = () => {
     const key = P && P.has && P.has() ? P.project.info.id || P.project.info.name : '';
@@ -255,6 +290,7 @@
     projKey = key;
     pick = '';
     trial = null;
+    seen = '';
     flash = '';
     UI.load().then(render, render);
   };
@@ -270,5 +306,5 @@
     render();
   });
 
-  MLA.roadmapCard = { render, state: () => ({ pick, trial, testing, flash, folded }) };
+  MLA.roadmapCard = { render, state: () => ({ pick, trial, testing, flash, folded, seen }) };
 })();
