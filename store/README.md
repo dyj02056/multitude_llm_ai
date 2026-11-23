@@ -47,7 +47,8 @@ WHAT YOU CAN DO
 • Compare — answers in columns, highlight what differs, a disagreement table with a final answer
 • Merge — ask one AI to review the others and write the final answer
 • Code work — open a local folder, send files, compare each AI's code changes, preview, apply and undo; only changed files are sent on follow-ups
-• Roadmap — split a plan into tasks with an AI; a card next to the panels shows the current task and moves it to verifying when you apply its changes
+• Roadmap — split a plan into tasks with an AI; a card next to the panels shows the current task and moves it to verifying when you apply its changes; each task lists the developer tools it needs
+• Run & check — the project sidebar lists the developer tools the project needs (Node.js, Python, JDK, compilers…), read from the project's own files
 • Side panel — two AIs next to the page you are reading; the page text goes with your question
 • Right-click any page — ask about the selected text or the whole page
 • Local LLM — add an AI model running on your own PC (any OpenAI-compatible local server) as a panel
@@ -74,7 +75,8 @@ Multitude LLM은 한 탭에 AI 채팅 사이트를 최대 6개 나란히 띄우�
 • 비교 — 칸별 답변, 다른 부분 강조, 이견 표와 최종 답변
 • 종합 — 한 AI에게 다른 답들을 검토해 최종 답을 쓰게 함
 • 코드 작업 — 로컬 폴더를 열어 파일을 보내고, AI별 수정안 비교 · 미리보기 · 적용 · 되돌리기, 후속 질문은 바뀐 파일만
-• 로드맵 — 계획서를 AI와 작업 목록으로 나누고, 패널 옆 카드가 지금 할 작업을 보여 주며 수정안을 적용하면 검증 중으로 옮김
+• 로드맵 — 계획서를 AI와 작업 목록으로 나누고, 패널 옆 카드가 지금 할 작업을 보여 주며 수정안을 적용하면 검증 중으로 옮김, 작업마다 필요한 개발 도구 표시
+• 실행 · 확인 — 프로젝트 사이드바가 그 프로젝트에 필요한 개발 도구(Node.js · Python · JDK · 컴파일러 등)를 프로젝트 파일에서 읽어 보여 줌
 • 사이드탭 — 보고 있는 페이지 옆에 AI 2개, 페이지 본문을 함께 보냄
 • 오른쪽 클릭 — 선택한 글이나 페이지 본문으로 질문
 • 로컬 LLM — 이 PC에서 돌리는 AI 모델(OpenAI 호환 로컬 서버)을 패널로

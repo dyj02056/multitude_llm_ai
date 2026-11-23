@@ -2,7 +2,7 @@
 
 **English** · [한국어](#개인정보-처리방침--multitude-llm)
 
-Last updated: 2026-11-15 · Applies to the Multitude LLM Chrome extension and Windows app.
+Last updated: 2026-11-23 · Applies to the Multitude LLM Chrome extension and Windows app.
 
 ## Summary
 
@@ -19,6 +19,11 @@ Multitude LLM has **no server of its own** and **collects nothing**. It does not
 | Optional local LLM requests | Only to `localhost` / `127.0.0.1` on your own PC | Answers in local history |
 | Settings export file (`.mla.json`, only when you press Export in Settings › 설정 옮기기) | Saved where you choose (Windows save dialog / Chrome download). Never sent anywhere | Contains selected settings and your library (templates, skills with previous versions, presets). It does **not** contain history, project data or cookies. Optional password encryption (PBKDF2-SHA256 250k + AES-GCM) |
 | Desktop notifications (answers finished, usage limit, send failure, synthesis finished) | Shown by Windows / Chrome on your own screen only. They contain counts and AI service names, never your question or the answers | Not stored |
+| Developer tools on your PC (Windows app, project mode — names and versions such as "Node.js 22.11.0", found by running each tool's version command on your PC) | Nowhere by default. If "Tell the AI about this PC" is on (on by default, can be turned off), one line with tool **names and versions only** — no folder paths or user names — is added to project questions you send to the AI panels | Kept in memory while the project is open; the on/off choice in local storage |
+| Screen captures of your own app (Windows app, preview window) | Only to the AI panel you pick, and only when you press **Send** in the capture window after seeing the picture, the AI and the text | Kept in memory for this session only (last 12). Written to a file only when you press **Save PNG** |
+| Your app in the preview window (Windows app) | Opens only addresses on your own PC (`localhost`, `127.0.0.1`). Runs in a separate browser session that does not share cookies with the AI sites | Not stored |
+
+In project mode the Windows app can run your project's own code on your PC when you ask it to (tests, ▶ Run app, Run once, before/after screen compare) — always after a confirm dialog. Its output stays on your PC; nothing is sent unless you send it to an AI yourself.
 
 The extension also downloads two public files from this project's GitHub repository: `remote/selectors.json` (page selectors used to find input boxes and answers, signed and verified with Ed25519; it contains no code) and `package.json` (to tell you when a new version exists). These requests send no personal data.
 
@@ -47,7 +52,7 @@ Questions: open an issue at https://github.com/dyj02056/multitude_llm_ai/issues
 
 [English](#privacy-policy--multitude-llm) · **한국어**
 
-최종 수정: 2026-11-15 · Multitude LLM 크롬 확장 프로그램과 Windows 앱에 적용됩니다.
+최종 수정: 2026-11-23 · Multitude LLM 크롬 확장 프로그램과 Windows 앱에 적용됩니다.
 
 ## 요약
 
@@ -64,6 +69,11 @@ Multitude LLM은 **자체 서버가 없고 아무것도 수집하지 않습니�
 | 선택 기능 로컬 LLM 요청 | 이 PC의 `localhost` · `127.0.0.1`에만 | 답변은 로컬 기록에 |
 | 설정 옮기기 파일(`.mla.json`, 설정 › 설정 옮기기에서 내보내기를 누를 때만) | 사용자가 고른 곳에 저장(Windows 저장 창 / 크롬 다운로드). 어디로도 보내지 않음 | 설정 일부와 라이브러리(템플릿 · 스킬과 이전 버전 · 프리셋). 기록 · 프로젝트 · 쿠키는 **넣지 않음**. 비밀번호 암호화 선택(PBKDF2-SHA256 25만 번 + AES-GCM) |
 | 화면 알림 (답변 완료 · 사용 한도 · 보내기 실패 · 종합 끝) | 이 PC 화면에 Windows · 크롬이 띄우기만 함. 개수와 AI 서비스 이름만 넣고 질문 · 답변은 넣지 않음 | 저장하지 않음 |
+| 이 PC의 개발 도구 (Windows 앱 프로젝트 모드 — "Node.js 22.11.0" 같은 이름과 버전, 이 PC에서 각 도구의 버전 명령을 실행해 알아냄) | 기본으로는 어디로도 보내지 않음. "AI에게 이 PC 환경 알려 주기"(기본 켬, 끌 수 있음)가 켜져 있으면 AI 패널로 보내는 프로젝트 질문에 도구 **이름과 버전만** 담은 한 줄을 붙임 — 폴더 경로 · 사용자 이름은 넣지 않음 | 프로젝트를 연 동안 메모리에만, 켜고 끈 설정은 로컬 저장소에 |
+| 내 앱 화면 캡처 (Windows 앱 미리보기 창) | 캡처 창에서 그림 · 받을 AI · 보낼 글을 확인하고 **[보내기]를 누를 때만** 사용자가 고른 AI 패널로 | 이 실행 동안 메모리에만(최근 12장). **PNG로 저장**을 누를 때만 파일로 씀 |
+| 미리보기 창에 띄운 내 앱 (Windows 앱) | 이 PC 주소(`localhost` · `127.0.0.1`)만 엶. AI 사이트와 쿠키를 나누지 않는 따로 된 브라우저 세션에서 돎 | 저장하지 않음 |
+
+Windows 앱의 프로젝트 모드는 사용자가 요청할 때(테스트 실행 · ▶ 앱 실행 · 1회 실행 · 적용 전/후 화면 비교) 이 PC에서 프로젝트의 코드를 실행합니다 — 언제나 확인 창을 거칩니다. 실행 결과는 이 PC에만 남고, 사용자가 직접 AI에게 보내지 않는 한 어디로도 가지 않습니다.
 
 이 밖에 이 프로젝트의 GitHub 저장소에서 공개 파일 두 개를 받습니다: `remote/selectors.json`(입력창 · 답변을 찾는 셀렉터, Ed25519 서명 검사, 코드 아님)과 `package.json`(새 버전 알림). 이 요청에는 개인 정보가 들어가지 않습니다.
 
