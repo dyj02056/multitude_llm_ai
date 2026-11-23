@@ -372,3 +372,73 @@ test('연결: 사이드바 자리 · 창 · 스크립트 순서 · 확장 빌드
   assert.equal(i18n.t('dev.env.pill.ok'), '✓ Ready');
   i18n.setLang('ko');
 });
+
+// ---------- v0.42.0: 로드맵 작업의 도구 · AI 요청 환경 줄 · 테스트 전 거절 ----------
+test('로드맵: 작업에 필요한 도구(tools)를 읽고 · 고치고 · 합치고, 분해 · 구현 요청 글에 들어간다', () => {
+  const RM = require('../src/shared/roadmap');
+  const rm = RM.normalizeRoadmap({ title: 'x', milestones: [{ id: 'm1', title: 'a', tasks: [{ id: 't1', title: 'API', tools: ['Java', 'docker', 42, ''] }, { id: 't2', title: 'UI', tools: ['node'] }] }] });
+  assert.deepEqual(RM.findTask(rm, 't1').tools, ['Java', 'docker']);
+  assert.deepEqual(RM.findTask(RM.updateTask(rm, 't2', { tools: ['node', 'pnpm'] }), 't2').tools, ['node', 'pnpm']);
+  assert.deepEqual(RM.findTask(RM.mergeTasks(rm, 't1', 't2'), 't1').tools, ['Java', 'docker', 'node']);
+  assert.deepEqual(RM.normalizeRoadmap({ milestones: [{ id: 'm', title: 'm', tasks: [{ id: 't1', title: 'x' }] }] }).milestones[0].tasks[0].tools, []);
+  assert.match(RM.buildDecomposePrompt({ plan: 'p', lang: 'ko' }), /tools\(이 작업에 필요한 개발 도구/);
+  assert.match(RM.buildDecomposePrompt({ plan: 'p', lang: 'en' }), /"tools":\["node"\]/);
+  assert.match(RM.buildTaskPrompt(rm, 't1', { lang: 'ko' }), /필요한 도구: Java, docker/);
+  assert.match(RM.buildTaskPrompt(rm, 't2', { lang: 'en' }), /Tools needed: node/);
+});
+
+test('규칙: 도구 이름 → id(별칭) · 끝나지 않은 작업의 도구 · 작업 경고 · 검사에 필요한 도구', () => {
+  assert.deepEqual(['Java', 'Node.js', 'g++', 'docker compose', 'Postgres', 'JDK (javac)', 'cmake', 'banana'].map(E.toolIdOf), ['jdk', 'node', 'gpp', 'docker', 'psql', 'jdk', 'cmake', null]);
+  const rm = { milestones: [{ tasks: [{ id: 't1', status: 'done', tools: ['go'] }, { id: 't2', status: 'todo', tools: ['java', 'node'] }, { id: 't3', status: 'doing', tools: ['jdk', 'docker'] }] }] };
+  assert.deepEqual(E.taskNeeds(rm), [{ id: 'jdk', because: 'task:t2' }, { id: 'node', because: 'task:t2' }, { id: 'docker', because: 'task:t3' }]);
+  assert.deepEqual(E.taskNeeds(null), []);
+  const rows = E.evaluate([{ id: 'jdk' }, { id: 'node' }, { id: 'python' }], { jdk: { state: 'missing' }, node: { state: 'ok', version: '22.1.0' }, python: { state: 'ok', version: '3.9.0' } }, { python: { range: '>=3.11' } });
+  assert.deepEqual(E.problemsFor(rows, ['Java', 'node', 'python3']), [{ name: 'JDK (javac)', level: 'error', state: 'missing' }, { name: 'Python', level: 'warn', state: 'version' }]);
+  assert.deepEqual(E.missingForChecks({ node: { state: 'ok' }, npm: { state: 'missing' } }, ['test']), { check: 'test', id: 'npm' });
+  assert.deepEqual(E.missingForChecks({ python: { state: 'missing' } }, ['test', 'pytest']), { check: 'pytest', id: 'python' });
+  assert.equal(E.missingForChecks({}, ['test']), null); // 점검하지 않은 도구는 판단하지 않는다
+  assert.equal(E.missingForChecks(null, ['test']), null);
+});
+
+test('화면 (v0.42.0): 로드맵 작업의 도구도 점검 · AI에게 줄 환경 줄(끄면 빈 글) · 도구가 없으면 테스트 거절 이유', async () => {
+  const h = setup({ files: ['package.json', 'node_modules'], texts: { 'package.json': '{}' }, result: { ok: true, at: 1, tools: { git: { state: 'ok', version: '2.4' }, node: { state: 'ok', version: '22.1.0', path: 'C:\\n\\node.exe' }, npm: { state: 'missing' }, npx: { state: 'ok', version: '10' }, jdk: { state: 'missing' } }, ports: {}, docker: null, javaHome: null } });
+  const listeners = [];
+  h.ctx.MLA.roadmapUI = { get: () => ({ milestones: [{ tasks: [{ id: 't4', status: 'todo', tools: ['java'] }] }] }), onChange: (fn) => listeners.push(fn) };
+  // dev-hub.js는 읽힐 때 onChange를 건다 — 로드맵을 넣은 뒤 다시 읽는다
+  vm.runInContext(read('src/renderer/dev-hub.js'), h.ctx);
+  h.ctx.window.onDevProject();
+  await tick(30);
+  assert.ok(h.logs.checks.at(-1).tools.includes('jdk'));
+  const jdk = h.hub().env.rows.find((r) => r.key === 'jdk');
+  assert.equal(jdk.because, 'task:t4');
+  h.$('#dhEnvMore').listeners.click();
+  assert.ok(h.$('#envRows').children.some((r) => r.textContent.includes('로드맵 t4')));
+  assert.equal(h.hub().envLine(), 'git 2.4, Node.js 22.1.0, npm: -, npx 10, JDK (javac): -');
+  assert.doesNotMatch(h.hub().envLine(), /C:\\/);
+  assert.match(h.hub().blockReason(['test']), /npm이\(가\) 이 PC에 없어 test을\(를\) 실행할 수 없습니다/);
+  assert.equal(h.hub().blockReason(['pytest']), ''); // 점검하지 않은 도구는 막지 않는다
+  assert.deepEqual(h.hub().problemsFor(['java']), [{ name: 'JDK (javac)', level: 'error', state: 'missing' }]);
+  // 끄면 AI 요청에 붙이지 않는다 (이 PC에 기억)
+  h.$('#dhEnvLine').checked = false;
+  h.$('#dhEnvLine').listeners.change();
+  assert.equal(h.hub().envLine(), '');
+  assert.equal(h.store.get('mla-env-line'), '0');
+  // 로드맵이 바뀌어 새 도구가 생기면 다시 점검한다
+  const n = h.logs.checks.length;
+  h.ctx.MLA.roadmapUI.get = () => ({ milestones: [{ tasks: [{ id: 't4', status: 'todo', tools: ['java', 'go'] }] }] });
+  listeners.at(-1)();
+  await tick(30);
+  assert.equal(h.logs.checks.length, n + 1);
+  assert.ok(h.logs.checks.at(-1).tools.includes('go'));
+});
+
+test('연결 (v0.42.0): 질문에 환경 줄 · 미리보기 테스트 전 거절 · 카드 경고 자리 · 사전', () => {
+  assert.match(read('src/renderer/project.js'), /MLA\.devHub\?\.envLine\?\.\(\)[\s\S]*t\('prompt\.proj\.env', \{ line: envLine \}\)/);
+  assert.match(read('src/renderer/project-devtest.js'), /MLA\.devHub\?\.blockReason\?\.\(scripts\)/);
+  assert.match(read('src/renderer/index.html'), /id="rmcNote"[^\n]*\n\s*<div id="rmcEnv"/);
+  assert.match(read('src/renderer/index.html'), /id="dhEnvLine"/);
+  i18n.setLang('en');
+  assert.match(i18n.t('prompt.proj.env', { line: 'Node.js 22' }), /^\[This PC's dev environment\] Node\.js 22/);
+  i18n.setLang('ko');
+  assert.match(i18n.t('prompt.proj.env', { line: 'Node.js 22' }), /^\[이 PC의 개발 환경\] Node\.js 22/);
+});

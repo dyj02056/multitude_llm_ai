@@ -184,6 +184,7 @@
   'prompt.proj.head': '[프로젝트: {name}] (제외 규칙을 통과한 파일 {total}개 중 {n}개 내용 포함)',
   'prompt.proj.tree': '[프로젝트 구조]',
   'prompt.proj.request': '[요청]',
+  'prompt.proj.env': '[이 PC의 개발 환경] {line}\n이 환경에서 돌아가는 코드로 답해 주세요. 없는 도구(-)가 꼭 필요하면 설치 방법을 먼저 알려 주세요.',
   'prompt.proj.noRequest': '(요청 없음 — 위 내용을 검토해 줘)',
   'prompt.proj.noRequestAttached': '(요청 없음 — 첨부한 내용을 검토해 줘)',
   'prompt.proj.noRequestPlain': '(요청 없음)',

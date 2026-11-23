@@ -182,6 +182,7 @@
   'prompt.proj.head': '[Project: {name}] (content of {n} of the {total} files that passed the exclusion rules)',
   'prompt.proj.tree': '[Project structure]',
   'prompt.proj.request': '[Request]',
+  'prompt.proj.env': '[This PC\'s dev environment] {line}\nAnswer with code that runs in this environment. If a missing tool (-) is really needed, say how to install it first.',
   'prompt.proj.noRequest': '(no request — please review the content above)',
   'prompt.proj.noRequestAttached': '(no request — please review the attached content)',
   'prompt.proj.noRequestPlain': '(no request)',

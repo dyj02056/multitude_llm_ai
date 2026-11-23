@@ -555,6 +555,7 @@
   'ui.roadmap.f.desc': 'Details',
   'ui.roadmap.f.accept': 'Done condition',
   'ui.roadmap.f.files': 'Files (comma separated)',
+  'ui.roadmap.f.tools': 'Tools needed (comma separated — node, python, jdk …)',
   'ui.roadmap.f.deps': 'Dependency ids (comma separated)',
   'ui.roadmap.f.weight': 'Size (1-5)',
   'ui.roadmap.f.merge': 'Merge another task',

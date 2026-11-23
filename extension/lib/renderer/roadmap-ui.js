@@ -310,13 +310,14 @@
     const desc = Object.assign(el('textarea'), { rows: 2, value: tk.desc });
     const accept = Object.assign(el('textarea'), { rows: 2, value: tk.accept });
     const files = Object.assign(el('input'), { type: 'text', value: tk.files.join(', ') });
+    const tools = Object.assign(el('input'), { type: 'text', value: (tk.tools || []).join(', ') }); // 필요한 개발 도구 (v0.42.0)
     const deps = Object.assign(el('input'), { type: 'text', value: tk.deps.join(', ') });
     const weight = Object.assign(el('input'), { type: 'number', min: 1, max: 5, value: tk.weight });
     const merge = el('select');
     merge.append(Object.assign(document.createElement('option'), { value: '', textContent: t('ui.roadmap.mergeNone') }), ...RM.tasksOf(rm).filter((x) => x.id !== tk.id).map((x) => Object.assign(document.createElement('option'), { value: x.id, textContent: `${x.id} ${x.title}` })));
     const save = button(t('ui.roadmap.save'), '', () => {
       const split = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
-      const next = RM.updateTask(rm, tk.id, { title: title.value, desc: desc.value, accept: accept.value, files: split(files.value), deps: split(deps.value), weight: weight.value });
+      const next = RM.updateTask(rm, tk.id, { title: title.value, desc: desc.value, accept: accept.value, files: split(files.value), tools: split(tools.value), deps: split(deps.value), weight: weight.value });
       if (next === rm) status(t('ui.roadmap.editCycle'), 'warn');
       editing = '';
       mutate(next);
@@ -329,7 +330,7 @@
       editing = '';
       mutate(next);
     });
-    f.append(field(t('ui.roadmap.f.title'), title), field(t('ui.roadmap.f.desc'), desc), field(t('ui.roadmap.f.accept'), accept), field(t('ui.roadmap.f.files'), files), field(t('ui.roadmap.f.deps'), deps), field(t('ui.roadmap.f.weight'), weight), field(t('ui.roadmap.f.merge'), merge));
+    f.append(field(t('ui.roadmap.f.title'), title), field(t('ui.roadmap.f.desc'), desc), field(t('ui.roadmap.f.accept'), accept), field(t('ui.roadmap.f.files'), files), field(t('ui.roadmap.f.tools'), tools), field(t('ui.roadmap.f.deps'), deps), field(t('ui.roadmap.f.weight'), weight), field(t('ui.roadmap.f.merge'), merge));
     const bar = el('div', 'rm-edit-bar');
     bar.append(save, doMerge, button(t('ui.roadmap.cancel'), '', () => ((editing = ''), render())));
     f.append(bar);

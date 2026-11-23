@@ -254,6 +254,10 @@ The Windows app looks only in absolute PATH folders, never runs anything inside 
 
 ![Dev environment check](../screenshots/en/77-env-check.png)
 
+**v0.42.0** — Project questions get one line such as `[This PC's dev environment] Node.js 22.11.0, npm 10.9.0, Python 3.10.11, JDK (javac): -` so the AI answers for the tools you actually have (names and versions only, no paths; turn it off in the details dialog). Each roadmap task now carries the **tools** it needs (the AI fills them in when splitting the plan, and you can edit them); those tools are checked too, and when the current task's tool is missing the roadmap card shows a red warning with **Open Run & check**. Test runs whose tool is missing (for example `npm` for `test`) stop before running and tell you why.
+
+![Roadmap card warning about a missing tool](../screenshots/en/78-env-task.png)
+
 ### Roadmap (v0.38.0)
 
 With a project open, **로드맵** (Roadmap) on the toolbar sends your plan (pasted, `PLAN.md`, or a `.md` / `.txt` file) to an AI and turns the answer into **milestones → tasks**; each task is tracked as to do · in progress · verifying · done · blocked, and a task stays locked until the tasks it depends on are done. **구현 요청** (Implement) only fills the prompt box with that task's request and picks its expected files — nothing is sent; sending, applying and testing follow the project-mode steps above, checked by you. The **dashboard** tab shows a progress ring, per-milestone bars, a dependency map and a burndown (with an estimated finish date). The **docs** tab writes `docs/procedure.md` and `README.md` into the project (an existing README of yours is kept and the app writes `README.generated.md` by default; only the `mla:` marker blocks are refreshed). Progress is stored in `.mla/roadmap.json`, which is never sent to an AI. Details (Korean): [docs/roadmap.md](../roadmap.md).

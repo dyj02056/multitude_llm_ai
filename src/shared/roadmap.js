@@ -33,18 +33,18 @@
   const TXT = {
     ko: {
       decompose: (plan, tree) =>
-        `아래 프로젝트 계획서를 읽고, 프로젝트를 끝까지 구현하는 단계별 작업 목록으로 쪼개 주세요.\n\n[규칙]\n- 마일스톤(큰 단계) 3~8개, 마일스톤마다 작업 2~8개. 작업 하나는 한 번의 대화로 구현·확인할 수 있는 크기로 쪼갭니다.\n- 작업마다: id(t1, t2 …), title(짧게), desc(무엇을 만드는지), deps(먼저 끝나야 하는 작업 id 목록), files(건드릴 파일 경로 예상), accept(끝났다고 볼 조건 — 확인할 수 있게 구체적으로), weight(1~5, 작업 크기).\n- 선행 관계(deps)는 돌고 돌지 않게 하세요.\n- 아래 JSON 형식 그대로, 코드 블록 하나로만 답하세요. 설명 글은 쓰지 마세요.\n\n\`\`\`json\n{"title":"프로젝트 이름","milestones":[{"id":"m1","title":"마일스톤 이름","tasks":[{"id":"t1","title":"…","desc":"…","deps":[],"files":["src/a.js"],"accept":"…","weight":2}]}]}\n\`\`\`\n${tree ? `\n[현재 프로젝트 구조]\n${tree}\n` : ''}\n[프로젝트 계획서]\n${plan}`,
+        `아래 프로젝트 계획서를 읽고, 프로젝트를 끝까지 구현하는 단계별 작업 목록으로 쪼개 주세요.\n\n[규칙]\n- 마일스톤(큰 단계) 3~8개, 마일스톤마다 작업 2~8개. 작업 하나는 한 번의 대화로 구현·확인할 수 있는 크기로 쪼갭니다.\n- 작업마다: id(t1, t2 …), title(짧게), desc(무엇을 만드는지), deps(먼저 끝나야 하는 작업 id 목록), files(건드릴 파일 경로 예상), tools(이 작업에 필요한 개발 도구 — node · npm · python · jdk · gcc · cmake · dotnet · cargo · go · docker 같은 이름), accept(끝났다고 볼 조건 — 확인할 수 있게 구체적으로), weight(1~5, 작업 크기).\n- 선행 관계(deps)는 돌고 돌지 않게 하세요.\n- 아래 JSON 형식 그대로, 코드 블록 하나로만 답하세요. 설명 글은 쓰지 마세요.\n\n\`\`\`json\n{"title":"프로젝트 이름","milestones":[{"id":"m1","title":"마일스톤 이름","tasks":[{"id":"t1","title":"…","desc":"…","deps":[],"files":["src/a.js"],"tools":["node"],"accept":"…","weight":2}]}]}\n\`\`\`\n${tree ? `\n[현재 프로젝트 구조]\n${tree}\n` : ''}\n[프로젝트 계획서]\n${plan}`,
       task: (o) =>
-        `프로젝트 "${o.title}"의 작업 하나를 구현해 주세요.\n\n[이번 작업] ${o.task.id} ${o.task.title}\n${o.task.desc ? `내용: ${o.task.desc}\n` : ''}${o.task.files.length ? `건드릴 파일(예상): ${o.task.files.join(', ')}\n` : ''}완료 조건: ${o.task.accept || '(정해지지 않음 — 스스로 합리적으로 정해 밝혀 주세요)'}\n\n${o.done.length ? `[이미 끝난 작업]\n${o.done.map((d) => `- ${d.id} ${d.title}`).join('\n')}\n\n` : ''}${o.next.length ? `[이 작업 뒤에 이어질 작업 — 미리 만들지 마세요]\n${o.next.map((d) => `- ${d.id} ${d.title}`).join('\n')}\n\n` : ''}[규칙]\n- 이번 작업 범위만 구현하세요.\n- 끝에 "완료 조건 점검"으로 조건마다 충족 여부를 한 줄씩 적어 주세요.`,
+        `프로젝트 "${o.title}"의 작업 하나를 구현해 주세요.\n\n[이번 작업] ${o.task.id} ${o.task.title}\n${o.task.desc ? `내용: ${o.task.desc}\n` : ''}${o.task.files.length ? `건드릴 파일(예상): ${o.task.files.join(', ')}\n` : ''}${o.task.tools && o.task.tools.length ? `필요한 도구: ${o.task.tools.join(', ')}\n` : ''}완료 조건: ${o.task.accept || '(정해지지 않음 — 스스로 합리적으로 정해 밝혀 주세요)'}\n\n${o.done.length ? `[이미 끝난 작업]\n${o.done.map((d) => `- ${d.id} ${d.title}`).join('\n')}\n\n` : ''}${o.next.length ? `[이 작업 뒤에 이어질 작업 — 미리 만들지 마세요]\n${o.next.map((d) => `- ${d.id} ${d.title}`).join('\n')}\n\n` : ''}[규칙]\n- 이번 작업 범위만 구현하세요.\n- 끝에 "완료 조건 점검"으로 조건마다 충족 여부를 한 줄씩 적어 주세요.`,
       docsAsk: (o) =>
         `아래는 프로젝트 "${o.title}"의 작업 목록입니다. README에 넣을 소개를 만들어 주세요.\n\n[규칙]\n- intro: 이 프로젝트가 무엇인지 1~2문장.\n- features: 주요 기능 3~8개, 각각 한 줄.\n- 아래 JSON 코드 블록 하나로만 답하세요.\n\n\`\`\`json\n{"intro":"…","features":["…"]}\n\`\`\`\n\n[작업 목록]\n${o.list}`,
       clipped: '…(이하 생략)',
     },
     en: {
       decompose: (plan, tree) =>
-        `Read the project plan below and split it into step-by-step tasks that carry the project through to the end.\n\n[Rules]\n- 3-8 milestones, 2-8 tasks per milestone. Size each task so one conversation can implement and check it.\n- Per task: id (t1, t2 …), title (short), desc (what to build), deps (ids of tasks that must finish first), files (expected file paths), accept (a concrete, checkable done condition), weight (1-5, task size).\n- Keep deps free of cycles.\n- Answer with exactly one code block in the JSON shape below and no other prose.\n\n\`\`\`json\n{"title":"Project name","milestones":[{"id":"m1","title":"Milestone name","tasks":[{"id":"t1","title":"…","desc":"…","deps":[],"files":["src/a.js"],"accept":"…","weight":2}]}]}\n\`\`\`\n${tree ? `\n[Current project structure]\n${tree}\n` : ''}\n[Project plan]\n${plan}`,
+        `Read the project plan below and split it into step-by-step tasks that carry the project through to the end.\n\n[Rules]\n- 3-8 milestones, 2-8 tasks per milestone. Size each task so one conversation can implement and check it.\n- Per task: id (t1, t2 …), title (short), desc (what to build), deps (ids of tasks that must finish first), files (expected file paths), tools (developer tools this task needs — names like node, npm, python, jdk, gcc, cmake, dotnet, cargo, go, docker), accept (a concrete, checkable done condition), weight (1-5, task size).\n- Keep deps free of cycles.\n- Answer with exactly one code block in the JSON shape below and no other prose.\n\n\`\`\`json\n{"title":"Project name","milestones":[{"id":"m1","title":"Milestone name","tasks":[{"id":"t1","title":"…","desc":"…","deps":[],"files":["src/a.js"],"tools":["node"],"accept":"…","weight":2}]}]}\n\`\`\`\n${tree ? `\n[Current project structure]\n${tree}\n` : ''}\n[Project plan]\n${plan}`,
       task: (o) =>
-        `Implement one task of the project "${o.title}".\n\n[This task] ${o.task.id} ${o.task.title}\n${o.task.desc ? `Details: ${o.task.desc}\n` : ''}${o.task.files.length ? `Expected files: ${o.task.files.join(', ')}\n` : ''}Done condition: ${o.task.accept || '(not set — pick a reasonable one and state it)'}\n\n${o.done.length ? `[Already done]\n${o.done.map((d) => `- ${d.id} ${d.title}`).join('\n')}\n\n` : ''}${o.next.length ? `[Coming after this task — do not build ahead]\n${o.next.map((d) => `- ${d.id} ${d.title}`).join('\n')}\n\n` : ''}[Rules]\n- Implement only this task's scope.\n- End with a "Done check" listing, one line per condition, whether it is met.`,
+        `Implement one task of the project "${o.title}".\n\n[This task] ${o.task.id} ${o.task.title}\n${o.task.desc ? `Details: ${o.task.desc}\n` : ''}${o.task.files.length ? `Expected files: ${o.task.files.join(', ')}\n` : ''}${o.task.tools && o.task.tools.length ? `Tools needed: ${o.task.tools.join(', ')}\n` : ''}Done condition: ${o.task.accept || '(not set — pick a reasonable one and state it)'}\n\n${o.done.length ? `[Already done]\n${o.done.map((d) => `- ${d.id} ${d.title}`).join('\n')}\n\n` : ''}${o.next.length ? `[Coming after this task — do not build ahead]\n${o.next.map((d) => `- ${d.id} ${d.title}`).join('\n')}\n\n` : ''}[Rules]\n- Implement only this task's scope.\n- End with a "Done check" listing, one line per condition, whether it is met.`,
       docsAsk: (o) =>
         `Below is the task list of the project "${o.title}". Write the intro for its README.\n\n[Rules]\n- intro: what this project is, in 1-2 sentences.\n- features: 3-8 main features, one line each.\n- Answer with exactly one JSON code block.\n\n\`\`\`json\n{"intro":"…","features":["…"]}\n\`\`\`\n\n[Task list]\n${o.list}`,
       clipped: '…(truncated)',
@@ -129,6 +129,7 @@
           desc: str(rt.desc),
           deps: cleanList(rt.deps, 30), // 아래에서 id로 바꾼다
           files: cleanList(rt.files, 20).map((f) => f.slice(0, 260)),
+          tools: cleanList(rt.tools, 12).map((f) => f.slice(0, 40)), // 필요한 개발 도구 (v0.42.0)
           accept: str(rt.accept),
           weight: cleanWeight(rt.weight),
           status: cleanStatus(rt.status),
@@ -453,6 +454,7 @@
       if (typeof patch.desc === 'string') o.desc = str(patch.desc);
       if (typeof patch.accept === 'string') o.accept = str(patch.accept);
       if (Array.isArray(patch.files)) o.files = cleanList(patch.files, 20);
+      if (Array.isArray(patch.tools)) o.tools = cleanList(patch.tools, 12).map((f) => f.slice(0, 40));
       if (patch.weight !== undefined) o.weight = cleanWeight(patch.weight);
       if (Array.isArray(patch.deps)) o.deps = cleanList(patch.deps, 30).filter((d) => d !== id && ids.has(d));
       return o;
@@ -496,6 +498,7 @@
       desc: join(a.desc, b.desc, '\n').slice(0, MAX_TEXT),
       accept: join(a.accept, b.accept, '\n').slice(0, MAX_TEXT),
       files: uniq([...a.files, ...b.files]).slice(0, 20),
+      tools: uniq([...(a.tools || []), ...(b.tools || [])]).slice(0, 12),
       deps: uniq([...a.deps, ...b.deps]).filter((d) => d !== aId && d !== bId),
       weight: Math.min(5, a.weight + b.weight),
       status: a.status === 'done' && b.status === 'done' ? 'done' : a.status === 'done' || b.status === 'done' ? 'doing' : a.status,

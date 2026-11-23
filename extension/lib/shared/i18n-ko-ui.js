@@ -557,6 +557,7 @@
   'ui.roadmap.f.desc': '내용',
   'ui.roadmap.f.accept': '완료 조건',
   'ui.roadmap.f.files': '파일 (쉼표로 구분)',
+  'ui.roadmap.f.tools': '필요한 도구 (쉼표로 구분 — node, python, jdk …)',
   'ui.roadmap.f.deps': '선행 작업 id (쉼표로 구분)',
   'ui.roadmap.f.weight': '크기 (1~5)',
   'ui.roadmap.f.merge': '다른 작업 합치기',

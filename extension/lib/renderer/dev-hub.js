@@ -79,11 +79,8 @@
       // 표시 파일 + 맨 위의 .csproj 등은 이름만 보면 되므로 정해 둔 것만 읽는다
       for (const f of E.TEXT_FILES) if (names.has(f)) texts[f] = await readText(f);
       env.texts = texts;
-      const pref = loadPref();
-      const auto = E.detectNeeds(env.entries, texts);
-      const have = new Set(auto.map((n) => n.group || n.id));
-      env.needs = [...auto, ...pref.add.filter((id) => !have.has(id)).map((id) => ({ id, because: 'user' }))];
-      env.ignore = new Set(pref.ignore);
+      env.ignore = new Set(loadPref().ignore);
+      env.needs = needsNow();
       env.reqs = E.requirements(texts);
       env.ready = E.readiness(env.entries, texts);
       env.ports = E.devPorts(env.entries, texts);
@@ -100,6 +97,28 @@
     } finally {
       env.scanning = false;
     }
+  }
+
+  /** 필요한 도구 = 파일로 고른 것 + 로드맵의 끝나지 않은 작업이 적은 것(v0.42.0) + 사용자가 더한 것 */
+  function needsNow() {
+    const auto = E.detectNeeds(env.entries, env.texts);
+    const have = new Set(auto.map((n) => n.group || n.id));
+    const fromTasks = E.taskNeeds(MLA.roadmapUI?.get?.()).filter((n) => !have.has(n.id));
+    for (const n of fromTasks) have.add(n.id);
+    return [...auto, ...fromTasks, ...loadPref().add.filter((id) => !have.has(id)).map((id) => ({ id, because: 'user' }))];
+  }
+
+  /** 로드맵이 바뀌면(작업의 필요한 도구) 목록을 다시 — 아직 묻지 않은 도구가 생겼으면 다시 점검 */
+  function onRoadmapChanged() {
+    if (!projectId() || env.scanning || env.checking || !env.at && canCheck()) return;
+    const before = new Set(E.idsOf(env.needs));
+    env.needs = needsNow();
+    const fresh = E.idsOf(env.needs).filter((id) => !before.has(id) && !env.found?.tools?.[id]);
+    if (fresh.length && canCheck()) return check();
+    evaluate();
+    render();
+    renderModal();
+    window.onDevEnvChecked?.(env);
   }
 
   /** 판정 다시 하기 (본체 결과 + 사용자 무시 목록) */
@@ -209,6 +228,8 @@
     const lines = warns.slice(0, 1).map((r) => readyLine(r, true));
     if (warns.length > 1) lines.push(el('div', 'dh-ready-line lvl-warn', t('dev.env.readyMore', { n: warns.length - 1 })));
     $('#dhEnvReady').replaceChildren(...lines);
+    const lineLab = $('#dhEnvLineLabel');
+    if (lineLab) lineLab.hidden = !canCheck();
     $('#dhEnvNote').textContent = flashMsg || (!canCheck() ? t('dev.env.extNote') : '');
     $('#dhEnvNote').hidden = !$('#dhEnvNote').textContent;
   }
@@ -255,6 +276,8 @@
     return t(`dev.env.state.${r.state}`);
   }
 
+  const whyText = (b) => (b === 'user' ? t('dev.env.why.user') : /^task:/.test(b || '') ? t('dev.env.why.task', { id: b.slice(5) }) : b || t('dev.env.why.base'));
+
   function renderModal() {
     if (!modal) return;
     $('#envSub').textContent = P.project?.info?.name || '';
@@ -290,7 +313,7 @@
       else if (r.path) ver.title = r.path;
       if (notes.length) ver.append(el('div', 'dh-sub', notes.join(' · ')));
       const need = el('td', 'need', r.range ? `${r.range}${r.rangeFrom ? ` (${r.rangeFrom})` : ''}` : '');
-      const why = el('td', 'why', r.because === 'user' ? '✎' : r.because || t('dev.env.why.base'));
+      const why = el('td', 'why', whyText(r.because));
       const td = el('td', 'fix');
       const fix = el('div', 'fx');
       td.append(fix);
@@ -379,9 +402,8 @@
     savePref({ add: [...add], ignore: [...ign] });
     // 새로 더한 도구는 본체에 다시 물어야 하므로 점검을 다시 한다
     if (on && !isAuto && canCheck() && !env.found?.tools?.[id]) return check();
-    const have = new Set(E.detectNeeds(env.entries, env.texts).map((n) => n.group || n.id));
-    env.needs = [...E.detectNeeds(env.entries, env.texts), ...[...add].filter((x) => !have.has(x)).map((x) => ({ id: x, because: 'user' }))];
     env.ignore = ign;
+    env.needs = needsNow();
     evaluate();
     render();
     renderModal();
@@ -445,5 +467,41 @@
     }
   });
 
-  MLA.devHub = { env, check, render, openModal, closeModal, envLine: () => E.envLine(env.rows) };
+  MLA.roadmapUI?.onChange?.(() => onRoadmapChanged());
+
+  // AI 요청에 붙일 환경 한 줄 (v0.42.0): 점검을 마쳤고(확장은 없음) 사용자가 켜 둔 경우만 — 이름 · 버전만, 경로 없음
+  const ENV_LINE_KEY = 'mla-env-line';
+  const envLineOn = () => {
+    try {
+      return localStorage.getItem(ENV_LINE_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  };
+  function envLine() {
+    if (!canCheck() || !env.found || !envLineOn()) return '';
+    return E.envLine(env.rows);
+  }
+  const lineBox = $('#dhEnvLine');
+  if (lineBox) {
+    lineBox.checked = envLineOn();
+    lineBox.addEventListener('change', () => {
+      try {
+        localStorage.setItem(ENV_LINE_KEY, lineBox.checked ? '1' : '0');
+      } catch {}
+    });
+  }
+
+  /** 로드맵 작업이 적은 도구 중 없는 것 · 버전이 안 맞는 것 (카드 경고용) */
+  const problemsFor = (names) => (canCheck() && env.found ? E.problemsFor(env.rows, names) : []);
+
+  /** 검사(test · pytest …)에 꼭 필요한 도구가 없으면 알릴 글, 아니면 '' — 테스트 실행 전에 미리 거절 (v0.42.0) */
+  function blockReason(checks) {
+    if (!canCheck() || !env.found) return '';
+    // 점검 결과에 없던 도구(필요 목록에 안 든 것)는 모른다 — 판단하지 않는다
+    const miss = E.missingForChecks(env.found.tools, checks);
+    return miss ? t('dev.env.blockTest', { name: E.TOOLS[miss.id].name, check: miss.check }) : '';
+  }
+
+  MLA.devHub = { env, check, render, openModal, closeModal, envLine, problemsFor, blockReason };
 })();

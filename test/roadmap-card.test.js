@@ -158,7 +158,7 @@ function fakeDom() {
   return { El, $, document: { createElement: (t) => new El(t), getElementById: () => null, head: new El('head'), querySelector: () => null } };
 }
 
-function setup({ roadmap = fresh(), devtest = true, runResult = passRun(), git = false } = {}) {
+function setup({ roadmap = fresh(), devtest = true, runResult = passRun(), git = false, devHub = null } = {}) {
   i18n.setLang('ko');
   const dom = fakeDom();
   const FS = new Map([['package.json', '{}'], ...(roadmap ? [['.mla/roadmap.json', JSON.stringify(roadmap)]] : [])]);
@@ -188,7 +188,7 @@ function setup({ roadmap = fresh(), devtest = true, runResult = passRun(), git =
   };
   const store = new Map();
   const ctx = {
-    MLA: { roadmap: RM, roadmapCharts: CH, roadmapDocs: DOCS, i18n, projectUI: P },
+    MLA: { roadmap: RM, roadmapCharts: CH, roadmapDocs: DOCS, i18n, projectUI: P, ...(devHub ? { devHub } : {}) },
     document: dom.document,
     t: (k, v) => i18n.t(k, v),
     $: dom.$,
@@ -413,4 +413,33 @@ test('카드 연결: 사이드바 자리 · 스크립트 순서 · 신호 · 확
   assert.deepEqual(keys(ko).sort(), keys(en).sort());
   // 카드도 <style>을 끼워 넣지 않는다 (앱 CSP)
   assert.doesNotMatch(read('src/renderer/roadmap-card.js'), /createElement\('style'\)|style="/);
+});
+
+test('카드 (v0.42.0): 작업의 필요한 도구가 이 PC에 없으면 경고 줄 + [실행 · 확인 열기], 카드의 테스트 실행은 도구가 없으면 실행하지 않는다', async () => {
+  const rm = fresh();
+  rm.milestones[0].tasks[0].tools = ['java', 'node'];
+  let openedN = 0;
+  const devHub = {
+    problemsFor: (names) => (names.includes('java') ? [{ name: 'JDK (javac)', level: 'error', state: 'missing' }] : []),
+    blockReason: (checks) => (checks.includes('test') ? 'Node.js이(가) 이 PC에 없어 test을(를) 실행할 수 없습니다' : ''),
+    openModal: () => openedN++,
+  };
+  const h = setup({ roadmap: rm, devHub });
+  await opened(h);
+  const box = h.$('#rmcEnv');
+  assert.equal(box.hidden, false);
+  assert.match(box.textContent, /이 작업에 필요한 도구: JDK \(javac\) \(없음\)/);
+  await box.children[1].listeners.click();
+  assert.equal(openedN, 1);
+  // 진행 중 → 적용 → 검증 중에서 [테스트 실행]을 눌러도 실행하지 않고 이유를 보여 준다
+  await h.click('implement');
+  await h.ctx.window.onRoadmapApplied();
+  await tick();
+  await h.click('test');
+  assert.equal(h.logs.runs, 0);
+  assert.match(h.$('#rmcNote').textContent, /실행할 수 없습니다/);
+  // 점검 결과가 바뀌면 다시 그린다
+  devHub.problemsFor = () => [];
+  h.ctx.window.onDevEnvChecked();
+  assert.equal(box.hidden, true);
 });

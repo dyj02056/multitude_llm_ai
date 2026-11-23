@@ -125,6 +125,7 @@
       $('#rmcAccept').replaceChildren();
       $('#rmcNote').textContent = flash;
       acts.replaceChildren();
+      renderEnv(null);
       return;
     }
     const tk = cs.task;
@@ -133,7 +134,21 @@
     $('#rmcState').className = `rmc-state rm-s-${tk.status}`;
     $('#rmcAccept').replaceChildren(...acceptLines(tk.accept).map((line) => el('li', tk.status === 'done' ? 'ok' : '', line)));
     $('#rmcNote').textContent = testing ? t('ui.roadmap.card.note.testing') : flash || noteFor(cs);
+    renderEnv(tk);
     acts.replaceChildren(...cs.actions.map((a) => actionButton(a, cs)));
+  }
+
+  /** 이 작업이 적은 "필요한 도구" 중 이 PC에 없거나 버전이 안 맞는 것 (v0.42.0, 실행 · 확인 칸의 점검 결과) */
+  function renderEnv(tk) {
+    const box = $('#rmcEnv');
+    if (!box) return;
+    const probs = tk && tk.status !== 'done' ? MLA.devHub?.problemsFor?.(tk.tools || []) || [] : [];
+    box.hidden = !probs.length;
+    if (!probs.length) return box.replaceChildren();
+    const list = probs.map((p) => `${p.name} (${t(`dev.env.state.${p.state === 'missing' ? 'missing' : p.state === 'version' ? 'version' : 'notOnPath'}`)})`).join(', ');
+    const open = button(t('dev.env.taskOpen'), t('dev.env.moreTitle'), () => MLA.devHub?.openModal?.());
+    open.className = 'rmc-env-open';
+    box.replaceChildren(el('span', '', t('dev.env.task', { list })), open);
   }
 
   /** 완료로 바꾸기 → 커밋 해시가 생겼으면 함께 알린다. 다음 작업이 카드에 올라온다 */
@@ -161,6 +176,13 @@
       const info = await host.devtest.info().catch(() => null);
       const checks = info?.ok && Array.isArray(info.checks) ? info.checks.map((c) => c.name) : [];
       const pickName = checks.includes('test') ? 'test' : checks[0];
+      // 필요한 도구가 이 PC에 없으면 실행하지 않고 바로 알린다 (v0.42.0)
+      const block = pickName ? MLA.devHub?.blockReason?.([pickName]) : '';
+      if (block) {
+        testing = false;
+        flash = block;
+        return render();
+      }
       r = await host.devtest.run(pickName ? [pickName] : undefined);
     } catch (err) {
       r = { ok: false, error: err.message };
@@ -224,6 +246,9 @@
   };
 
   // 프로젝트를 열고 닫거나 바꾸면 그 프로젝트의 로드맵을 읽는다 (같은 프로젝트면 다시 그리기만)
+  // 실행 · 확인 칸의 점검이 끝나면 카드의 "필요한 도구" 경고를 다시 그린다 (v0.42.0)
+  window.onDevEnvChecked = () => render();
+
   window.onRoadmapProject = () => {
     const key = P && P.has && P.has() ? P.project.info.id || P.project.info.name : '';
     if (key === projKey) return render();

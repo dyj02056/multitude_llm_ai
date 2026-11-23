@@ -122,6 +122,9 @@
       if (!chosen.length) return ($('#patchStatus').textContent = t('project.test.pick'));
       const scripts = picked();
       if (!scripts.length) return ($('#patchStatus').textContent = t('devtest.pickScript'));
+      // 필요한 도구(node · python …)가 이 PC에 없으면 실행하지 않고 원인을 바로 알린다 (v0.42.0, 실행 · 확인 칸의 점검 결과)
+      const block = MLA.devHub?.blockReason?.(scripts);
+      if (block) return ($('#patchStatus').textContent = block);
       testState.running = true;
       btn.textContent = t('project.test.stop');
       $('#patchApply').disabled = true;

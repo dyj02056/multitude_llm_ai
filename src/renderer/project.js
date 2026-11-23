@@ -716,7 +716,10 @@
       P.splitSuggested = true;
       notice(t('project.send.bigHint', { n: files.length, lines: lineCount.toLocaleString() }));
     }
-    const request = project.split ? `${payload.text || t('prompt.proj.noRequestPlain')}\n\n${PC.PLAN_FIRST}` : payload.text;
+    // 이 PC의 개발 환경 한 줄 (v0.42.0, 실행 · 확인 칸에서 켜고 끔 · 이름과 버전만): AI가 없는 도구를 전제로 답하지 않게
+    const envLine = MLA.devHub?.envLine?.() || '';
+    const envBlock = envLine ? `\n\n${t('prompt.proj.env', { line: envLine })}` : '';
+    const request = (project.split ? `${payload.text || t('prompt.proj.noRequestPlain')}\n\n${PC.PLAN_FIRST}` : payload.text) + envBlock;
     const projInfo = { name: project.info.name, paths: sendablePaths() };
     const treeHash = PC.hashText(PC.buildTree(projInfo.paths));
     const plan = project.incremental

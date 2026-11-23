@@ -29,9 +29,10 @@ const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
 // v0.31.0: 09 · 10 · 16 · 21 · 22 · 23(예전 디자인이던 프로젝트 장면)과 47(파일 나무 키보드)도 같은 가짜 프로젝트로 찍는다
-const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
+const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next', '78-env-task'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
 const ROADMAP = CARD || ['71-roadmap-tasks', '72-roadmap-dash'].includes(scene); // v0.38.1
-const ENV = ['76-env-hub', '77-env-check'].includes(scene); // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
+const ENV = ['76-env-hub', '77-env-check'].includes(scene);
+const ENV_TASK = scene === '78-env-task'; // v0.42.0: 로드맵 작업에 필요한 도구(java)가 이 PC에 없음 → 카드 경고 // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
 const PROJ = ENV || ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
 const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
 let onboarded = !ONBOARD;
@@ -317,7 +318,13 @@ function fakeProject() {
     files['pom.xml'] = '<project><properties><maven.compiler.release>21</maven.compiler.release></properties></project>\n';
     files['.env.example'] = 'API_URL=\n';
   }
-  if (ROADMAP) files['.mla/roadmap.json'] = JSON.stringify(CARD ? S.roadmapCardSample(LANG) : S.roadmapSample(LANG));
+  if (ROADMAP) {
+    const rm = CARD ? S.roadmapCardSample(LANG) : S.roadmapSample(LANG);
+    // 작업마다 필요한 도구 (v0.42.0). 78 장면은 다음 작업이 Java(JDK)를 쓴다
+    for (const m of rm.milestones) for (const tk of m.tasks) tk.tools = tk.tools || ['node'];
+    if (ENV_TASK) for (const m of rm.milestones) for (const tk of m.tasks) if (tk.status !== 'done') tk.tools = ['node', 'java'];
+    files['.mla/roadmap.json'] = JSON.stringify(rm);
+  }
   const readDir = async (dir) => {
     const pre = dir ? `${dir}/` : '';
     const out = new Map();

@@ -435,6 +435,58 @@
     return items.join(', ');
   }
 
+  // 로드맵 작업의 "필요한 도구"(AI가 적은 이름)를 도구 id로 (v0.42.0). 모르는 이름은 null
+  const ALIASES = {
+    nodejs: 'node', 'node.js': 'node', javascript: 'node', js: 'node', typescript: 'node', ts: 'node', python3: 'python', py: 'python',
+    java: 'jdk', javac: 'jdk', openjdk: 'jdk', maven: 'mvn', 'g++': 'gpp', 'c++': 'gpp', cpp: 'gpp', c: 'gcc', cc: 'gcc', 'visual studio': 'msvc', 'visual c++': 'msvc',
+    '.net': 'dotnet', 'dotnet-sdk': 'dotnet', 'c#': 'dotnet', csharp: 'dotnet', rust: 'cargo', rustup: 'cargo', golang: 'go', 'docker-compose': 'docker', 'docker compose': 'docker',
+    k8s: 'kubectl', kubernetes: 'kubectl', postgres: 'psql', postgresql: 'psql', mariadb: 'mysql', sqlite: 'sqlite3', 'pre-commit': 'precommit', 'clang-format': 'clangformat',
+    playwright: 'pwbrowsers', android: 'adb', 'android sdk': 'adb', bundle: 'bundler', 'github cli': 'gh', kotlin: 'kotlinc', 'gnu make': 'make', 'mingw32-make': 'make',
+  };
+  function toolIdOf(name) {
+    const n = String(name || '').trim().toLowerCase().replace(/\s*\(.*\)\s*$/, '');
+    if (!n) return null;
+    if (ALIASES[n]) return ALIASES[n]; // java → JDK처럼 별칭이 먼저
+    if (TOOLS[n]) return n;
+    return TOOL_IDS.find((id) => TOOLS[id].name.toLowerCase() === n || (TOOLS[id].exe || []).includes(n)) || null;
+  }
+
+  /** 로드맵의 끝나지 않은 작업이 적은 도구 → needs [{ id, because: 'task:t3' }] (같은 도구는 처음 작업 하나만) */
+  function taskNeeds(rm) {
+    const out = new Map();
+    for (const m of (rm && rm.milestones) || []) {
+      for (const tk of m.tasks || []) {
+        if (tk.status === 'done') continue;
+        for (const name of tk.tools || []) {
+          const id = toolIdOf(name);
+          if (id && !out.has(id)) out.set(id, { id, because: `task:${tk.id}` });
+        }
+      }
+    }
+    return [...out.values()];
+  }
+
+  /** 판정 줄에서 도구 이름 목록(작업이 적은 것)에 해당하는 문제 줄 → [{ name, level, state }] (없음 · 버전 · PATH) */
+  function problemsFor(rows, names) {
+    const want = new Set((names || []).map(toolIdOf).filter(Boolean));
+    if (!want.size) return [];
+    return (rows || []).filter((r) => r.ids.some((i) => want.has(i)) && (r.level === 'error' || r.level === 'warn')).map((r) => ({ name: r.pick && TOOLS[r.pick] ? TOOLS[r.pick].name : r.name, level: r.level, state: r.state }));
+  }
+
+  /** 검사 이름(test · lint · pytest …) → 그 검사에 꼭 필요한 도구 id */
+  const CHECK_TOOLS = { test: ['node', 'npm'], lint: ['node', 'npm'], typecheck: ['node', 'npm'], build: ['node', 'npm'], pytest: ['python'], 'cargo-test': ['cargo'], 'go-test': ['go'] };
+
+  /** 점검 결과(found)에서 검사에 필요한 도구 중 "없음"인 것 → 첫 번째 { check, id } | null (점검 전 · 확장은 null) */
+  function missingForChecks(found, checks) {
+    if (!found) return null;
+    for (const c of checks || []) {
+      for (const id of CHECK_TOOLS[c] || []) {
+        if (found[id] && found[id].state === 'missing') return { check: c, id };
+      }
+    }
+    return null;
+  }
+
   // 본체가 받는 값 검사: 도구 id는 목록 안의 것만, 포트는 1024~65535 숫자만 (최대 8개)
   function cleanCheckRequest(req) {
     if (!req || typeof req !== 'object') return null;
@@ -446,5 +498,5 @@
   /** needs → 본체에 물어볼 도구 id (묶음은 풀어서) */
   const idsOf = (needs) => [...new Set((needs || []).flatMap((nd) => (nd.group ? GROUPS[nd.group] : [nd.id])).filter((i) => TOOLS[i]))];
 
-  return { TOOLS, TOOL_IDS, CATS, GROUPS, LOCAL_PKGS, TEXT_FILES, detectNeeds, requirements, parseVersion, satisfies, evaluate, summarize, readiness, devPorts, installHint, envLine, cleanCheckRequest, idsOf, parseJson };
+  return { toolIdOf, taskNeeds, problemsFor, CHECK_TOOLS, missingForChecks, TOOLS, TOOL_IDS, CATS, GROUPS, LOCAL_PKGS, TEXT_FILES, detectNeeds, requirements, parseVersion, satisfies, evaluate, summarize, readiness, devPorts, installHint, envLine, cleanCheckRequest, idsOf, parseJson };
 });
