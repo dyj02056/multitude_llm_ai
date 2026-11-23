@@ -106,6 +106,9 @@ const SCENES = [
   // v0.43.0 (앱 실행)
   { name: '79-run-app', page: 'app' },
   { name: '80-run-log', page: 'app' },
+  // v0.44.0 (미리보기 창 — 실제 앱에서는 따로 된 창, 아래쪽은 예시 앱 페이지)
+  { name: '81-preview', page: 'preview', width: 1180, height: 760 },
+  { name: '82-preview-errors', page: 'preview', width: 1180, height: 760 },
   // v0.37.0 (사이드탭)
   { name: '68-side-pdf', page: 'side', width: 420 },
   { name: '69-side-compare', page: 'side', width: 420 },
@@ -134,6 +137,7 @@ app.whenReady().then(async () => {
   const ses = session.fromPartition('screenshots');
   ses.protocol.handle('shot', (req) => {
     const u = new URL(req.url);
+    if (u.pathname === '/__demo') return new Response(S.demoApp(u.searchParams.get('scene')), { headers: { 'content-type': 'text/html; charset=utf-8' } }); // 미리보기 장면의 예시 앱 (v0.44.0)
     if (u.pathname === '/__chat') return new Response(appChat(u.searchParams.get('id'), u.searchParams.get('scene')), { headers: { 'content-type': 'text/html; charset=utf-8' } });
     const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
     const file = path.resolve(ROOT, rel);
@@ -159,13 +163,13 @@ app.whenReady().then(async () => {
     const win = new BrowserWindow({
       // MLA_SHOT_W=960: 앱 장면을 좁은 창(앱의 가장 작은 폭)으로 찍어 넘침을 본다 (v0.39.0). 사이드탭 장면은 자기 폭 그대로
       width: STORE ? 1280 : scene.width || Number(process.env.MLA_SHOT_W) || 1400,
-      height: STORE ? 800 : 860,
+      height: STORE ? 800 : scene.height || 860,
       show: false,
       useContentSize: true,
       backgroundColor: '#161616',
       webPreferences: {
         session: ses,
-        preload: path.join(__dirname, scene.page === 'side' ? 'preload-side.js' : 'preload-app.js'),
+        preload: path.join(__dirname, scene.page === 'side' ? 'preload-side.js' : scene.page === 'preview' ? 'preload-preview.js' : 'preload-app.js'),
         contextIsolation: false, // 가짜 본체를 화면 코드와 같은 window에 둔다 (이 도구 전용)
         sandbox: false,
         nodeIntegration: false,
@@ -180,7 +184,7 @@ app.whenReady().then(async () => {
       if (e.level === 'error') console.error(`[${scene.name}] console error:`, e.message);
     });
     const ready = new Promise((resolve) => win.webContents.ipc.once('shot:ready', resolve));
-    const url = scene.page === 'side' ? 'shot://repo/extension/sidepanel.html' : 'shot://repo/src/renderer/index.html';
+    const url = scene.page === 'side' ? 'shot://repo/extension/sidepanel.html' : scene.page === 'preview' ? 'shot://repo/src/renderer/preview.html' : 'shot://repo/src/renderer/index.html';
     await win.loadURL(`${url}?scene=${scene.name}`).catch((err) => console.warn(scene.name, 'load:', err.message));
     await Promise.race([ready, new Promise((r) => setTimeout(r, 8000))]);
     await new Promise((r) => setTimeout(r, 400));

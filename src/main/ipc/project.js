@@ -56,6 +56,7 @@ function register(ctx) {
     ctx.gitConsole()?.stop();
     const r = await rememberProject(picked);
     ctx.devRun?.()?.onProjectChange(); // 다른 프로젝트로 바꾸면 띄운 개발 서버를 끈다 (v0.43.0)
+    ctx.preview?.()?.close(); // 미리보기 창도 닫는다 (v0.44.0)
     return r;
   }));
   // Windows 앱은 접근 허용을 다시 받을 필요가 없어 restore·reconnect가 같다.
@@ -76,6 +77,7 @@ function register(ctx) {
     project.close();
     await rememberProject(null);
     ctx.devRun?.()?.onProjectChange(); // 프로젝트를 닫으면 띄운 개발 서버도 끈다 (v0.43.0)
+    ctx.preview?.()?.close(); // 미리보기 창도 닫는다 (v0.44.0)
     return true;
   }));
   ipcMain.handle('project:readDir', projectCall((rel) => project.readDir(String(rel))));

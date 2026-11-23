@@ -264,6 +264,12 @@ The Windows app looks only in absolute PATH folders, never runs anything inside 
 
 ![Run log](../screenshots/en/80-run-log.png)
 
+**Preview window (v0.44.0, Windows app)** — when the address is found, an in-app **preview window** opens once (later: **Open preview** in the sidebar). The toolbar has ← → ⟳ (F5) ⌂, the address, **In browser ↗** and **DevTools**; the thick line under it is the verdict: green no problems, yellow failed requests only (status 400+ or connection errors, favicon 404 ignored), red console errors, a blank screen (no text, images or inputs 1.5 s after load) or a page that could not open. Click the **console errors** / **failed requests** badges to see the messages and addresses. The sidebar shows the same verdict in one line. The preview opens only local addresses (links to outside sites are blocked), runs in its own session separate from your AI logins, without Node or preload, denies permission requests and blocks downloads.
+
+![Preview window](../screenshots/en/81-preview.png)
+
+![Preview with errors expanded](../screenshots/en/82-preview-errors.png)
+
 ### Roadmap (v0.38.0)
 
 With a project open, **로드맵** (Roadmap) on the toolbar sends your plan (pasted, `PLAN.md`, or a `.md` / `.txt` file) to an AI and turns the answer into **milestones → tasks**; each task is tracked as to do · in progress · verifying · done · blocked, and a task stays locked until the tasks it depends on are done. **구현 요청** (Implement) only fills the prompt box with that task's request and picks its expected files — nothing is sent; sending, applying and testing follow the project-mode steps above, checked by you. The **dashboard** tab shows a progress ring, per-milestone bars, a dependency map and a burndown (with an estimated finish date). The **docs** tab writes `docs/procedure.md` and `README.md` into the project (an existing README of yours is kept and the app writes `README.generated.md` by default; only the `mla:` marker blocks are refreshed). Progress is stored in `.mla/roadmap.json`, which is never sent to an AI. Details (Korean): [docs/roadmap.md](../roadmap.md).

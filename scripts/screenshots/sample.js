@@ -307,4 +307,23 @@ function roadmapCardSample(lang = 'ko') {
   return rm;
 }
 
-module.exports = { QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage, PROJECT_FILES, PROJECT_ANSWERS, roadmapSample, roadmapCardSample };
+// 미리보기 창 장면의 예시 앱 페이지 (v0.44.0): 사용자 목록 앱. 오류 장면은 한 카드가 비고 빨간 안내가 뜬다
+function demoApp(scene) {
+  const err = scene === '82-preview-errors';
+  const users = [['김하늘', 'haneul@example.com', '관리자'], ['이도윤', 'doyun@example.com', '편집자'], ['박서연', 'seoyeon@example.com', '보기 전용']];
+  const cards = users.map(([n, e, r], i) => (err && i === 1 ? '<div class="card broken"><b>불러오지 못함</b><span>500 Internal Server Error</span></div>' : `<div class="card"><div class="av">${n[0]}</div><div><b>${n}</b><span>${e}</span></div><em>${r}</em></div>`)).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{margin:0;font:14px system-ui,'Malgun Gothic',sans-serif;background:#f5f6f8;color:#1d2330}
+    header{display:flex;align-items:center;gap:12px;padding:14px 28px;background:#1d4ed8;color:#fff}
+    header b{font-size:18px} header span{opacity:.8}
+    main{padding:24px 28px;display:flex;flex-direction:column;gap:12px;max-width:720px}
+    h2{margin:4px 0 6px;font-size:16px}
+    .card{display:flex;align-items:center;gap:14px;padding:12px 16px;background:#fff;border:1px solid #e3e6ec;border-radius:10px}
+    .card .av{width:36px;height:36px;border-radius:50%;background:#dbe5ff;color:#1d4ed8;display:grid;place-items:center;font-weight:700}
+    .card div b{display:block} .card div span{color:#6b7280;font-size:12.5px} .card em{margin-left:auto;font-style:normal;font-size:12px;color:#374151;background:#eef1f6;padding:2px 8px;border-radius:999px}
+    .card.broken{border-color:#f3b4b4;background:#fff5f5;color:#b42318;flex-direction:column;align-items:flex-start;gap:2px}
+    .bar{display:flex;gap:8px} .bar input{flex:1;padding:8px 10px;border:1px solid #cfd5df;border-radius:8px} .bar button{padding:8px 14px;border:0;border-radius:8px;background:#1d4ed8;color:#fff}
+  </style></head><body><header><b>demo-app</b><span>사용자 관리</span></header><main><h2>사용자 ${users.length}명</h2><div class="bar"><input placeholder="이름 · 이메일로 찾기"><button>추가</button></div>${cards}</main></body></html>`;
+}
+
+module.exports = { demoApp, QUESTION, ANSWERS, ANALYSIS_MD, ANALYSIS_MD2, DEBATE_RESULT, CHAIN, SYNTH_ANSWER, HISTORY, chatPage, PROJECT_FILES, PROJECT_ANSWERS, roadmapSample, roadmapCardSample };

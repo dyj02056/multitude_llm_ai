@@ -1,0 +1,25 @@
+/* 미리보기 창의 도구 줄 (v0.44.0, preview.html). 색 이름표는 styles.css의 :root를 쓴다. 높이는 main/preview.js BAR_H(76px)와 맞춘다 */
+body.pv-page { margin: 0; background: var(--bg); color: var(--text); font: 12.5px system-ui, sans-serif; overflow: hidden; }
+.pv-bar { height: 76px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 5px 8px; border-bottom: 3px solid var(--lv, var(--border)); background: var(--bg-2); }
+body[data-level="ok"] { --lv: var(--ok); }
+body[data-level="warn"] { --lv: var(--warn); }
+body[data-level="error"] { --lv: var(--err); }
+body[data-level="wait"] { --lv: var(--accent); }
+.pv-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pv-row button { padding: 1px 8px; font-size: 12px; white-space: nowrap; }
+.pv-url { flex: 1; min-width: 0; padding: 2px 8px; border: 1px solid var(--control-border); border-radius: var(--r-sm); background: var(--field); font: 12px var(--mono); color: var(--bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.pv-tools { display: flex; gap: 5px; }
+.pv-tools:empty { display: none; }
+.pv-verdict { padding: 1px 10px; border: 1px solid var(--c, var(--border)); border-radius: var(--r-sm); color: var(--c, var(--text)); background: color-mix(in srgb, var(--c, transparent) 14%, transparent); font-weight: 700; white-space: nowrap; }
+.pv-verdict:empty { display: none; }
+.pv-badge { border-color: var(--err) !important; color: var(--err-text) !important; }
+#pvFailed.pv-badge { border-color: var(--warn) !important; color: var(--warn-text) !important; }
+.pv-badge[aria-expanded="true"] { background: var(--err-soft); }
+.pv-notice { color: var(--warn-text); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-details { height: 220px; box-sizing: border-box; overflow: auto; padding: 6px 10px; border-bottom: 1px solid var(--border-strong); background: var(--bg); }
+.pv-details[hidden] { display: none; }
+.pv-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.pv-list li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; border-bottom: 1px solid var(--border); }
+.pv-msg { flex: 1; min-width: 0; font: 12px var(--mono); color: var(--bright); white-space: pre-wrap; word-break: break-all; user-select: text; }
+.pv-src { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.pv-status { min-width: 34px; font: 700 12px var(--mono); color: var(--warn-text); }

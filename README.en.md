@@ -3,7 +3,7 @@
 [한국어](README.md) · **English**
 
 [![release](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml/badge.svg)](https://github.com/dyj02056/multitude_llm_ai/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.43.0-8db3e2)
+![version](https://img.shields.io/badge/version-0.44.0-8db3e2)
 ![Windows](https://img.shields.io/badge/Windows-Electron-47848F)
 ![Chrome](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4)
 ![API key](https://img.shields.io/badge/API%20key-not%20needed-3fb950)
@@ -52,7 +52,7 @@
 | | Apply changes | Apply from the bar under each panel, compare across AIs, apply by hunk, undo; a failed multi-file apply rolls back; mix changes from several AIs per file and pick up work after a restart (v0.28.0) |
 | | Cut-off protection | Blocks truncated or abbreviated code, find/replace blocks for long files, continue automatically, plan-first mode |
 | | Test run, git console & commit | Compare `npm test` and lint / typecheck / build before/after (v0.28.0); commit only the applied files, never pushed (v0.28.0); run git commands in that folder (Windows app) |
-| | **Run & check** | The sidebar shows whether **the tools this project needs** (node, npm, python, JDK, gcc, cmake, dotnet, cargo, go, docker and ~50 more) are on this PC with the right version — green ready, yellow needs a look, red missing — plus missing `node_modules`, `.venv`, `.env`, busy ports and a stopped Docker engine; copy the install command or open the official guide (nothing is installed, v0.41.0); one line about this PC is added to project questions, each roadmap task lists the tools it needs and the card warns when one is missing, and test runs stop early with the reason (v0.42.0); **▶ Run app** starts `npm run dev` (or start, serve, preview) from the sidebar, shows the address it found (`http://localhost:5173`) as a big button, with a log window and ■ Stop (v0.43.0) |
+| | **Run & check** | The sidebar shows whether **the tools this project needs** (node, npm, python, JDK, gcc, cmake, dotnet, cargo, go, docker and ~50 more) are on this PC with the right version — green ready, yellow needs a look, red missing — plus missing `node_modules`, `.venv`, `.env`, busy ports and a stopped Docker engine; copy the install command or open the official guide (nothing is installed, v0.41.0); one line about this PC is added to project questions, each roadmap task lists the tools it needs and the card warns when one is missing, and test runs stop early with the reason (v0.42.0); **▶ Run app** starts `npm run dev` (or start, serve, preview) from the sidebar, shows the address it found (`http://localhost:5173`) as a big button, with a log window and ■ Stop (v0.43.0); a **preview window** opens the app inside Multitude and checks for console errors, failed requests and a blank screen (v0.44.0) |
 | | Roadmap | Split a plan into milestones and tasks with an AI, track each task's status (dependencies lock later tasks), see a progress ring, milestone bars, dependency map and burndown, and write `docs/procedure.md` and `README.md` into the project without touching text you wrote (v0.38.0); a sidebar card tracks the current task without opening the window, moves it to verifying when you apply and asks to mark it done when tests pass (v0.40.0) |
 | **Extension** | Side panel | Two AIs in Chrome's side panel; the page you are reading is sent along |
 | | Ask about a page | Right-click › selected text or the whole page goes into the app |

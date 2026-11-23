@@ -12,7 +12,8 @@
   const E = MLA.envRules;
   const P = MLA.projectUI;
   const PICK_KEY = 'mla-run-script';
-  const run = { scripts: [], state: { running: false }, error: '', starting: false, key: null };
+  const run = { scripts: [], state: { running: false }, error: '', starting: false, key: null, pv: { open: false }, autoPreview: false };
+  const PH = MLA.previewHealth;
   let logOpen = null; // { dialog, pending, timer }
 
   const can = () => !!host.devrun;
@@ -82,12 +83,54 @@
       const link = button(st.url.replace(/\/$/, ''), t('dev.run.openTitle'), () => host.devrun.open(st.url));
       link.className = 'dh-url';
       kids.push(link);
+      // 미리보기 창 (v0.44.0): 앱 안에서 보고 오류를 점검
+      if (host.preview) {
+        const pvBtn = button(run.pv.open ? t('dev.pv.focus') : t('dev.pv.open'), t('dev.pv.openTitle'), () => openPreview(st.url));
+        pvBtn.className = 'dh-pv-btn primary';
+        kids.push(pvBtn);
+      }
     } else if (st.running) kids.push(el('span', 'dh-run-dot wait', '●'), el('span', 'dh-run-msg', t('dev.run.waitUrl', { name: st.name, n: st.lines || 0 })));
     else if (st.exit) kids.push(el('span', st.exit.stopped ? 'dh-sub' : st.exit.code === 0 ? 'dh-sub' : 'lvl-error dh-run-msg', st.exit.stopped ? t('dev.run.stopped', { name: st.name }) : t('dev.run.exited', { name: st.name, code: st.exit.code ?? '?' })));
     else if (run.error) kids.push(el('span', 'lvl-error dh-run-msg', run.error));
     line.replaceChildren(...kids);
     box.classList.toggle('running', !!st.running);
+    renderPreview();
     window.onDevRunChanged?.(st); // 미리보기(v0.44.0) · 로드맵 카드(v0.46.0)가 듣는다
+  }
+
+  // ---------- 미리보기 (v0.44.0) ----------
+  async function openPreview(url) {
+    if (!host.preview || !url) return;
+    const r = await host.preview.open(url).catch((err) => ({ ok: false, error: err.message }));
+    if (!r?.ok) run.error = r?.error || '';
+    render();
+  }
+  const pvText = (v) => {
+    const pv = run.pv;
+    switch (v.key) {
+      case 'loadError':
+        return t('dev.pv.v.loadError', { msg: pv.loadError || '' });
+      case 'loading':
+        return t('dev.pv.v.loading');
+      case 'blank':
+        return t('dev.pv.v.blank');
+      case 'errors':
+        return t('dev.pv.s.problems', { errors: v.errors, failed: v.failed });
+      case 'failed':
+        return t('dev.pv.s.failed', { failed: v.failed });
+      default:
+        return t('dev.pv.v.ok');
+    }
+  };
+  function renderPreview() {
+    const box = $('#dhPvState');
+    if (!box) return;
+    const pv = run.pv;
+    box.hidden = !host.preview || !pv?.open;
+    if (box.hidden) return box.replaceChildren();
+    const v = PH.verdict(pv);
+    box.className = `dh-pv-state lvl-${v.level === 'wait' ? 'unknown' : v.level}`;
+    box.replaceChildren(el('span', 'dh-pv-label', t('dev.pv.label')), el('b', '', pvText(v)));
   }
 
   async function toggle() {
@@ -103,6 +146,7 @@
     } catch {}
     run.starting = true;
     run.error = '';
+    run.autoPreview = !!host.preview; // 이번 실행에서 주소를 찾으면 미리보기를 한 번 연다 (v0.44.0)
     render();
     let r;
     try {
@@ -165,7 +209,20 @@
   if (can()) {
     host.on('devrun:state', (st) => {
       run.state = st || { running: false };
+      // ▶ 로 직접 띄운 서버의 주소를 처음 찾으면 미리보기 창을 연다 (눈으로 바로 확인)
+      if (run.autoPreview && run.state.running && run.state.url) {
+        run.autoPreview = false;
+        openPreview(run.state.url);
+      }
+      if (!run.state.running) run.autoPreview = false;
       render();
+    });
+  }
+  if (host.preview) {
+    host.on('preview:state', (pv) => {
+      run.pv = pv || { open: false };
+      render();
+      window.onPreviewState?.(run.pv); // 화면 캡처 · 로드맵 카드 (v0.45.0 · v0.46.0)
     });
   }
   // 프로젝트가 바뀌면 그 프로젝트의 스크립트를 읽는다 · 점검이 끝나면(도구 없음 → 막기) 다시 그린다
@@ -204,5 +261,5 @@
     }
   });
 
-  MLA.devRun = { run, refresh, render, toggle, openLog, closeLog, state: () => run.state };
+  MLA.devRun = { run, refresh, render, toggle, openLog, closeLog, openPreview, state: () => run.state, preview: () => run.pv };
 })();

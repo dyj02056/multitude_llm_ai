@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob: data:" />
+  <title>Preview</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="preview.css" />
+</head>
+<!-- 미리보기 창의 도구 줄 (v0.44.0). 아래쪽은 본체가 띄운 사이트 화면(WebContentsView)이 덮는다. preview.js -->
+<body class="pv-page">
+  <header class="pv-bar">
+    <div class="pv-row">
+      <button id="pvBack" data-i18n-title="dev.pv.back" data-i18n-aria="dev.pv.back">←</button>
+      <button id="pvFwd" data-i18n-title="dev.pv.forward" data-i18n-aria="dev.pv.forward">→</button>
+      <button id="pvReload" data-i18n-title="dev.pv.reload" data-i18n-aria="dev.pv.reload">⟳</button>
+      <button id="pvHome" data-i18n-title="dev.pv.home" data-i18n-aria="dev.pv.home">⌂</button>
+      <span id="pvUrl" class="pv-url" data-i18n-title="dev.pv.urlTitle"></span>
+      <span id="pvTools" class="pv-tools"></span>
+      <button id="pvExternal" data-i18n="dev.pv.external" data-i18n-title="dev.pv.externalTitle"></button>
+      <button id="pvDevtools" data-i18n="dev.pv.devtools" data-i18n-title="dev.pv.devtoolsTitle"></button>
+    </div>
+    <div class="pv-row">
+      <span id="pvVerdict" class="pv-verdict" role="status" aria-live="polite"></span>
+      <button id="pvErrors" class="pv-badge" aria-expanded="false" aria-controls="pvDetails" hidden></button>
+      <button id="pvFailed" class="pv-badge" aria-expanded="false" aria-controls="pvDetails" hidden></button>
+      <span id="pvNotice" class="pv-notice" role="status" aria-live="polite"></span>
+    </div>
+  </header>
+  <section id="pvDetails" class="pv-details" hidden data-i18n-aria="dev.pv.detailsAria"></section>
+  <script src="../shared/i18n-ko.js"></script>
+  <script src="../shared/i18n-ko-dev.js"></script>
+  <script src="../shared/i18n-en.js"></script>
+  <script src="../shared/i18n-en-dev.js"></script>
+  <script src="../shared/i18n.js"></script>
+  <script src="../shared/preview-health.js"></script>
+  <script src="preview.js"></script>
+</body>
+</html>

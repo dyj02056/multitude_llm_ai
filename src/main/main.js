@@ -47,6 +47,7 @@ const { setupDevTest } = require('./devtest');
 const { setupGitCommit } = require('./gitcommit');
 const { setupEnvCheck } = require('./envcheck');
 const { setupDevRun } = require('./devrun');
+const { setupPreview } = require('./preview');
 const { createUpdater } = require('./updater');
 const secure = require('./secure-store'); // 기록 · 설정 · 라이브러리 · 프로젝트 상태 암호화 (v0.22.1)
 const notifyCore = require('../shared/notify');
@@ -97,6 +98,7 @@ let sidebarOpen = false; // 프로젝트 사이드바가 열려 있으면 패널
 let gitConsole = null; // git 콘솔 (gitconsole.js)
 let devTest = null; // 미리보기 창의 테스트 실행 (devtest.js)
 let devRun = null; // 앱 실행 — 개발 서버 (devrun.js, v0.43.0)
+let preview = null; // 미리보기 창 (preview.js, v0.44.0)
 let focusId = null; // 크게 보는 패널 (⤢). 나머지 패널은 크기를 그대로 둔 채 화면 밖으로 옮긴다
 const barIds = new Map(); // 패널 id -> 아래 바 줄 수 (1~2, v0.28.0) — 웹페이지 아래쪽을 바 높이 × 줄 수만큼 비운다
 let loginView = null;
@@ -749,6 +751,7 @@ require('./ipc/project').register({
   win: () => win,
   devTest: () => devTest,
   devRun: () => devRun,
+  preview: () => preview,
   gitConsole: () => gitConsole,
   setSidebarOpen: (open) => (sidebarOpen = open),
 });
@@ -866,6 +869,8 @@ if (!app.requestSingleInstanceLock()) {
     setupEnvCheck({ ipcMain, getRoot: () => project.info()?.id || null, shell });
     // 앱 실행 (v0.43.0): package.json의 dev · start · serve · preview만, 확인 창, 셸 없이, 주소는 localhost만
     devRun = setupDevRun({ ipcMain, getWin: () => win, project, shell });
+    // 미리보기 창 (v0.44.0): 이 PC 주소만, 따로 된 세션, 콘솔 오류 · 실패한 요청 · 빈 화면 점검
+    preview = setupPreview({ ipcMain, getWin: () => win, shell, log });
     updater = createUpdater({ app, isAuto: () => prefs.autoUpdate !== false, onChange: () => schedulePushState(), log });
     updater.start();
   });
@@ -879,6 +884,7 @@ if (!app.requestSingleInstanceLock()) {
     gitConsole?.stop();
     devTest?.stop();
     devRun?.stop(); // 띄운 개발 서버도 함께 끈다 (v0.43.0)
+    preview?.close();
     updater?.stop();
   });
 }

@@ -43,7 +43,7 @@ const barRows = new Map();
 // 보내기 전 미리보기 장면은 문서를 받지 않는 Duck.ai를 넣어 "빼고 보냄" 경고가 보이게 한다
 const selected = scene === '64-local-panels' ? ['gemini', 'local', 'local-2', 'local-3'] : scene === '65-local-attach' ? ['gemini', 'chatgpt', 'local', 'local-2'] : LOCAL ? ['gemini', 'chatgpt', 'claude', LL.LOCAL_ID] : PREVIEW ? ['gemini', 'chatgpt', 'claude', 'duckai'] : ['gemini', 'chatgpt', 'deepseek', 'perplexity'];
 
-const listeners = { state: [], 'panel:status': [], 'synth:status': [], shortcut: [], 'devrun:state': [] };
+const listeners = { state: [], 'panel:status': [], 'synth:status': [], shortcut: [], 'devrun:state': [], 'preview:state': [] };
 const emit = (ch, p) => listeners[ch].forEach((fn) => fn(p));
 let mode = scene === '01-model-picker' ? 'pick' : 'chat';
 let chatView = 'panels';
@@ -271,7 +271,7 @@ window.host = {
   setPanelBar: (id, rows) => (rows ? barRows.set(id, rows) : barRows.delete(id), push()),
   update: { check: async () => {}, download: async () => {}, install: async () => false, openReleases() {} },
   project: PROJ ? fakeProject() : Object.fromEntries(['pick', 'restore', 'reconnect', 'close', 'readDir', 'readFile', 'writeFile', 'deleteFile', 'globalExclude', 'loadState', 'saveState'].map((n) => [n, async () => null])),
-  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit(), env: fakeEnv(), devrun: fakeDevrun() } : {}),
+  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit(), env: fakeEnv(), devrun: fakeDevrun(), preview: { open: async () => ({ ok: true }), state: async () => ({ open: false }), close: async () => true } } : {}),
   library: {
     load: async () =>
       normalizeLibrary({
@@ -643,6 +643,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     click('#dhRunBtn');
     await sleep(300);
     emit('devrun:state', { running: true, name: 'dev', script: 'vite', url: 'http://localhost:5173/', lines: 9, startedAt: now });
+    await sleep(200);
+    // 미리보기 창이 열려 점검한 결과 (v0.44.0): 콘솔 오류 2 · 실패한 요청 1
+    emit('preview:state', { open: true, home: 'http://localhost:5173/', url: 'http://localhost:5173/', loading: false, loadError: null, blank: false, errors: [{ text: 'TypeError', count: 2 }], failed: [{ url: '/api/users/42', status: 500, count: 1 }] });
     await sleep(300);
     if (scene === '80-run-log') {
       click('#dhRunLog');

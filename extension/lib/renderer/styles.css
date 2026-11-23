@@ -1357,6 +1357,10 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, summary
 .dh-run-dot.wait { color: var(--warn); animation: soft-blink 1s steps(2, jump-none) infinite; }
 .dh-url { padding: 0 6px; font: 600 11.5px var(--mono); color: var(--ok-text); border-color: var(--ok); background: var(--ok-soft); }
 .dh-url:hover { background: color-mix(in srgb, var(--ok) 22%, transparent); }
+.dh-pv-btn { padding: 1px 10px; font-size: 11.5px; font-weight: 600; }
+.dh-pv-state { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 2px 6px; border-left: 3px solid var(--c, var(--border)); background: color-mix(in srgb, var(--c, transparent) 10%, transparent); color: var(--c, var(--text)); font-size: 11.5px; }
+.dh-pv-state[hidden] { display: none; }
+.dh-pv-label { color: var(--muted); }
 .modal-box.run-log-box { width: min(980px, 95vw); }
 .run-log { margin: 0; flex: 1; min-height: 0; overflow: auto; padding: 8px 10px; background: var(--field); border: 1px solid var(--border); font: 12px/1.45 var(--mono); white-space: pre-wrap; word-break: break-all; user-select: text; }
 @media (prefers-reduced-motion: reduce) { .dh-run-dot.on, .dh-run-dot.wait { animation: none; } }
