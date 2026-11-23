@@ -101,8 +101,30 @@
     box.append(bar);
   }
 
+  /** 창의 [화면 비교] (v0.45.0): 미리보기 창이 열려 있으면, 체크한 수정안을 잠깐 써 보고 적용 전 · 후 화면을 캡처해 나란히 (dev-capture.js) */
+  function setupShot(getChosen) {
+    const btn = $('#patchShot');
+    if (!btn) return;
+    btn.hidden = !MLA.devCapture?.canCompare?.();
+    btn.disabled = false;
+    btn.onclick = async () => {
+      const chosen = getChosen();
+      if (!chosen.length) return ($('#patchStatus').textContent = t('project.test.pick'));
+      btn.disabled = true;
+      $('#patchApply').disabled = true;
+      $('#patchStatus').textContent = t('dev.cap.comparing');
+      try {
+        $('#patchStatus').textContent = await MLA.devCapture.compare(chosen.map((p) => ({ path: p.path, after: p.op === 'delete' ? null : p.after })));
+      } finally {
+        btn.disabled = false;
+        $('#patchApply').disabled = false;
+      }
+    };
+  }
+
   /** 창의 [테스트 실행]: 체크한 수정안을 잠깐 쓰고 고른 검사를 적용 전 · 후로 돌려 나란히 보여 준다. getChosen() → 적용할 plan 목록, ai: 이 수정안을 낸 AI (v0.34.0) */
   function setupTestRun(getChosen, ai) {
+    setupShot(getChosen);
     if (!host.devtest) return;
     const btn = $('#patchTest');
     btn.hidden = false;

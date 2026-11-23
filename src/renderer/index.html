@@ -128,6 +128,12 @@
         </div>
         <div id="dhRunState" class="dh-run-state" role="status" aria-live="polite"></div>
         <div id="dhPvState" class="dh-pv-state" role="status" aria-live="polite" hidden></div>
+        <!-- 화면 캡처 (v0.45.0): 미리보기 화면을 찍어 AI에게 보내 확인받기. dev-capture.js -->
+        <div id="dhCap" class="dh-cap" hidden>
+          <button id="dhCapShot" class="dh-mini" data-i18n="dev.cap.shot" data-i18n-title="dev.cap.shotTitle"></button>
+          <button id="dhCapOpen" class="dh-mini accent" data-label-by-script></button>
+          <span id="dhCapNote" class="dh-sub" role="status" aria-live="polite"></span>
+        </div>
       </div>
     </section>
     <details id="psRules" class="ps-rules">
@@ -397,6 +403,7 @@
           <input id="patchBranchName" type="text" spellcheck="false" maxlength="64" data-i18n-aria="project.branch.nameLabel" />
         </span>
         <button id="patchTest" hidden data-i18n-title="ui.h.patchTest.title" data-i18n="ui.h.patchTest"></button>
+        <button id="patchShot" hidden data-i18n="dev.cap.compareBtn" data-i18n-title="dev.cap.compareBtnTitle"></button>
         <button id="patchAll" data-i18n-title="ui.h.patchAll.title" data-i18n="ui.h.patchAll"></button>
         <button id="patchApply" class="primary" title="Ctrl+Enter" data-i18n="ui.h.patchApply"></button>
         <button id="patchCancel" data-i18n="ui.h.patchCancel"></button>
@@ -527,6 +534,33 @@
         <button id="runLogCopy" data-i18n="dev.run.copy"></button>
         <button id="runLogStop" class="danger" data-i18n="dev.run.stopBtn"></button>
         <button id="runLogClose" data-i18n="dev.close"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 화면 캡처 (v0.45.0): 캡처 목록 · 크게 보기 · AI에게 보내기 전 확인. dev-capture.js -->
+  <div id="capModal" class="modal" hidden>
+    <div class="modal-box cap-box" role="dialog" aria-modal="true" aria-labelledby="capTitle">
+      <div class="modal-head"><b id="capTitle" data-i18n="dev.cap.title"></b><span id="capSub" class="muted-label"></span></div>
+      <div class="modal-body cap-body">
+        <ul id="capList" class="cap-list" data-i18n-aria="dev.cap.listAria"></ul>
+        <div class="cap-main">
+          <div id="capView" class="cap-view"></div>
+          <div class="cap-send">
+            <h3 class="rm-h" data-i18n="dev.cap.sendTitle"></h3>
+            <p class="cap-hint" data-i18n="dev.cap.sendNote"></p>
+            <label class="rm-field"><span class="muted-label" data-i18n="dev.cap.who"></span><select id="capWho" data-i18n-aria="dev.cap.who"></select></label>
+            <p id="capNoWho" class="dh-sub" data-i18n="dev.cap.noWho" hidden></p>
+            <textarea id="capText" rows="6" spellcheck="false" data-i18n-aria="dev.cap.textAria"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span id="capStatus" class="muted-label" role="status" aria-live="polite"></span>
+        <button id="capSave" data-i18n="dev.cap.save"></button>
+        <button id="capRemove" class="danger" data-i18n="dev.cap.remove"></button>
+        <button id="capSend" class="primary" data-label-by-script></button>
+        <button id="capClose" data-i18n="dev.close"></button>
       </div>
     </div>
   </div>
@@ -955,7 +989,7 @@
       <button id="sendBtn" class="primary" data-i18n-title="compose.sendTitle" data-i18n="ui.h.sendBtn"></button>
     </div>
   </footer>
-  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → dev-hub.js → dev-run.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
+  <!-- 스크립트 읽는 순서가 중요합니다: 공통 모듈 → 템플릿 → renderer.js → renderer-views.js → chain-views.js → compare-modes.js → history-view.js → history-transfer-ui.js → recommend-ui.js → renderer-compose.js → send-preview.js → panel-offers.js → debate-ui.js → workflow-ui.js → factcheck-ui.js → project.js → project-related.js → project-changes.js → project-runs.js → project-devtest.js → project-collect.js → project-mix.js → project-commit.js → project-restore.js → project-editor.js → roadmap-ui.js → roadmap-card.js → dev-hub.js → dev-run.js → dev-capture.js → library.js → library-presets.js → settings-transfer-ui.js → selector-editor.js → onboarding.js → a11y.js (뒤의 것이 앞의 것을 씀) -->
   <script src="../shared/i18n-ko.js"></script>
   <script src="../shared/i18n-ko-ui.js"></script>
   <script src="../shared/i18n-ko-project.js"></script>
@@ -1036,6 +1070,7 @@
   <script src="roadmap-card.js"></script>
   <script src="dev-hub.js"></script>
   <script src="dev-run.js"></script>
+  <script src="dev-capture.js"></script>
   <script src="library.js"></script>
   <script src="library-presets.js"></script>
   <script src="settings-transfer-ui.js"></script>

@@ -29,12 +29,13 @@ const svc = (id) => all.find((s) => s.id === id);
 const PREVIEW = scene === '26-send-preview';
 // v0.28.0 프로젝트 장면: 가짜 프로젝트 폴더(sample.js PROJECT_FILES) · 두 AI가 같은 파일을 고친 답 · 가짜 테스트 실행 · 가짜 git
 // v0.31.0: 09 · 10 · 16 · 21 · 22 · 23(예전 디자인이던 프로젝트 장면)과 47(파일 나무 키보드)도 같은 가짜 프로젝트로 찍는다
-const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next', '78-env-task'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
+const CARD = ['73-roadmap-card', '74-roadmap-auto', '75-roadmap-next', '78-env-task', '83-capture-send', '84-compare'].includes(scene); // v0.40.0: 사이드바의 로드맵 카드 · 적용 후 자동 진행
 const ROADMAP = CARD || ['71-roadmap-tasks', '72-roadmap-dash'].includes(scene); // v0.38.1
 const ENV = ['76-env-hub', '77-env-check'].includes(scene);
 const ENV_TASK = scene === '78-env-task';
-const RUN = ['79-run-app', '80-run-log'].includes(scene); // v0.43.0: 앱 실행 — 개발 서버를 띄우고 주소 · 로그 // v0.42.0: 로드맵 작업에 필요한 도구(java)가 이 PC에 없음 → 카드 경고 // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
-const PROJ = RUN || ENV || ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
+const RUN = ['79-run-app', '80-run-log'].includes(scene);
+const CAP = ['83-capture-send', '84-compare'].includes(scene); // v0.45.0: 화면 캡처를 AI에게 보내기 전 · 적용 전/후 비교 // v0.43.0: 앱 실행 — 개발 서버를 띄우고 주소 · 로그 // v0.42.0: 로드맵 작업에 필요한 도구(java)가 이 PC에 없음 → 카드 경고 // v0.41.0: 실행 · 확인 칸 — 개발 환경 점검
+const PROJ = CAP || RUN || ENV || ROADMAP || ['57-fix-loop', '58-related-files', '59-branch-apply', '36-check-scripts', '37-mix-apply', '38-commit', '39-bars-stacked', '40-project-restore', '09-project', '10-changes', '16-test-run', '21-truncation-guard', '22-continue', '23-plan-split', '47-file-tree'].includes(scene);
 const ONBOARD = scene === '46-onboarding'; // 첫 사용 안내 (v0.31.0): 아직 안 본 사람의 첫 화면
 let onboarded = !ONBOARD;
 const SIDEBAR_W = 300;
@@ -271,7 +272,7 @@ window.host = {
   setPanelBar: (id, rows) => (rows ? barRows.set(id, rows) : barRows.delete(id), push()),
   update: { check: async () => {}, download: async () => {}, install: async () => false, openReleases() {} },
   project: PROJ ? fakeProject() : Object.fromEntries(['pick', 'restore', 'reconnect', 'close', 'readDir', 'readFile', 'writeFile', 'deleteFile', 'globalExclude', 'loadState', 'saveState'].map((n) => [n, async () => null])),
-  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit(), env: fakeEnv(), devrun: fakeDevrun(), preview: { open: async () => ({ ok: true }), state: async () => ({ open: false }), close: async () => true } } : {}),
+  ...(PROJ ? { devtest: fakeDevtest(), git: fakeGit(), env: fakeEnv(), devrun: fakeDevrun(), preview: fakePreview() } : {}),
   library: {
     load: async () =>
       normalizeLibrary({
@@ -400,6 +401,38 @@ function fakeDevrun() {
     stop: async () => true,
     log: async () => ({ ok: true, text: RUN_LOG, state: { ...st, running: true, name: 'dev', script: 'vite' } }),
     open: async () => true,
+  };
+}
+
+// 미리보기 · 화면 캡처 (v0.44.0 · v0.45.0): 캡처 그림은 미리보기 장면 그림(81 · 82)에서 도구 줄을 잘라 낸 것
+function fakePreview() {
+  const { nativeImage } = require('electron');
+  const pathm = require('path');
+  const shot = (file, top) => {
+    const img = nativeImage.createFromPath(pathm.join(__dirname, '..', '..', 'docs', 'screenshots', ...(LANG === 'en' ? ['en'] : []), file));
+    if (img.isEmpty()) return '';
+    const { width, height } = img.getSize();
+    return img.crop({ x: 0, y: top, width, height: height - top }).toDataURL();
+  };
+  const caps = [
+    { id: 'c1', at: now - 120e3, url: 'http://localhost:5173/users/42', title: 'demo-app', tag: 'before', w: 1180, h: 464, file: '82-preview-errors.png', top: 296 },
+    { id: 'c2', at: now - 100e3, url: 'http://localhost:5173/users/42', title: 'demo-app', tag: 'after', w: 1180, h: 684, file: '81-preview.png', top: 76 },
+    { id: 'c3', at: now - 30e3, url: 'http://localhost:5173/', title: 'demo-app', tag: '', w: 1180, h: 684, file: '81-preview.png', top: 76 },
+  ];
+  const meta = (c) => ({ id: c.id, at: c.at, url: c.url, title: c.title, tag: c.tag, w: c.w, h: c.h, bytes: 50000 });
+  return {
+    open: async () => ({ ok: true }),
+    state: async () => ({ open: CAP }),
+    close: async () => true,
+    capture: async () => ({ ok: true, capture: meta(caps[2]) }),
+    captures: async () => (CAP ? caps.map(meta) : []),
+    captureData: async (id) => {
+      const c = caps.find((x) => x.id === id);
+      return c ? { ok: true, ...meta(c), dataUrl: shot(c.file, c.top) } : { ok: false };
+    },
+    captureRemove: async () => true,
+    captureSave: async () => ({ ok: true, path: 'C:\\work\\capture.png' }),
+    compare: async () => ({ ok: true, before: meta(caps[0]), after: meta(caps[1]) }),
   };
 }
 
@@ -637,6 +670,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     Object.assign(document.activeElement.style, { outline: '2px solid var(--accent)', outlineOffset: '-2px' });
     await sleep(200);
   }
+  if (CAP) {
+    // 화면 캡처 (v0.45.0): 83은 최근 캡처 한 장을 AI에게 보내기 전, 84는 적용 전 · 후 비교
+    await sleep(900);
+    emit('preview:state', { open: true, home: 'http://localhost:5173/', url: 'http://localhost:5173/', loading: false, loadError: null, blank: false, errors: [], failed: [], captures: 3 });
+    await sleep(300);
+    if (scene === '83-capture-send') await window.MLA.devCapture.openGallery({ select: ['c3'] });
+    else await window.MLA.devCapture.openGallery({ select: ['c1', 'c2'], compare: true });
+    await sleep(900);
+  }
   if (RUN) {
     // ▶ 앱 실행 → 본체가 주소를 알림 → (80) 로그 창
     await sleep(800);
@@ -645,7 +687,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     emit('devrun:state', { running: true, name: 'dev', script: 'vite', url: 'http://localhost:5173/', lines: 9, startedAt: now });
     await sleep(200);
     // 미리보기 창이 열려 점검한 결과 (v0.44.0): 콘솔 오류 2 · 실패한 요청 1
-    emit('preview:state', { open: true, home: 'http://localhost:5173/', url: 'http://localhost:5173/', loading: false, loadError: null, blank: false, errors: [{ text: 'TypeError', count: 2 }], failed: [{ url: '/api/users/42', status: 500, count: 1 }] });
+    emit('preview:state', { open: true, home: 'http://localhost:5173/', url: 'http://localhost:5173/', loading: false, loadError: null, blank: false, errors: [{ text: 'TypeError', count: 2 }], failed: [{ url: '/api/users/42', status: 500, count: 1 }], captures: 0 });
     await sleep(300);
     if (scene === '80-run-log') {
       click('#dhRunLog');

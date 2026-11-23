@@ -870,7 +870,7 @@ if (!app.requestSingleInstanceLock()) {
     // 앱 실행 (v0.43.0): package.json의 dev · start · serve · preview만, 확인 창, 셸 없이, 주소는 localhost만
     devRun = setupDevRun({ ipcMain, getWin: () => win, project, shell });
     // 미리보기 창 (v0.44.0): 이 PC 주소만, 따로 된 세션, 콘솔 오류 · 실패한 요청 · 빈 화면 점검
-    preview = setupPreview({ ipcMain, getWin: () => win, shell, log });
+    preview = setupPreview({ ipcMain, getWin: () => win, shell, devTest: () => devTest, log });
     updater = createUpdater({ app, isAuto: () => prefs.autoUpdate !== false, onChange: () => schedulePushState(), log });
     updater.start();
   });

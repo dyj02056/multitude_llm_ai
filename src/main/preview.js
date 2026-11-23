@@ -10,7 +10,8 @@
 // [쉽게 말하면] 개발 서버 주소를 앱 안의 작은 브라우저 창으로 열어, 눈으로 보면서 오류가 있는지 숫자로도 알려 주는 담당입니다.
 
 const path = require('path');
-const { BrowserWindow, WebContentsView, session } = require('electron');
+const { BrowserWindow, WebContentsView, session, dialog } = require('electron');
+const fs = require('fs');
 const H = require('../shared/preview-health');
 const { isLocalUrl } = require('./devrun');
 const { t } = require('../shared/i18n');
@@ -18,7 +19,12 @@ const { t } = require('../shared/i18n');
 const BAR_H = 76; // 도구 줄 높이 (preview.html의 .pv-bar와 맞춤)
 const PARTITION = 'mla-preview';
 
-function setupPreview({ ipcMain, getWin, shell, log = () => {} }) {
+const MAX_CAPTURES = 12; // 화면 캡처는 이 실행 동안 메모리에만, 최근 12장 (v0.45.0)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function setupPreview({ ipcMain, getWin, shell, devTest = () => null, log = () => {} }) {
+  let captures = []; // [{ id, at, url, title, tag, png(Buffer), w, h }]
+  let capSeq = 0;
   let pw = null; // { win, view, home, health }
   let ses = null;
 
@@ -28,7 +34,8 @@ function setupPreview({ ipcMain, getWin, shell, log = () => {} }) {
     if (app && !app.isDestroyed()) app.webContents.send('preview:state', st);
     if (pw && !pw.win.isDestroyed()) pw.win.webContents.send('pv:state', st);
   };
-  const snapshot = () => (pw ? { open: true, home: pw.home, ...pw.health, canBack: pw.view.webContents.navigationHistory?.canGoBack?.() || false, canForward: pw.view.webContents.navigationHistory?.canGoForward?.() || false, notice: pw.notice || '' } : { open: false });
+  const capMeta = (c) => ({ id: c.id, at: c.at, url: c.url, title: c.title, tag: c.tag, w: c.w, h: c.h, bytes: c.png.length });
+  const snapshot = () => (pw ? { open: true, captures: captures.length, home: pw.home, ...pw.health, canBack: pw.view.webContents.navigationHistory?.canGoBack?.() || false, canForward: pw.view.webContents.navigationHistory?.canGoForward?.() || false, notice: pw.notice || '' } : { open: false });
 
   function previewSession() {
     if (ses) return ses;
@@ -168,6 +175,106 @@ function setupPreview({ ipcMain, getWin, shell, log = () => {} }) {
     load(url);
   }
 
+  // ---------- 화면 캡처 · 적용 전/후 비교 (v0.45.0) ----------
+  /** 지금 보이는 앱 화면을 PNG로 (도구 줄 · 자세히 칸은 빼고 사이트 화면만). tag: '' | 'before' | 'after' */
+  async function captureNow(tag = '') {
+    if (!pw) throw new Error(t('dev.cap.needPreview'));
+    if (pw.win.isMinimized()) pw.win.restore();
+    const img = await pw.view.webContents.capturePage();
+    if (img.isEmpty()) throw new Error(t('dev.cap.empty'));
+    const size = img.getSize();
+    const c = { id: `c${++capSeq}`, at: Date.now(), url: pw.view.webContents.getURL(), title: pw.view.webContents.getTitle(), tag, png: img.toPNG(), w: size.width, h: size.height };
+    captures = [...captures, c].slice(-MAX_CAPTURES);
+    sendAll();
+    return capMeta(c);
+  }
+
+  /** 새로 고친 뒤 다 읽을 때까지(최대 15초) 기다리고 그리기를 잠깐 더 기다린다 */
+  function reloadAndWait(settle = 1000) {
+    return new Promise((resolve) => {
+      if (!pw) return resolve(false);
+      const wc = pw.view.webContents;
+      let done = false;
+      const finish = async (ok) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        wc.removeListener('did-finish-load', onOk);
+        wc.removeListener('did-fail-load', onFail);
+        await sleep(settle);
+        resolve(ok);
+      };
+      const onOk = () => finish(true);
+      const onFail = (_e, code, _d, _u, isMain) => isMain && code !== -3 && finish(false);
+      const timer = setTimeout(() => finish(false), 15000);
+      wc.once('did-finish-load', onOk);
+      wc.on('did-fail-load', onFail);
+      wc.reloadIgnoringCache();
+    });
+  }
+
+  ipcMain.handle('preview:capture', async () => {
+    try {
+      return { ok: true, capture: await captureNow('') };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  ipcMain.handle('preview:captures', () => captures.map(capMeta));
+  ipcMain.handle('preview:captureData', (_e, id) => {
+    const c = captures.find((x) => x.id === id);
+    return c ? { ok: true, ...capMeta(c), dataUrl: `data:image/png;base64,${c.png.toString('base64')}` } : { ok: false };
+  });
+  ipcMain.handle('preview:captureRemove', (_e, id) => {
+    captures = captures.filter((x) => x.id !== id);
+    sendAll();
+    return true;
+  });
+  ipcMain.handle('preview:captureSave', async (_e, id) => {
+    const c = captures.find((x) => x.id === id);
+    if (!c) return { ok: false };
+    const { canceled, filePath } = await dialog.showSaveDialog(getWin(), { defaultPath: `capture-${new Date(c.at).toISOString().slice(0, 19).replace(/[:T]/g, '-')}${c.tag ? `-${c.tag}` : ''}.png`, filters: [{ name: 'PNG', extensions: ['png'] }] });
+    if (canceled || !filePath) return { ok: false, cancelled: true };
+    fs.writeFileSync(filePath, c.png);
+    return { ok: true, path: filePath };
+  });
+
+  /**
+   * 적용 전/후 화면 비교: 지금 화면(새로 고침) 캡처 → 수정안을 잠깐 써 두고(테스트 실행과 같은 잠금 · 복구) 새로 고쳐 캡처 → 원래대로 → 다시 새로 고침.
+   * changes: [{ path, after(null=삭제) }] → { ok, before, after, restoreFailed? }
+   */
+  ipcMain.handle('preview:compare', async (_e, rawChanges) => {
+    if (!pw) return { ok: false, error: t('dev.cap.needPreview') };
+    const dt = devTest();
+    if (!dt?.withTrial) return { ok: false, error: t('dev.cap.noTrial') };
+    const n = Array.isArray(rawChanges) ? rawChanges.length : 0;
+    const { response } = await dialog.showMessageBox(getWin(), {
+      type: 'question',
+      buttons: [t('dev.cap.compareRun'), t('main.cancel')],
+      defaultId: 0,
+      cancelId: 1,
+      title: t('dev.cap.compareTitle'),
+      message: t('dev.cap.compareMessage', { n }),
+      detail: t('dev.cap.compareDetail'),
+    });
+    if (response !== 0) return { ok: false, cancelled: true, error: t('main.cancelled') };
+    try {
+      await reloadAndWait(800);
+      const before = await captureNow('before');
+      const r = await dt.withTrial(rawChanges, async () => {
+        await sleep(1200); // 개발 서버가 바뀐 파일을 알아채도록
+        await reloadAndWait(1200);
+        return captureNow('after');
+      });
+      if (!r.ok) return r;
+      await sleep(800);
+      reloadAndWait(500); // 원래 화면으로 (기다리지 않음)
+      return { ok: true, before, after: r.value, ...(r.restoreFailed ? { restoreFailed: r.restoreFailed } : {}) };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   // 앱 화면: 미리보기 열기(이 PC 주소만). 이미 열려 있으면 그 주소로 바꾸고 앞으로
   ipcMain.handle('preview:open', (_e, url) => {
     if (!isLocalUrl(url)) return { ok: false, error: t('dev.pv.notLocal') };
@@ -206,6 +313,14 @@ function setupPreview({ ipcMain, getWin, shell, log = () => {} }) {
     pw.extra = open ? 220 : 0;
     layout();
     return true;
+  });
+  ipcMain.handle('pv:capture', async (e) => {
+    if (!fromBar(e)) return { ok: false };
+    try {
+      return { ok: true, capture: await captureNow('') };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
   ipcMain.handle('pv:external', async (e) => {
     if (!fromBar(e)) return false;

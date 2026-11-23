@@ -10,6 +10,7 @@ body[data-level="wait"] { --lv: var(--accent); }
 .pv-url { flex: 1; min-width: 0; padding: 2px 8px; border: 1px solid var(--control-border); border-radius: var(--r-sm); background: var(--field); font: 12px var(--mono); color: var(--bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
 .pv-tools { display: flex; gap: 5px; }
 .pv-tools:empty { display: none; }
+.pv-capture { border-color: var(--accent) !important; color: var(--accent-text); font-weight: 600; }
 .pv-verdict { padding: 1px 10px; border: 1px solid var(--c, var(--border)); border-radius: var(--r-sm); color: var(--c, var(--text)); background: color-mix(in srgb, var(--c, transparent) 14%, transparent); font-weight: 700; white-space: nowrap; }
 .pv-verdict:empty { display: none; }
 .pv-badge { border-color: var(--err) !important; color: var(--err-text) !important; }

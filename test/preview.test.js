@@ -171,7 +171,7 @@ test('안전 장치 · 연결: 따로 된 세션 · preload 없음 · 권한 거
   assert.match(src, /const PARTITION = 'mla-preview'/);
   assert.match(src, /setPermissionRequestHandler\(\(_wc, _perm, cb\) => cb\(false\)\)/);
   assert.match(src, /will-download', \(e\) => e\.preventDefault\(\)/);
-  assert.match(src, /ipcMain\.handle\('preview:open', \(_e, url\) => \{\n\s+if \(!isLocalUrl\(url\)\)/);
+  assert.match(src, /ipcMain\.handle\('preview:open', \(_e, url\) => \{\r?\n\s+if \(!isLocalUrl\(url\)\)/);
   assert.match(src, /wc\.on\('will-navigate', guard\)/);
   assert.match(src, /e\.sender === pw\.win\.webContents/); // 도구 줄 요청은 그 창에서 온 것만
   const pre = read('src/preload/preview-preload.js');

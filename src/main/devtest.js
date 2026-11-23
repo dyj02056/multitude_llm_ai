@@ -321,7 +321,49 @@ function setupDevTest({ ipcMain, getWin, project, userDataDir, findRunner = (nam
     return true;
   });
 
-  return { recover, stop: () => running && killTree(running.child), isBusy: () => busy };
+  /**
+   * 수정안을 잠깐 써 두고 fn()을 돌린 뒤, 무슨 일이 있어도 원래 파일로 되돌린다 (v0.45.0, 적용 전/후 화면 비교).
+   * 테스트 실행과 같은 잠금(busy — 그동안 적용 · 저장 · 프로젝트 닫기를 받지 않음)과 복구 파일(앱이 꺼져도 다음에 되돌림)을 쓴다.
+   * → { ok, value, restoreFailed? } | { ok: false, error }
+   */
+  async function withTrial(rawChanges, fn) {
+    if (busy) return { ok: false, error: t('main.devtest.busy') };
+    const changes = R.checkTrialChanges(rawChanges);
+    if (!changes) return { ok: false, error: t('main.devtest.badChanges') };
+    busy = true;
+    try {
+      const backup = [];
+      for (const c of changes) {
+        const r = await project.readFile(c.path, { maxBytes: 5 * 1024 * 1024 });
+        if (r.missing) backup.push({ path: c.path, existed: false });
+        else if (typeof r.text === 'string') backup.push({ path: c.path, existed: true, text: r.text });
+        else return { ok: false, error: t(r.binary ? 'main.devtest.binary' : 'main.devtest.tooLarge', { path: c.path }) };
+      }
+      writeRecovery({ root: root(), at: Date.now(), files: backup });
+      const restoreList = [];
+      let value;
+      let restoreFailed = null;
+      try {
+        for (const c of changes) {
+          restoreList.push(backup.find((b) => b.path === c.path));
+          if (c.after === null) await project.deleteFile(c.path);
+          else await project.writeFile(c.path, c.after);
+        }
+        value = await fn();
+      } finally {
+        const failed = await restore(restoreList);
+        if (!failed.length) clearRecovery();
+        else restoreFailed = failed;
+      }
+      return { ok: true, value, ...(restoreFailed ? { restoreFailed } : {}) };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    } finally {
+      busy = false;
+    }
+  }
+
+  return { recover, stop: () => running && killTree(running.child), isBusy: () => busy, withTrial };
 }
 
 module.exports = { setupDevTest };

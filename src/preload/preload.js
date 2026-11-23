@@ -163,6 +163,13 @@ contextBridge.exposeInMainWorld('host', {
     open: (url) => ipcRenderer.invoke('preview:open', url),
     state: () => ipcRenderer.invoke('preview:state'),
     close: () => ipcRenderer.invoke('preview:close'),
+    // 화면 캡처 · 적용 전/후 비교 (v0.45.0): 캡처는 이 실행 동안 본체 메모리에만
+    capture: () => ipcRenderer.invoke('preview:capture'),
+    captures: () => ipcRenderer.invoke('preview:captures'),
+    captureData: (id) => ipcRenderer.invoke('preview:captureData', id),
+    captureRemove: (id) => ipcRenderer.invoke('preview:captureRemove', id),
+    captureSave: (id) => ipcRenderer.invoke('preview:captureSave', id),
+    compare: (changes) => ipcRenderer.invoke('preview:compare', changes), // [{ path, after }] — 잠깐 써 보고 되돌림
   },
   panelAction: (id, action) => ipcRenderer.send('panel:action', { id, action }),
   on: (channel, fn) => {

@@ -270,6 +270,12 @@ The Windows app looks only in absolute PATH folders, never runs anything inside 
 
 ![Preview with errors expanded](../screenshots/en/82-preview-errors.png)
 
+**Capture and compare (v0.45.0, Windows app)** — with the preview open, **Capture screen** (sidebar or the preview toolbar) takes a picture of the app (captures stay in memory for this session, last 12; **Save PNG** to keep one). The capture window shows the picture large, lets you pick the AI (open panels that accept images) and prefills the text — "does the screen look as intended; if not, what is wrong and which file to change; otherwise 'No problems'" — including the current roadmap task's done conditions. **Nothing is sent until you press Send.** In the change preview, **Compare screens** reloads and captures the current screen, writes the checked change for a moment (same lock and recovery file as test runs), reloads and captures again, then restores the files; the capture window opens with **Before** and **After** side by side and a matching prompt, ready to **Send both pictures**.
+
+![Capture before sending](../screenshots/en/83-capture-send.png)
+
+![Before and after](../screenshots/en/84-compare.png)
+
 ### Roadmap (v0.38.0)
 
 With a project open, **로드맵** (Roadmap) on the toolbar sends your plan (pasted, `PLAN.md`, or a `.md` / `.txt` file) to an AI and turns the answer into **milestones → tasks**; each task is tracked as to do · in progress · verifying · done · blocked, and a task stays locked until the tasks it depends on are done. **구현 요청** (Implement) only fills the prompt box with that task's request and picks its expected files — nothing is sent; sending, applying and testing follow the project-mode steps above, checked by you. The **dashboard** tab shows a progress ring, per-milestone bars, a dependency map and a burndown (with an estimated finish date). The **docs** tab writes `docs/procedure.md` and `README.md` into the project (an existing README of yours is kept and the app writes `README.generated.md` by default; only the `mla:` marker blocks are refreshed). Progress is stored in `.mla/roadmap.json`, which is never sent to an AI. Details (Korean): [docs/roadmap.md](../roadmap.md).

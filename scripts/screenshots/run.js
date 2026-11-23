@@ -109,6 +109,9 @@ const SCENES = [
   // v0.44.0 (미리보기 창 — 실제 앱에서는 따로 된 창, 아래쪽은 예시 앱 페이지)
   { name: '81-preview', page: 'preview', width: 1180, height: 760 },
   { name: '82-preview-errors', page: 'preview', width: 1180, height: 760 },
+  // v0.45.0 (화면 캡처 → AI에게 보내기 전 확인 · 적용 전/후 비교). 81 · 82 그림을 잘라 쓰므로 그 뒤에 찍는다
+  { name: '83-capture-send', page: 'app' },
+  { name: '84-compare', page: 'app' },
   // v0.37.0 (사이드탭)
   { name: '68-side-pdf', page: 'side', width: 420 },
   { name: '69-side-compare', page: 'side', width: 420 },

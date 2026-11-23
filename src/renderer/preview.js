@@ -99,6 +99,15 @@
   $('#pvExternal').addEventListener('click', () => window.pv.external());
   $('#pvDevtools').addEventListener('click', () => window.pv.nav('devtools'));
   $('#pvErrors').addEventListener('click', () => toggle('errors'));
+  // 화면 캡처 (v0.45.0): 찍은 그림은 앱의 실행 · 확인 칸 › 캡처 창에서 AI에게 보낼 수 있다
+  $('#pvCapture').addEventListener('click', async () => {
+    const b = $('#pvCapture');
+    b.disabled = true;
+    const r = await window.pv.capture().catch((err) => ({ ok: false, error: err.message }));
+    b.disabled = false;
+    st = { ...st, notice: r?.ok ? t('dev.cap.shotDone') : r?.error || '' };
+    render();
+  });
   $('#pvFailed').addEventListener('click', () => toggle('failed'));
   document.addEventListener('keydown', (e) => {
     if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {

@@ -18,5 +18,6 @@ contextBridge.exposeInMainWorld('pv', {
   nav: (what) => ipcRenderer.invoke('pv:nav', what), // back · forward · reload · home · devtools
   external: () => ipcRenderer.invoke('pv:external'), // 지금 주소를 기본 브라우저로 (이 PC 주소만)
   details: (open) => ipcRenderer.invoke('pv:details', !!open), // 자세히 칸을 펼치면 사이트 화면을 그만큼 내린다
+  capture: () => ipcRenderer.invoke('pv:capture'), // 지금 화면을 캡처해 앱의 캡처 목록에 (v0.45.0)
   onState: (fn) => ipcRenderer.on('pv:state', (_e, st) => fn(st)),
 });
