@@ -108,6 +108,7 @@ Send one question to several AI chat websites that the user opens side by side i
 | `cookies` | Chrome does not send a site's cookies on WebSocket connections from a frame inside an extension page, so services like Grok cannot start a chat. The extension reads the cookies of the supported AI sites only, and attaches them only to those sites' own WebSocket requests from the app tab. For Qwen and Z.ai it copies the sign-in token into that site's own frame inside the app tab. Cookies never leave the browser. |
 | `browsingData` | Some AI sites register a service worker that serves the page without going through the frame rules. The extension removes only the service worker registration of that AI site when its panel opens. Cookies and site data are kept. |
 | `clipboardWrite` | Copy buttons for answers, analysis and code. |
+| `notifications` | Shows a notification when all answers are finished, when a usage limit or send failure occurs, or when synthesis/analysis is done — only while the app tab is not focused. The notification contains counts and service names only, never question or answer text. Users can turn each kind off in settings. |
 | `contextMenus` | Right-click menu "Ask Multitude LLM — selected text / this page". |
 | `activeTab` | Reads the text of the tab the user right-clicked or pressed the shortcut on, once, at that moment. |
 | `scripting` | Runs a one-time script in that active tab to extract the page text. |
